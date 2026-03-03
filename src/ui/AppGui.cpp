@@ -894,10 +894,14 @@ void AppGui::drawSettingsPanel() {
             ImGui::Separator();
             ImGui::Text("Relative Strength Index");
             ImGui::SliderInt("RSI Period", &config_.rsiPeriod, 2, 50);
-            ImGui::SliderFloat("RSI Overbought", (float*)&config_.rsiOverbought,
-                               50.0f, 90.0f, "%.0f");
-            ImGui::SliderFloat("RSI Oversold", (float*)&config_.rsiOversold,
-                               10.0f, 50.0f, "%.0f");
+            {
+                float rsiOB = (float)config_.rsiOverbought;
+                if (ImGui::SliderFloat("RSI Overbought", &rsiOB, 50.0f, 90.0f, "%.0f"))
+                    config_.rsiOverbought = rsiOB;
+                float rsiOS = (float)config_.rsiOversold;
+                if (ImGui::SliderFloat("RSI Oversold", &rsiOS, 10.0f, 50.0f, "%.0f"))
+                    config_.rsiOversold = rsiOS;
+            }
 
             ImGui::Separator();
             ImGui::Text("ATR");
@@ -928,8 +932,11 @@ void AppGui::drawSettingsPanel() {
             ImGui::Text("LSTM Model");
             ImGui::SliderInt("Hidden Size", &config_.lstmHidden, 32, 512);
             ImGui::SliderInt("Sequence Length", &config_.lstmSeqLen, 10, 200);
-            ImGui::SliderFloat("Dropout", (float*)&config_.lstmDropout,
-                               0.0f, 0.5f, "%.2f");
+            {
+                float dropout = (float)config_.lstmDropout;
+                if (ImGui::SliderFloat("Dropout", &dropout, 0.0f, 0.5f, "%.2f"))
+                    config_.lstmDropout = dropout;
+            }
 
             ImGui::Separator();
             ImGui::Text("XGBoost Model");
@@ -939,8 +946,11 @@ void AppGui::drawSettingsPanel() {
 
             ImGui::Separator();
             ImGui::Text("Ensemble");
-            ImGui::SliderFloat("Min Confidence", (float*)&config_.ensembleMinConfidence,
-                               0.5f, 0.9f, "%.2f");
+            {
+                float minConf = (float)config_.ensembleMinConfidence;
+                if (ImGui::SliderFloat("Min Confidence", &minConf, 0.5f, 0.9f, "%.2f"))
+                    config_.ensembleMinConfidence = minConf;
+            }
             ImGui::SliderInt("Retrain Interval (h)", &config_.retrainIntervalHours, 1, 168);
             ImGui::SliderInt("Lookback (days)", &config_.lookbackDays, 7, 365);
 

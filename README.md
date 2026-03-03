@@ -42,7 +42,7 @@ Production-ready C++17/20 algorithmic trading system with ML-enhanced signals.
 │                                  └──────────────┬──────────────────┘   │
 │                                                 │                       │
 │                                  ┌──────────────▼──────────────────┐   │
-│                                  │    Dashboard (ncurses / text)    │   │
+│                                  │      Dashboard (GUI / text)      │   │
 │                                  └─────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -64,7 +64,9 @@ Production-ready C++17/20 algorithmic trading system with ML-enhanced signals.
 │   ├── indicators/          ← EMA, RSI, ATR, MACD, BB, IndicatorEngine
 │   ├── ml/                  ← LSTM, XGBoost, FeatureExtractor, ModelTrainer
 │   ├── strategy/            ← MLEnhancedStrategy, RiskManager
-│   └── ui/                  ← ncurses Dashboard
+│   └── ui/                  ← ImGui Dashboard (GUI) + ncurses fallback
+├── third_party/
+│   └── imgui/               ← Dear ImGui v1.90.4 (MIT license)
 └── tests/
     ├── test_indicators.cpp
     ├── test_features.cpp
@@ -80,10 +82,13 @@ Production-ready C++17/20 algorithmic trading system with ML-enhanced signals.
 | nlohmann/json    | JSON parsing                     |
 | OpenSSL          | HMAC-SHA256 request signing      |
 | spdlog           | Structured logging               |
+| **Dear ImGui**   | **Windowed GUI dashboard**       |
+| **GLFW**         | **OpenGL window/context**        |
+| **OpenGL**       | **GPU rendering**                |
 | LibTorch         | LSTM neural network (optional)   |
 | XGBoost C++ API  | Gradient boosting (optional)     |
 | Eigen3           | Matrix operations (optional)     |
-| ncurses          | Console UI dashboard (optional)  |
+| ncurses          | Console UI fallback (optional)   |
 | Google Test      | Unit tests (optional)            |
 
 ## Build Instructions
@@ -102,7 +107,9 @@ sudo apt-get install -y \
     libspdlog-dev \
     libgtest-dev \
     libeigen3-dev \
-    libncurses-dev
+    libncurses-dev \
+    libglfw3-dev \
+    libgl-dev
 
 # Build
 mkdir build && cd build
@@ -113,7 +120,7 @@ make -j$(nproc)
 ### macOS (Homebrew)
 
 ```bash
-brew install cmake curl openssl boost nlohmann-json spdlog googletest eigen ncurses
+brew install cmake curl openssl boost nlohmann-json spdlog googletest eigen ncurses glfw
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
@@ -199,6 +206,23 @@ make install
 # Default: testnet / paper trading mode (safe)
 ./crypto_trader config/settings.json
 ```
+
+### GUI Mode
+
+When built with GLFW and OpenGL (default on Windows via vcpkg, optional on Linux),
+the application launches with a full windowed GUI featuring a dark metal theme:
+
+- **Toolbar** — Connect/Disconnect, Start/Stop Trading, Settings buttons
+- **Market Data** — Live price, OHLCV, mini price chart
+- **Indicators** — EMA, RSI, ATR, MACD, Bollinger Bands with real-time values
+- **Trading Signal** — Current signal (BUY/SELL/HOLD), confidence bar, stop loss, take profit
+- **Portfolio & Risk** — Equity curve, drawdown, open positions, risk parameters
+- **Log** — Color-coded event log
+- **Settings** — Tabbed configuration for Exchange, Trading, Indicators, ML Models, Risk
+
+### Console Mode (fallback)
+
+If GLFW/OpenGL is not available, the application falls back to ncurses or plain text output.
 
 ## Running Tests
 
