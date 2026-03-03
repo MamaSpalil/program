@@ -8,3 +8,10 @@ _codeql_detected_source_root
 *.deb
 logs/
 *.log
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+*.ilk
+*.exp

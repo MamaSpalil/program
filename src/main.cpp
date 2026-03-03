@@ -5,6 +5,10 @@
 #include <iostream>
 #include <memory>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace {
 std::atomic<bool> g_shutdown{false};
 crypto::Engine*   g_engine{nullptr};
@@ -15,6 +19,17 @@ void signalHandler(int sig) {
         if (g_engine) g_engine->stop();
     }
 }
+
+#ifdef _WIN32
+BOOL WINAPI consoleCtrlHandler(DWORD ctrlType) {
+    if (ctrlType == CTRL_C_EVENT || ctrlType == CTRL_CLOSE_EVENT) {
+        g_shutdown = true;
+        if (g_engine) g_engine->stop();
+        return TRUE;
+    }
+    return FALSE;
+}
+#endif
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -23,6 +38,10 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGINT,  signalHandler);
     std::signal(SIGTERM, signalHandler);
+
+#ifdef _WIN32
+    SetConsoleCtrlHandler(consoleCtrlHandler, TRUE);
+#endif
 
     try {
         crypto::Logger::init();
