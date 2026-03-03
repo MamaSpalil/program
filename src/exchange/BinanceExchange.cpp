@@ -45,7 +45,9 @@ BinanceExchange::BinanceExchange(const std::string& apiKey,
                                    const std::string& wsHost,
                                    const std::string& wsPort)
     : apiKey_(apiKey), apiSecret_(apiSecret),
-      baseUrl_(baseUrl), wsHost_(wsHost), wsPort_(wsPort) {}
+      baseUrl_(baseUrl), wsHost_(wsHost), wsPort_(wsPort),
+      futuresBaseUrl_("https://fapi.binance.com"),
+      futuresWsHost_("fstream.binance.com") {}
 
 BinanceExchange::~BinanceExchange() {
     disconnect();
@@ -59,6 +61,14 @@ std::string BinanceExchange::sign(const std::string& payload) const {
          reinterpret_cast<const unsigned char*>(payload.c_str()),
          payload.size(), digest, &digestLen);
     return toHex(digest, digestLen);
+}
+
+std::string BinanceExchange::effectiveBaseUrl() const {
+    return (marketType_ == "futures") ? futuresBaseUrl_ : baseUrl_;
+}
+
+void BinanceExchange::setMarketType(const std::string& marketType) {
+    marketType_ = marketType;
 }
 
 void BinanceExchange::rateLimit() const {
@@ -82,7 +92,8 @@ std::string BinanceExchange::httpGet(const std::string& path, bool signed_) cons
     (void)path; (void)signed_;
 #else
     rateLimit();
-    std::string url = baseUrl_ + path;
+    std::string base = effectiveBaseUrl();
+    std::string url = base + path;
     if (signed_) {
         auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
@@ -94,7 +105,67 @@ std::string BinanceExchange::httpGet(const std::string& path, bool signed_) cons
             queryString = "timestamp=" + std::to_string(ts);
         }
         std::string sig = sign(queryString);
-        url = baseUrl_ + path +
+        url = base + path +
+              (qpos == std::string::npos ? "?" : "&") +
+              "timestamp=" + std::to_string(ts) + "&signature=" + sig;
+    }
+
+    int retries = 3;
+    while (retries-- > 0) {
+        CURL* curl = curl_easy_init();
+        if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+        std::string response;
+        struct curl_slist* headers = nullptr;
+        if (!apiKey_.empty())
+            headers = curl_slist_append(headers, ("X-MBX-APIKEY: " + apiKey_).c_str());
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+
+        CURLcode res = curl_easy_perform(curl);
+        long httpCode = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+
+        if (res == CURLE_OK && httpCode < 400) return response;
+
+        if (httpCode == 429 || httpCode == 418) {
+            std::this_thread::sleep_for(std::chrono::seconds(5 * (3 - retries)));
+        } else if (res != CURLE_OK) {
+            Logger::get()->warn("HTTP GET error: {}", curl_easy_strerror(res));
+        } else {
+            throw std::runtime_error("HTTP " + std::to_string(httpCode) + ": " + response);
+        }
+    }
+    throw std::runtime_error("Max retries exceeded");
+#endif
+}
+
+std::string BinanceExchange::httpGetUrl(const std::string& fullUrl, bool signed_) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)fullUrl; (void)signed_;
+#else
+    rateLimit();
+    std::string url = fullUrl;
+    if (signed_) {
+        auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        auto qpos = fullUrl.find('?');
+        std::string queryString;
+        if (qpos != std::string::npos) {
+            queryString = fullUrl.substr(qpos + 1) + "&timestamp=" + std::to_string(ts);
+        } else {
+            queryString = "timestamp=" + std::to_string(ts);
+        }
+        std::string sig = sign(queryString);
+        url = fullUrl +
               (qpos == std::string::npos ? "?" : "&") +
               "timestamp=" + std::to_string(ts) + "&signature=" + sig;
     }
@@ -197,9 +268,10 @@ std::vector<Candle> BinanceExchange::getKlines(const std::string& symbol,
                                                  const std::string& interval,
                                                  int limit) {
     Logger::get()->debug("[Binance] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
-    std::string path = "/api/v3/klines?symbol=" + symbol +
-                       "&interval=" + interval +
-                       "&limit=" + std::to_string(limit);
+    std::string path = (marketType_ == "futures" ? "/fapi/v1/klines?" : "/api/v3/klines?");
+    path += "symbol=" + symbol +
+            "&interval=" + interval +
+            "&limit=" + std::to_string(limit);
     auto response = httpGet(path);
     Logger::get()->debug("[Binance] getKlines response size={}", response.size());
     auto json = nlohmann::json::parse(response);
@@ -281,7 +353,11 @@ void BinanceExchange::subscribeKline(const std::string& symbol,
     std::string path = "/stream?streams=" +
         [&]{ std::string s = symbol; for(auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }() +
         "@kline_" + interval;
-    ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, path);
+    if (marketType_ == "futures") {
+        ws_ = std::make_unique<WebSocketClient>(futuresWsHost_, "443", path);
+    } else {
+        ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, path);
+    }
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
 }
 
@@ -318,28 +394,47 @@ std::vector<SymbolInfo> BinanceExchange::getSymbols(const std::string& marketTyp
     (void)marketType;
     return {};
 #else
+    std::vector<SymbolInfo> result;
     try {
-        auto resp = httpGet("/api/v3/exchangeInfo");
-        auto j = nlohmann::json::parse(resp);
-        std::vector<SymbolInfo> result;
-        if (j.contains("symbols") && j["symbols"].is_array()) {
-            for (auto& s : j["symbols"]) {
-                if (s.value("status", "") != "TRADING") continue;
-                SymbolInfo si;
-                si.symbol     = s.value("symbol", "");
-                si.baseAsset  = s.value("baseAsset", "");
-                si.quoteAsset = s.value("quoteAsset", "");
-                si.marketType = "spot";
-                si.displayName = si.baseAsset + "/" + si.quoteAsset;
-                if (marketType.empty() || marketType == si.marketType)
+        // Fetch spot symbols if requested or no filter
+        if (marketType.empty() || marketType == "spot") {
+            auto resp = httpGetUrl(baseUrl_ + "/api/v3/exchangeInfo");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("symbols") && j["symbols"].is_array()) {
+                for (auto& s : j["symbols"]) {
+                    if (s.value("status", "") != "TRADING") continue;
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseAsset", "");
+                    si.quoteAsset = s.value("quoteAsset", "");
+                    si.marketType = "spot";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset;
                     result.push_back(std::move(si));
+                }
+            }
+        }
+        // Fetch futures symbols if requested or no filter
+        if (marketType.empty() || marketType == "futures") {
+            auto resp = httpGetUrl(futuresBaseUrl_ + "/fapi/v1/exchangeInfo");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("symbols") && j["symbols"].is_array()) {
+                for (auto& s : j["symbols"]) {
+                    if (s.value("status", "") != "TRADING") continue;
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseAsset", "");
+                    si.quoteAsset = s.value("quoteAsset", "");
+                    si.marketType = "futures";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset + " Swap";
+                    result.push_back(std::move(si));
+                }
             }
         }
         Logger::get()->info("[Binance] Fetched {} symbols", result.size());
         return result;
     } catch (const std::exception& e) {
         Logger::get()->warn("[Binance] getSymbols failed: {}", e.what());
-        return {};
+        return result;
     }
 #endif
 }
@@ -375,6 +470,126 @@ OrderBook BinanceExchange::getOrderBook(const std::string& symbol, int depth) {
     (void)symbol; (void)depth;
 #endif
     return ob;
+}
+
+std::vector<OpenOrderInfo> BinanceExchange::getOpenOrders(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        std::string path = "/api/v3/openOrders";
+        if (!symbol.empty()) path += "?symbol=" + symbol;
+        auto resp = httpGet(path, true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<OpenOrderInfo> result;
+        for (auto& o : j) {
+            OpenOrderInfo info;
+            info.orderId    = std::to_string(o.value("orderId", (int64_t)0));
+            info.symbol     = o.value("symbol", "");
+            info.side       = o.value("side", "");
+            info.type       = o.value("type", "");
+            info.price      = std::stod(o.value("price", "0"));
+            info.qty        = std::stod(o.value("origQty", "0"));
+            info.executedQty = std::stod(o.value("executedQty", "0"));
+            info.time       = o.value("time", (int64_t)0);
+            result.push_back(std::move(info));
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] getOpenOrders failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+std::vector<UserTradeInfo> BinanceExchange::getMyTrades(const std::string& symbol, int limit) {
+#ifndef USE_CURL
+    (void)symbol; (void)limit;
+    return {};
+#else
+    try {
+        std::string path = "/api/v3/myTrades?symbol=" + symbol +
+                           "&limit=" + std::to_string(limit);
+        auto resp = httpGet(path, true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<UserTradeInfo> result;
+        for (auto& t : j) {
+            UserTradeInfo info;
+            info.time           = t.value("time", (int64_t)0);
+            info.symbol         = t.value("symbol", "");
+            info.side           = t.value("isBuyer", false) ? "BUY" : "SELL";
+            info.price          = std::stod(t.value("price", "0"));
+            info.qty            = std::stod(t.value("qty", "0"));
+            info.commission     = std::stod(t.value("commission", "0"));
+            info.commissionAsset = t.value("commissionAsset", "");
+            result.push_back(std::move(info));
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] getMyTrades failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+std::vector<PositionInfo> BinanceExchange::getPositionRisk(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        std::string url = futuresBaseUrl_ + "/fapi/v2/positionRisk";
+        if (!symbol.empty()) url += "?symbol=" + symbol;
+        auto resp = httpGetUrl(url, true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<PositionInfo> result;
+        for (auto& p : j) {
+            PositionInfo info;
+            info.symbol           = p.value("symbol", "");
+            info.positionAmt      = std::stod(p.value("positionAmt", "0"));
+            info.entryPrice       = std::stod(p.value("entryPrice", "0"));
+            info.unrealizedProfit = std::stod(p.value("unRealizedProfit", "0")); // Binance API uses camelCase "unRealizedProfit"
+            info.marginType       = p.value("marginType", "");
+            info.leverage         = std::stod(p.value("leverage", "1"));
+            result.push_back(std::move(info));
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] getPositionRisk failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+FuturesBalanceInfo BinanceExchange::getFuturesBalance() {
+#ifndef USE_CURL
+    return {};
+#else
+    try {
+        std::string url = futuresBaseUrl_ + "/fapi/v2/account";
+        auto resp = httpGetUrl(url, true);
+        auto j = nlohmann::json::parse(resp);
+        FuturesBalanceInfo info;
+        info.totalWalletBalance    = std::stod(j.value("totalWalletBalance", "0"));
+        info.totalUnrealizedProfit = std::stod(j.value("totalUnrealizedProfit", "0"));
+        info.totalMarginBalance    = std::stod(j.value("totalMarginBalance", "0"));
+        if (j.contains("positions") && j["positions"].is_array()) {
+            for (auto& p : j["positions"]) {
+                PositionInfo pos;
+                pos.symbol           = p.value("symbol", "");
+                pos.positionAmt      = std::stod(p.value("positionAmt", "0"));
+                pos.entryPrice       = std::stod(p.value("entryPrice", "0"));
+                pos.unrealizedProfit = std::stod(p.value("unrealizedProfit", "0")); // /fapi/v2/account uses lowercase
+                info.positions.push_back(std::move(pos));
+            }
+        }
+        return info;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] getFuturesBalance failed: {}", e.what());
+        return {};
+    }
+#endif
 }
 
 } // namespace crypto
