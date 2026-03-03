@@ -58,6 +58,7 @@ void WebSocketClient::send(const std::string& message) {
 }
 
 void WebSocketClient::workerLoop() {
+    int backoffSec = 5;
     while (shouldRun_) {
         try {
             net::io_context ioc;
@@ -106,13 +107,20 @@ void WebSocketClient::workerLoop() {
 
             stream->next_layer().handshake(ssl::stream_base::client);
 
+            // Include port in Host header for non-default WSS ports (RFC 7230 §5.4)
+            std::string hostField = host_;
+            if (port_ != "443") {
+                hostField = host_ + ":" + port_;
+            }
+
             stream->set_option(websocket::stream_base::decorator(
-                [this](websocket::request_type& req) {
-                    req.set(boost::beast::http::field::host, host_);
+                [hostField](websocket::request_type& req) {
+                    req.set(boost::beast::http::field::host, hostField);
                     req.set(boost::beast::http::field::user_agent, "CryptoTrader/1.0");
                 }));
-            stream->handshake(host_, path_);
+            stream->handshake(hostField, path_);
             connected_ = true;
+            backoffSec = 5;
             Logger::get()->info("WebSocket connected to {}:{}{}", host_, port_, path_);
 
             while (shouldRun_) {
@@ -137,8 +145,9 @@ void WebSocketClient::workerLoop() {
         }
 
         if (shouldRun_) {
-            Logger::get()->info("WebSocket reconnecting in 5s...");
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            Logger::get()->info("WebSocket reconnecting in {}s...", backoffSec);
+            std::this_thread::sleep_for(std::chrono::seconds(backoffSec));
+            backoffSec = std::min(backoffSec * 2, 60);
         }
     }
 }
