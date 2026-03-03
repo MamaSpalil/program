@@ -330,6 +330,38 @@ void Engine::setMarketType(const std::string& marketType) {
         impl_->exchange->setMarketType(marketType);
 }
 
+void Engine::reloadCandles(const std::string& symbol, const std::string& interval) {
+    if (!impl_ || !impl_->exchange) return;
+
+    impl_->maxCandleHistory = maxBarsForTimeframe(interval);
+    impl_->candleHistory.clear();
+
+    Logger::get()->info("[Engine] Reloading candles: {} {} maxBars={}",
+                        symbol, interval, impl_->maxCandleHistory);
+
+    try {
+        int requestLimit = impl_->maxCandleHistory;
+        auto hist = impl_->exchange->getKlines(symbol, interval, requestLimit);
+        Logger::get()->info("[Engine] Loaded {} historical candles for {}", hist.size(), symbol);
+
+        if (impl_->feed) {
+            for (auto& c : hist) impl_->feed->onCandle(c);
+        }
+        if (impl_->strategy) {
+            for (auto& c : hist) impl_->strategy->onCandle(c);
+        }
+        if (impl_->userIndicators) {
+            for (auto& c : hist) impl_->userIndicators->updateAll(c);
+        }
+
+        if (!hist.empty()) {
+            updateDashboard(hist.back());
+        }
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Engine] Candle reload failed: {}", e.what());
+    }
+}
+
 double Engine::getPrice(const std::string& symbol) const {
     if (impl_ && impl_->exchange)
         return impl_->exchange->getPrice(symbol);

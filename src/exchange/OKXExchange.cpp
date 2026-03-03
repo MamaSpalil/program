@@ -264,6 +264,11 @@ bool OKXExchange::testConnection(std::string& outError) {
     }
 }
 
+void OKXExchange::setMarketType(const std::string& marketType) {
+    marketType_ = marketType;
+    Logger::get()->debug("[OKX] Market type set to: {}", marketType_);
+}
+
 std::vector<SymbolInfo> OKXExchange::getSymbols(const std::string& marketType) {
 #ifndef USE_CURL
     (void)marketType;

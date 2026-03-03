@@ -51,6 +51,9 @@ public:
     // Set market type on the exchange (spot/futures)
     void setMarketType(const std::string& marketType);
 
+    // Reload historical candles for a new symbol/interval pair
+    void reloadCandles(const std::string& symbol, const std::string& interval);
+
     // Get current ticker price
     double getPrice(const std::string& symbol) const;
 
