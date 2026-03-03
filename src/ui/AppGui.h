@@ -62,6 +62,8 @@ struct GuiConfig {
     std::string passphrase;   // for OKX, Bitget, KuCoin
     bool testnet{true};
     std::string baseUrl{"https://testnet.binance.vision"};
+    std::string wsHost{"testnet.binance.vision"};
+    std::string wsPort{"443"};
 
     // Trading
     std::string symbol{"BTCUSDT"};

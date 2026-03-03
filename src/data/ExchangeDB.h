@@ -15,6 +15,8 @@ struct ExchangeProfile {
     std::string apiSecret;
     std::string passphrase;     // required for OKX, Bitget, KuCoin
     std::string baseUrl;
+    std::string wsHost;
+    std::string wsPort;
     bool testnet{false};
 };
 

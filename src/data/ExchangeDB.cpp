@@ -37,6 +37,8 @@ bool ExchangeDB::load() {
                 prof.apiSecret    = p.value("api_secret", "");
                 prof.passphrase   = p.value("passphrase", "");
                 prof.baseUrl      = p.value("base_url", "");
+                prof.wsHost       = p.value("ws_host", "");
+                prof.wsPort       = p.value("ws_port", "");
                 prof.testnet      = p.value("testnet", false);
                 profiles_.push_back(std::move(prof));
             }
@@ -70,6 +72,8 @@ bool ExchangeDB::save() const {
             pj["api_secret"]    = p.apiSecret;
             pj["passphrase"]    = p.passphrase;
             pj["base_url"]      = p.baseUrl;
+            pj["ws_host"]       = p.wsHost;
+            pj["ws_port"]       = p.wsPort;
             pj["testnet"]       = p.testnet;
             arr.push_back(std::move(pj));
         }
