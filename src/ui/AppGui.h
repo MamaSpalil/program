@@ -21,6 +21,9 @@ struct GuiState {
     Candle lastCandle;
     std::deque<Candle> candleHistory;  // last N candles for chart
 
+    // Order book snapshot
+    OrderBook orderBook;
+
     // Indicators
     double emaFast{0}, emaSlow{0}, emaTrend{0};
     double rsi{50};
@@ -52,6 +55,7 @@ struct GuiConfig {
     std::string exchangeName{"binance"};
     std::string apiKey;
     std::string apiSecret;
+    std::string passphrase;   // for OKX, Bitget, KuCoin
     bool testnet{true};
     std::string baseUrl{"https://testnet.binance.vision"};
 
@@ -59,7 +63,22 @@ struct GuiConfig {
     std::string symbol{"BTCUSDT"};
     std::string interval{"15m"};
     std::string mode{"paper"};
+    std::string marketType{"futures"}; // "futures" or "spot"
     double initialCapital{1000.0};
+
+    // Filters
+    double filterMinVolume{0.0};
+    double filterMinPrice{0.0};
+    double filterMaxPrice{0.0};
+    double filterMinChange{-100.0};
+    double filterMaxChange{100.0};
+
+    // Active indicators (up to 5 selected from list)
+    bool indEmaEnabled{true};
+    bool indRsiEnabled{true};
+    bool indAtrEnabled{true};
+    bool indMacdEnabled{true};
+    bool indBbEnabled{true};
 
     // Indicators
     int emaFast{9}, emaSlow{21}, emaTrend{200};
@@ -135,12 +154,16 @@ private:
     void drawMenuBar();
     void drawToolbar();
     void drawMarketPanel();
+    void drawCandlestickChart();
+    void drawVolumeDeltaPanel();
+    void drawOrderBookPanel();
     void drawIndicatorsPanel();
     void drawSignalPanel();
     void drawPortfolioPanel();
     void drawSettingsPanel();
     void drawLogPanel();
     void drawStatusBar();
+    void drawFilterPanel();
 
     // Load/save config from/to JSON file
     void loadConfig(const std::string& path);
@@ -157,6 +180,7 @@ private:
 
     bool showSettings_{false};
     bool showDemo_{false};
+    bool showOrderBook_{false};  // Order book mode
 
     // Signal history for display
     std::deque<Signal> signalHistory_;
@@ -169,6 +193,9 @@ private:
 
     // Price history for chart
     std::deque<double> priceHistory_;
+
+    // Volume delta history (buy volume - sell volume)
+    std::deque<double> volumeDeltaHistory_;
 
     static constexpr int kMaxHistory = 200;
     static constexpr int kMaxLogLines = 500;

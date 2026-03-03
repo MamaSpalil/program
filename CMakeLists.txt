@@ -49,6 +49,9 @@ set(EXCHANGE_SOURCES
     src/exchange/WebSocketClient.cpp
     src/exchange/BinanceExchange.cpp
     src/exchange/BybitExchange.cpp
+    src/exchange/OKXExchange.cpp
+    src/exchange/BitgetExchange.cpp
+    src/exchange/KuCoinExchange.cpp
 )
 
 set(DATA_SOURCES
@@ -202,6 +205,10 @@ if(GTest_FOUND OR GTEST_FOUND)
     add_executable(test_risk tests/test_risk.cpp)
     target_link_libraries(test_risk PRIVATE crypto_lib GTest::GTest GTest::Main)
     add_test(NAME test_risk COMMAND test_risk)
+
+    add_executable(test_exchanges tests/test_exchanges.cpp)
+    target_link_libraries(test_exchanges PRIVATE crypto_lib GTest::GTest GTest::Main)
+    add_test(NAME test_exchanges COMMAND test_exchanges)
 else()
     message(STATUS "GTest not found — unit tests will not be built")
 endif()

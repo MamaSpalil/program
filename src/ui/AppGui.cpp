@@ -253,6 +253,15 @@ void AppGui::updateState(const GuiState& s) {
         rsiHistory_.push_back(s.rsi);
         if ((int)rsiHistory_.size() > kMaxHistory) rsiHistory_.pop_front();
     }
+    // Volume delta: approximate buy vs sell using candle direction
+    // Note: this is an approximation; real delta requires tick-level order flow data
+    {
+        double delta = (s.lastCandle.close >= s.lastCandle.open)
+            ?  s.lastCandle.volume
+            : -s.lastCandle.volume;
+        volumeDeltaHistory_.push_back(delta);
+        if ((int)volumeDeltaHistory_.size() > kMaxHistory) volumeDeltaHistory_.pop_front();
+    }
     if (s.lastSignal.type != Signal::Type::HOLD) {
         signalHistory_.push_back(s.lastSignal);
         if ((int)signalHistory_.size() > 50) signalHistory_.pop_front();
@@ -285,6 +294,7 @@ void AppGui::loadConfig(const std::string& path) {
     config_.exchangeName = ex.value("name", "binance");
     config_.apiKey       = ex.value("api_key", "");
     config_.apiSecret    = ex.value("api_secret", "");
+    config_.passphrase   = ex.value("passphrase", "");
     config_.testnet      = ex.value("testnet", true);
     config_.baseUrl      = ex.value("base_url", "https://testnet.binance.vision");
 
@@ -292,6 +302,7 @@ void AppGui::loadConfig(const std::string& path) {
     config_.symbol         = tr.value("symbol", "BTCUSDT");
     config_.interval       = tr.value("interval", "15m");
     config_.mode           = tr.value("mode", "paper");
+    config_.marketType     = tr.value("market_type", "futures");
     config_.initialCapital = tr.value("initial_capital", 1000.0);
 
     auto& ind = j["indicator"];
@@ -337,6 +348,7 @@ nlohmann::json AppGui::configToJson() const {
         {"name",       config_.exchangeName},
         {"api_key",    config_.apiKey},
         {"api_secret", config_.apiSecret},
+        {"passphrase", config_.passphrase},
         {"testnet",    config_.testnet},
         {"base_url",   config_.baseUrl}
     };
@@ -344,6 +356,7 @@ nlohmann::json AppGui::configToJson() const {
         {"symbol",          config_.symbol},
         {"interval",        config_.interval},
         {"mode",            config_.mode},
+        {"market_type",     config_.marketType},
         {"initial_capital", config_.initialCapital}
     };
     j["indicator"] = {
@@ -409,6 +422,7 @@ void AppGui::renderFrame() {
 
     drawMenuBar();
     drawToolbar();
+    drawFilterPanel();
 
     // Layout: two columns
     float w = ImGui::GetContentRegionAvail().x;
@@ -416,6 +430,9 @@ void AppGui::renderFrame() {
 
     ImGui::BeginChild("##LeftCol", ImVec2(w * 0.65f, h), ImGuiChildFlags_None);
     drawMarketPanel();
+    drawCandlestickChart();
+    drawVolumeDeltaPanel();
+    if (showOrderBook_) drawOrderBookPanel();
     drawIndicatorsPanel();
     drawLogPanel();
     ImGui::EndChild();
@@ -533,12 +550,40 @@ void AppGui::drawToolbar() {
     }
     ImGui::SameLine();
 
+    // Order Book (Стакан) toggle
+    if (showOrderBook_) {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.45f, 0.25f, 0.55f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.55f, 0.32f, 0.65f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.38f, 0.20f, 0.48f, 1.0f));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.22f, 0.22f, 0.24f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.30f, 0.30f, 0.32f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.18f, 0.18f, 0.20f, 1.0f));
+    }
+    if (ImGui::Button(u8"  Режим Стакан  ")) {
+        showOrderBook_ = !showOrderBook_;
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::SameLine();
+
+    // Market type toggle (futures / spot)
+    {
+        const char* marketTypes[] = { "futures", "spot" };
+        int mtIdx = (config_.marketType == "spot") ? 1 : 0;
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::Combo("##MarketType", &mtIdx, marketTypes, 2)) {
+            config_.marketType = marketTypes[mtIdx];
+        }
+    }
+    ImGui::SameLine();
+
     // Display current pair & mode
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20);
     ImGui::TextColored(ImVec4(0.60f, 0.70f, 0.85f, 1.0f),
-                       "%s  |  %s  |  %s",
+                       "%s  |  %s  |  %s  |  %s",
                        config_.symbol.c_str(),
                        config_.interval.c_str(),
+                       config_.marketType.c_str(),
                        config_.mode.c_str());
 
     ImGui::PopStyleVar();
@@ -572,14 +617,26 @@ void AppGui::drawMarketPanel() {
     if (ImGui::CollapsingHeader("Market Data", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::BeginChild("##MarketChild", ImVec2(0, 190), ImGuiChildFlags_Border);
 
-        // Price display
+        // Price display with change percentage
+        double priceChange = 0.0;
+        double pctChange = 0.0;
+        if (snap.lastCandle.open > 0) {
+            priceChange = snap.lastCandle.close - snap.lastCandle.open;
+            pctChange = (priceChange / snap.lastCandle.open) * 100.0;
+        }
+        ImVec4 chgColor = (priceChange >= 0)
+            ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+            : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+
         ImGui::TextColored(ImVec4(0.90f, 0.90f, 0.92f, 1.0f), "Price");
         ImGui::SameLine(100);
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
         ImGui::Text("%.4f", snap.lastCandle.close);
         ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::TextColored(chgColor, "(%+.2f%%)", pctChange);
 
-        ImGui::SameLine(250);
+        ImGui::SameLine(350);
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f),
             "O: %.4f  H: %.4f  L: %.4f  V: %.1f",
             snap.lastCandle.open, snap.lastCandle.high,
@@ -607,56 +664,72 @@ void AppGui::drawIndicatorsPanel() {
     }
 
     if (ImGui::CollapsingHeader("Indicators", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::BeginChild("##IndChild", ImVec2(0, 180), ImGuiChildFlags_Border);
+        ImGui::BeginChild("##IndChild", ImVec2(0, 200), ImGuiChildFlags_Border);
 
         // EMA
-        ImGui::Columns(3, "##indcols", false);
-        ImGui::TextColored(ImVec4(0.50f, 0.75f, 0.50f, 1.0f), "EMA Fast (%d)", config_.emaFast);
-        ImGui::Text("%.4f", snap.emaFast);
-        ImGui::NextColumn();
-        ImGui::TextColored(ImVec4(0.75f, 0.50f, 0.50f, 1.0f), "EMA Slow (%d)", config_.emaSlow);
-        ImGui::Text("%.4f", snap.emaSlow);
-        ImGui::NextColumn();
-        ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.75f, 1.0f), "EMA Trend (%d)", config_.emaTrend);
-        ImGui::Text("%.4f", snap.emaTrend);
-        ImGui::Columns(1);
-        ImGui::Separator();
-
-        // RSI
-        ImGui::Columns(3, "##indcols2", false);
-        ImGui::Text("RSI (%d)", config_.rsiPeriod);
-        {
-            float rsiVal = (float)snap.rsi;
-            ImVec4 rsiColor = (rsiVal > 70) ? ImVec4(0.90f, 0.30f, 0.30f, 1.0f) :
-                              (rsiVal < 30) ? ImVec4(0.30f, 0.90f, 0.30f, 1.0f) :
-                                              ImVec4(0.80f, 0.80f, 0.30f, 1.0f);
-            ImGui::TextColored(rsiColor, "%.2f", snap.rsi);
+        if (config_.indEmaEnabled) {
+            ImGui::Columns(3, "##indcols", false);
+            ImGui::TextColored(ImVec4(0.50f, 0.75f, 0.50f, 1.0f), "EMA Fast (%d)", config_.emaFast);
+            ImGui::Text("%.4f", snap.emaFast);
+            ImGui::NextColumn();
+            ImGui::TextColored(ImVec4(0.75f, 0.50f, 0.50f, 1.0f), "EMA Slow (%d)", config_.emaSlow);
+            ImGui::Text("%.4f", snap.emaSlow);
+            ImGui::NextColumn();
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.75f, 1.0f), "EMA Trend (%d)", config_.emaTrend);
+            ImGui::Text("%.4f", snap.emaTrend);
+            ImGui::Columns(1);
+            ImGui::Separator();
         }
 
-        ImGui::NextColumn();
-        ImGui::Text("ATR (%d)", config_.atrPeriod);
-        ImGui::Text("%.4f", snap.atr);
+        // RSI & ATR & MACD
+        {
+            int cols = 0;
+            if (config_.indRsiEnabled) ++cols;
+            if (config_.indAtrEnabled) ++cols;
+            if (config_.indMacdEnabled) ++cols;
+            if (cols > 0) {
+                ImGui::Columns(std::max(cols, 1), "##indcols2", false);
 
-        ImGui::NextColumn();
-        ImGui::Text("MACD");
-        ImGui::TextColored(
-            snap.macd.histogram >= 0
-                ? ImVec4(0.30f, 0.80f, 0.30f, 1.0f)
-                : ImVec4(0.80f, 0.30f, 0.30f, 1.0f),
-            "%.4f (S: %.4f H: %.4f)",
-            snap.macd.macd, snap.macd.signal, snap.macd.histogram);
-        ImGui::Columns(1);
+                if (config_.indRsiEnabled) {
+                    ImGui::Text("RSI (%d)", config_.rsiPeriod);
+                    float rsiVal = (float)snap.rsi;
+                    ImVec4 rsiColor = (rsiVal > 70) ? ImVec4(0.90f, 0.30f, 0.30f, 1.0f) :
+                                      (rsiVal < 30) ? ImVec4(0.30f, 0.90f, 0.30f, 1.0f) :
+                                                      ImVec4(0.80f, 0.80f, 0.30f, 1.0f);
+                    ImGui::TextColored(rsiColor, "%.2f", snap.rsi);
+                    ImGui::NextColumn();
+                }
+                if (config_.indAtrEnabled) {
+                    ImGui::Text("ATR (%d)", config_.atrPeriod);
+                    ImGui::Text("%.4f", snap.atr);
+                    ImGui::NextColumn();
+                }
+                if (config_.indMacdEnabled) {
+                    ImGui::Text("MACD");
+                    ImGui::TextColored(
+                        snap.macd.histogram >= 0
+                            ? ImVec4(0.30f, 0.80f, 0.30f, 1.0f)
+                            : ImVec4(0.80f, 0.30f, 0.30f, 1.0f),
+                        "%.4f (S: %.4f H: %.4f)",
+                        snap.macd.macd, snap.macd.signal, snap.macd.histogram);
+                    ImGui::NextColumn();
+                }
+                ImGui::Columns(1);
+            }
+        }
 
         // Bollinger Bands
-        ImGui::Separator();
-        ImGui::Text("Bollinger Bands (%d, %.1f)", config_.bbPeriod, config_.bbStddev);
-        ImGui::SameLine(220);
-        ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.80f, 1.0f),
-            "Upper: %.4f  Mid: %.4f  Lower: %.4f",
-            snap.bb.upper, snap.bb.middle, snap.bb.lower);
+        if (config_.indBbEnabled) {
+            ImGui::Separator();
+            ImGui::Text("Bollinger Bands (%d, %.1f)", config_.bbPeriod, config_.bbStddev);
+            ImGui::SameLine(220);
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.80f, 1.0f),
+                "Upper: %.4f  Mid: %.4f  Lower: %.4f",
+                snap.bb.upper, snap.bb.middle, snap.bb.lower);
+        }
 
         // RSI mini chart
-        {
+        if (config_.indRsiEnabled) {
             std::lock_guard<std::mutex> lk(stateMutex_);
             if (!rsiHistory_.empty()) {
                 std::vector<float> v(rsiHistory_.begin(), rsiHistory_.end());
@@ -813,24 +886,31 @@ void AppGui::drawSettingsPanel() {
             ImGui::Text("Exchange Configuration");
             ImGui::Separator();
 
-            const char* exchanges[] = { "binance", "bybit" };
-            int exIdx = (config_.exchangeName == "bybit") ? 1 : 0;
-            if (ImGui::Combo("Exchange", &exIdx, exchanges, 2)) {
+            const char* exchanges[] = { "binance", "bybit", "okx", "bitget", "kucoin" };
+            int exIdx = 0;
+            for (int i = 0; i < 5; ++i) {
+                if (config_.exchangeName == exchanges[i]) { exIdx = i; break; }
+            }
+            if (ImGui::Combo("Exchange", &exIdx, exchanges, 5)) {
                 config_.exchangeName = exchanges[exIdx];
             }
 
             static char apiKeyBuf[256] = {};
             static char apiSecBuf[256] = {};
+            static char passBuf[256] = {};
             static char baseUrlBuf[256] = {};
             static bool bufInit = false;
             if (!bufInit) {
                 strncpy(apiKeyBuf, config_.apiKey.c_str(), sizeof(apiKeyBuf) - 1);
                 strncpy(apiSecBuf, config_.apiSecret.c_str(), sizeof(apiSecBuf) - 1);
+                strncpy(passBuf, config_.passphrase.c_str(), sizeof(passBuf) - 1);
                 strncpy(baseUrlBuf, config_.baseUrl.c_str(), sizeof(baseUrlBuf) - 1);
                 bufInit = true;
             }
             ImGui::InputText("API Key", apiKeyBuf, sizeof(apiKeyBuf));
             ImGui::InputText("API Secret", apiSecBuf, sizeof(apiSecBuf),
+                             ImGuiInputTextFlags_Password);
+            ImGui::InputText("Passphrase", passBuf, sizeof(passBuf),
                              ImGuiInputTextFlags_Password);
             ImGui::InputText("Base URL", baseUrlBuf, sizeof(baseUrlBuf));
             ImGui::Checkbox("Testnet", &config_.testnet);
@@ -838,6 +918,7 @@ void AppGui::drawSettingsPanel() {
             if (ImGui::Button("Apply Exchange Settings")) {
                 config_.apiKey = apiKeyBuf;
                 config_.apiSecret = apiSecBuf;
+                config_.passphrase = passBuf;
                 config_.baseUrl = baseUrlBuf;
                 addLog("[Config] Exchange settings updated");
             }
@@ -857,12 +938,19 @@ void AppGui::drawSettingsPanel() {
             }
             ImGui::InputText("Symbol", symBuf, sizeof(symBuf));
 
-            const char* intervals[] = {"1m","3m","5m","15m","30m","1h","2h","4h","1d"};
-            int intIdx = 3; // 15m default
-            for (int i = 0; i < 9; ++i) {
+            const char* intervals[] = {
+                "1m","3m","5m","10m","15m","20m","25m","30m","40m","45m","50m","55m",
+                "1h","2h","3h","4h","5h","6h","7h","8h","9h","10h","11h","12h","14h","16h","18h","20h","22h",
+                "1d","2d","3d","4d","5d","6d",
+                "1w","2w","3w",
+                "1M","2M","3M"
+            };
+            static constexpr int numIntervals = 39;
+            int intIdx = 4; // 15m default
+            for (int i = 0; i < numIntervals; ++i) {
                 if (config_.interval == intervals[i]) { intIdx = i; break; }
             }
-            if (ImGui::Combo("Interval", &intIdx, intervals, 9)) {
+            if (ImGui::Combo("Interval", &intIdx, intervals, numIntervals)) {
                 config_.interval = intervals[intIdx];
             }
 
@@ -870,6 +958,12 @@ void AppGui::drawSettingsPanel() {
             int modeIdx = (config_.mode == "live") ? 1 : 0;
             if (ImGui::Combo("Mode", &modeIdx, modes, 2)) {
                 config_.mode = modes[modeIdx];
+            }
+
+            const char* marketTypes[] = {"futures", "spot"};
+            int mtIdx = (config_.marketType == "spot") ? 1 : 0;
+            if (ImGui::Combo("Market Type", &mtIdx, marketTypes, 2)) {
+                config_.marketType = marketTypes[mtIdx];
             }
 
             ImGui::InputDouble("Initial Capital ($)", &config_.initialCapital, 100.0, 1000.0, "%.2f");
@@ -886,37 +980,89 @@ void AppGui::drawSettingsPanel() {
             ImGui::Text("Technical Indicator Parameters");
             ImGui::Separator();
 
-            ImGui::Text("Exponential Moving Averages");
-            ImGui::SliderInt("EMA Fast", &config_.emaFast, 2, 50);
-            ImGui::SliderInt("EMA Slow", &config_.emaSlow, 5, 100);
-            ImGui::SliderInt("EMA Trend", &config_.emaTrend, 50, 500);
-
+            // Indicator selection: up to 5 simultaneously
+            ImGui::Text("Select indicators (up to 5):");
+            int activeCount = (config_.indEmaEnabled ? 1 : 0) +
+                              (config_.indRsiEnabled ? 1 : 0) +
+                              (config_.indAtrEnabled ? 1 : 0) +
+                              (config_.indMacdEnabled ? 1 : 0) +
+                              (config_.indBbEnabled ? 1 : 0);
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
+                               "Active: %d / 5", activeCount);
             ImGui::Separator();
-            ImGui::Text("Relative Strength Index");
-            ImGui::SliderInt("RSI Period", &config_.rsiPeriod, 2, 50);
-            {
-                float rsiOB = (float)config_.rsiOverbought;
-                if (ImGui::SliderFloat("RSI Overbought", &rsiOB, 50.0f, 90.0f, "%.0f"))
-                    config_.rsiOverbought = rsiOB;
-                float rsiOS = (float)config_.rsiOversold;
-                if (ImGui::SliderFloat("RSI Oversold", &rsiOS, 10.0f, 50.0f, "%.0f"))
-                    config_.rsiOversold = rsiOS;
+
+            // EMA checkbox & config
+            if (!config_.indEmaEnabled && activeCount >= 5)
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("EMA (Exponential Moving Average)", &config_.indEmaEnabled);
+            if (!config_.indEmaEnabled && activeCount >= 5)
+                ImGui::EndDisabled();
+            if (config_.indEmaEnabled) {
+                ImGui::Indent();
+                ImGui::SliderInt("EMA Fast", &config_.emaFast, 2, 50);
+                ImGui::SliderInt("EMA Slow", &config_.emaSlow, 5, 100);
+                ImGui::SliderInt("EMA Trend", &config_.emaTrend, 50, 500);
+                ImGui::Unindent();
             }
 
-            ImGui::Separator();
-            ImGui::Text("ATR");
-            ImGui::SliderInt("ATR Period", &config_.atrPeriod, 2, 50);
+            // RSI checkbox & config
+            if (!config_.indRsiEnabled && activeCount >= 5)
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("RSI (Relative Strength Index)", &config_.indRsiEnabled);
+            if (!config_.indRsiEnabled && activeCount >= 5)
+                ImGui::EndDisabled();
+            if (config_.indRsiEnabled) {
+                ImGui::Indent();
+                ImGui::SliderInt("RSI Period", &config_.rsiPeriod, 2, 50);
+                {
+                    float rsiOB = (float)config_.rsiOverbought;
+                    if (ImGui::SliderFloat("RSI Overbought", &rsiOB, 50.0f, 90.0f, "%.0f"))
+                        config_.rsiOverbought = rsiOB;
+                    float rsiOS = (float)config_.rsiOversold;
+                    if (ImGui::SliderFloat("RSI Oversold", &rsiOS, 10.0f, 50.0f, "%.0f"))
+                        config_.rsiOversold = rsiOS;
+                }
+                ImGui::Unindent();
+            }
 
-            ImGui::Separator();
-            ImGui::Text("MACD");
-            ImGui::SliderInt("MACD Fast", &config_.macdFast, 2, 50);
-            ImGui::SliderInt("MACD Slow", &config_.macdSlow, 5, 100);
-            ImGui::SliderInt("MACD Signal", &config_.macdSignal, 2, 50);
+            // ATR checkbox & config
+            if (!config_.indAtrEnabled && activeCount >= 5)
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("ATR (Average True Range)", &config_.indAtrEnabled);
+            if (!config_.indAtrEnabled && activeCount >= 5)
+                ImGui::EndDisabled();
+            if (config_.indAtrEnabled) {
+                ImGui::Indent();
+                ImGui::SliderInt("ATR Period", &config_.atrPeriod, 2, 50);
+                ImGui::Unindent();
+            }
 
-            ImGui::Separator();
-            ImGui::Text("Bollinger Bands");
-            ImGui::SliderInt("BB Period", &config_.bbPeriod, 5, 50);
-            ImGui::InputDouble("BB Std Dev", &config_.bbStddev, 0.1, 0.5, "%.1f");
+            // MACD checkbox & config
+            if (!config_.indMacdEnabled && activeCount >= 5)
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("MACD", &config_.indMacdEnabled);
+            if (!config_.indMacdEnabled && activeCount >= 5)
+                ImGui::EndDisabled();
+            if (config_.indMacdEnabled) {
+                ImGui::Indent();
+                ImGui::SliderInt("MACD Fast", &config_.macdFast, 2, 50);
+                ImGui::SliderInt("MACD Slow", &config_.macdSlow, 5, 100);
+                ImGui::SliderInt("MACD Signal", &config_.macdSignal, 2, 50);
+                ImGui::Unindent();
+            }
+
+            // BB checkbox & config
+            if (!config_.indBbEnabled && activeCount >= 5)
+                ImGui::BeginDisabled();
+            ImGui::Checkbox("Bollinger Bands", &config_.indBbEnabled);
+            if (!config_.indBbEnabled && activeCount >= 5)
+                ImGui::EndDisabled();
+            if (config_.indBbEnabled) {
+                ImGui::Indent();
+                ImGui::SliderInt("BB Period", &config_.bbPeriod, 5, 50);
+                ImGui::InputDouble("BB Std Dev", &config_.bbStddev, 0.1, 0.5, "%.1f");
+                ImGui::Unindent();
+            }
 
             if (ImGui::Button("Apply Indicator Settings")) {
                 addLog("[Config] Indicator settings updated");
@@ -1032,6 +1178,271 @@ void AppGui::drawLogPanel() {
         // Auto-scroll to bottom
         if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20)
             ImGui::SetScrollHereY(1.0f);
+        ImGui::EndChild();
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  Filter Panel (volume, price, percent change filters)
+// ---------------------------------------------------------------------------
+void AppGui::drawFilterPanel() {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
+    ImGui::BeginChild("##FilterBar", ImVec2(0, 30), ImGuiChildFlags_Border);
+
+    ImGui::Text("Filters:");
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(80);
+    ImGui::InputDouble("##MinVol", &config_.filterMinVolume, 0, 0, "Vol>%.0f");
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(80);
+    ImGui::InputDouble("##MinPrice", &config_.filterMinPrice, 0, 0, "P>%.2f");
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(80);
+    ImGui::InputDouble("##MaxPrice", &config_.filterMaxPrice, 0, 0, "P<%.2f");
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(80);
+    float fMinChg = (float)config_.filterMinChange;
+    if (ImGui::InputFloat("##MinChg", &fMinChg, 0, 0, "%%>%.1f"))
+        config_.filterMinChange = fMinChg;
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(80);
+    float fMaxChg = (float)config_.filterMaxChange;
+    if (ImGui::InputFloat("##MaxChg", &fMaxChg, 0, 0, "%%<%.1f"))
+        config_.filterMaxChange = fMaxChg;
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+}
+
+// ---------------------------------------------------------------------------
+//  Candlestick Chart — improved bar visualization
+// ---------------------------------------------------------------------------
+void AppGui::drawCandlestickChart() {
+    GuiState snap;
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        snap = state_;
+    }
+
+    if (snap.candleHistory.empty()) return;
+
+    if (ImGui::CollapsingHeader("Candlestick Chart", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, 220);
+        ImGui::BeginChild("##CandleChart", canvasSize, ImGuiChildFlags_Border);
+
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float w = canvasSize.x - 4;
+        float h = canvasSize.y - 4;
+
+        int count = (int)snap.candleHistory.size();
+        if (count < 2) { ImGui::EndChild(); return; }
+
+        // Find price range
+        double pMin = 1e18, pMax = -1e18;
+        for (auto& c : snap.candleHistory) {
+            if (c.low  < pMin) pMin = c.low;
+            if (c.high > pMax) pMax = c.high;
+        }
+        double range = pMax - pMin;
+        if (range < 1e-9) range = 1.0;
+
+        float barWidth = std::max(2.0f, w / (float)count - 1.0f);
+        float halfBar  = barWidth * 0.5f;
+
+        for (int i = 0; i < count; ++i) {
+            auto& c = snap.candleHistory[i];
+            float x = p.x + 2.0f + (float)i * (barWidth + 1.0f);
+
+            // Map prices to pixel Y (top = high price, bottom = low price)
+            float yHigh  = p.y + h - (float)((c.high  - pMin) / range) * h;
+            float yLow   = p.y + h - (float)((c.low   - pMin) / range) * h;
+            float yOpen  = p.y + h - (float)((c.open  - pMin) / range) * h;
+            float yClose = p.y + h - (float)((c.close - pMin) / range) * h;
+
+            bool bullish = c.close >= c.open;
+            ImU32 color = bullish
+                ? IM_COL32(40, 200, 80, 255)    // green
+                : IM_COL32(220, 60, 60, 255);   // red
+
+            // Wick (high-low line)
+            float wickX = x + halfBar;
+            draw->AddLine(ImVec2(wickX, yHigh), ImVec2(wickX, yLow), color, 1.0f);
+
+            // Body (open-close rect)
+            float bodyTop = std::min(yOpen, yClose);
+            float bodyBot = std::max(yOpen, yClose);
+            if (bodyBot - bodyTop < 1.0f) bodyBot = bodyTop + 1.0f;
+
+            if (bullish) {
+                draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + barWidth, bodyBot), color);
+            } else {
+                draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + barWidth, bodyBot), color);
+            }
+        }
+
+        // Price scale on the right
+        for (int i = 0; i <= 4; ++i) {
+            float frac = (float)i / 4.0f;
+            float yLine = p.y + h - frac * h;
+            double priceVal = pMin + frac * range;
+            char label[32];
+            snprintf(label, sizeof(label), "%.2f", priceVal);
+            draw->AddText(ImVec2(p.x + w - 60, yLine - 6), IM_COL32(130, 130, 135, 200), label);
+            draw->AddLine(ImVec2(p.x, yLine), ImVec2(p.x + w - 65, yLine),
+                          IM_COL32(50, 50, 55, 100), 1.0f);
+        }
+
+        ImGui::Dummy(canvasSize);
+        ImGui::EndChild();
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  Volume Delta Bars
+// ---------------------------------------------------------------------------
+void AppGui::drawVolumeDeltaPanel() {
+    std::lock_guard<std::mutex> lk(stateMutex_);
+    if (volumeDeltaHistory_.empty()) return;
+
+    if (ImGui::CollapsingHeader("Volume Delta", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, 80);
+        ImGui::BeginChild("##VolDelta", canvasSize, ImGuiChildFlags_Border);
+
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float w = canvasSize.x - 4;
+        float h = canvasSize.y - 4;
+
+        int count = (int)volumeDeltaHistory_.size();
+        if (count < 1) { ImGui::EndChild(); return; }
+
+        double maxAbs = 1.0;
+        for (auto& v : volumeDeltaHistory_) {
+            if (std::abs(v) > maxAbs) maxAbs = std::abs(v);
+        }
+
+        float barW = std::max(2.0f, w / (float)count - 1.0f);
+        float midY = p.y + h * 0.5f;
+
+        // Zero line
+        draw->AddLine(ImVec2(p.x, midY), ImVec2(p.x + w, midY),
+                      IM_COL32(80, 80, 85, 150), 1.0f);
+
+        for (int i = 0; i < count; ++i) {
+            float x = p.x + 2.0f + (float)i * (barW + 1.0f);
+            double val = volumeDeltaHistory_[i];
+            float barH = (float)(std::abs(val) / maxAbs) * (h * 0.48f);
+
+            ImU32 col = (val >= 0)
+                ? IM_COL32(40, 180, 80, 200)
+                : IM_COL32(200, 60, 60, 200);
+
+            if (val >= 0) {
+                draw->AddRectFilled(ImVec2(x, midY - barH), ImVec2(x + barW, midY), col);
+            } else {
+                draw->AddRectFilled(ImVec2(x, midY), ImVec2(x + barW, midY + barH), col);
+            }
+        }
+
+        ImGui::Dummy(canvasSize);
+        ImGui::EndChild();
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  Order Book Panel (Стакан / Биржевой стакан)
+// ---------------------------------------------------------------------------
+void AppGui::drawOrderBookPanel() {
+    GuiState snap;
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        snap = state_;
+    }
+
+    if (ImGui::CollapsingHeader(u8"Order Book (Стакан)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::BeginChild("##OrderBook", ImVec2(0, 260), ImGuiChildFlags_Border);
+
+        // Find max quantity for bar scaling
+        double maxQty = 1.0;
+        for (auto& a : snap.orderBook.asks) {
+            if (a.qty > maxQty) maxQty = a.qty;
+        }
+        for (auto& b : snap.orderBook.bids) {
+            if (b.qty > maxQty) maxQty = b.qty;
+        }
+
+        float colW = ImGui::GetContentRegionAvail().x;
+
+        // Asks (sell orders) — top, red, reversed (lowest ask at bottom)
+        ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f), "ASKS (Sell)");
+        ImGui::Separator();
+
+        int askCount = std::min((int)snap.orderBook.asks.size(), 15);
+        for (int i = askCount - 1; i >= 0; --i) {
+            auto& level = snap.orderBook.asks[i];
+            float frac = (float)(level.qty / maxQty);
+
+            // Background bar
+            ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                cursorPos,
+                ImVec2(cursorPos.x + colW * frac, cursorPos.y + ImGui::GetTextLineHeight()),
+                IM_COL32(180, 40, 40, 60));
+
+            ImGui::TextColored(ImVec4(0.90f, 0.35f, 0.35f, 1.0f),
+                "%.4f", level.price);
+            ImGui::SameLine(colW * 0.4f);
+            ImGui::Text("%.6f", level.qty);
+            ImGui::SameLine(colW * 0.75f);
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
+                "%.2f", level.price * level.qty);
+        }
+
+        // Spread
+        ImGui::Separator();
+        double spread = 0.0;
+        if (!snap.orderBook.asks.empty() && !snap.orderBook.bids.empty()) {
+            spread = snap.orderBook.asks[0].price - snap.orderBook.bids[0].price;
+        }
+        ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.72f, 1.0f),
+            "  Spread: %.4f", spread);
+        ImGui::Separator();
+
+        // Bids (buy orders) — bottom, green
+        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "BIDS (Buy)");
+        ImGui::Separator();
+
+        int bidCount = std::min((int)snap.orderBook.bids.size(), 15);
+        for (int i = 0; i < bidCount; ++i) {
+            auto& level = snap.orderBook.bids[i];
+            float frac = (float)(level.qty / maxQty);
+
+            ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                cursorPos,
+                ImVec2(cursorPos.x + colW * frac, cursorPos.y + ImGui::GetTextLineHeight()),
+                IM_COL32(40, 160, 60, 60));
+
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.40f, 1.0f),
+                "%.4f", level.price);
+            ImGui::SameLine(colW * 0.4f);
+            ImGui::Text("%.6f", level.qty);
+            ImGui::SameLine(colW * 0.75f);
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
+                "%.2f", level.price * level.qty);
+        }
+
+        if (snap.orderBook.bids.empty() && snap.orderBook.asks.empty()) {
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f),
+                "No order book data available. Connect to an exchange to see the order book.");
+        }
+
         ImGui::EndChild();
     }
 }
