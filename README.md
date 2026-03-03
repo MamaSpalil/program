@@ -148,7 +148,7 @@ make -j$(sysctl -n hw.ncpu)
 4. **Соберите проект**
 
    - `Сборка → Собрать всё` (Ctrl+Shift+B).
-   - Готовый `crypto_trader.exe` появится в папке `build\Release\`.
+   - Готовый `crypto_trader.exe` появится в папке `build\vs2019-x64-release\Release\`.
 
 > **Примечание:** требуется Visual Studio 2019 версии 16.10 или новее.
 > Если вы используете Visual Studio 2022, выберите пресет
@@ -164,10 +164,10 @@ set VCPKG_ROOT=C:\vcpkg
 
 # Сборка (из корня проекта)
 cmake --preset windows-x64-release
-cmake --build build --config Release
+cmake --build build/vs2019-x64-release --config Release
 ```
 
-Исполняемый файл: `build\Release\crypto_trader.exe`.
+Исполняемый файл: `build\vs2019-x64-release\Release\crypto_trader.exe`.
 
 ### Windows (CI / GitHub Actions)
 
