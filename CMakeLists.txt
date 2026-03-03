@@ -50,6 +50,7 @@ set(EXCHANGE_SOURCES
     src/exchange/BinanceExchange.cpp
     src/exchange/BybitExchange.cpp
     src/exchange/OKXExchange.cpp
+    src/exchange/BitgetExchange.cpp
 )
 
 set(DATA_SOURCES
