@@ -5,6 +5,11 @@
 #include <iostream>
 #include <memory>
 
+#ifdef USE_IMGUI
+#include "ui/AppGui.h"
+#include <thread>
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -32,6 +37,8 @@ BOOL WINAPI consoleCtrlHandler(DWORD ctrlType) {
 #endif
 } // namespace
 
+#ifdef USE_IMGUI
+// ── GUI mode ─────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
     std::string configPath = "config/settings.json";
     if (argc > 1) configPath = argv[1];
@@ -45,7 +52,104 @@ int main(int argc, char* argv[]) {
 
     try {
         crypto::Logger::init();
-        crypto::Logger::get()->info("CryptoTrader starting...");
+        crypto::Logger::get()->info("CryptoTrader GUI starting...");
+
+        auto gui = std::make_unique<crypto::AppGui>();
+        if (!gui->init(configPath)) {
+            std::cerr << "Failed to initialize GUI\n";
+            return 1;
+        }
+
+        std::unique_ptr<crypto::Engine> engine;
+
+        // Wire up GUI callbacks to engine
+        gui->setConnectCallback([&](const crypto::GuiConfig& cfg) {
+            gui->addLog("[Info] Connecting to " + cfg.exchangeName + "...");
+            try {
+                engine = std::make_unique<crypto::Engine>(configPath);
+                g_engine = engine.get();
+
+                // Start the engine on a background thread
+                std::thread([&]() {
+                    try {
+                        engine->run();
+                    } catch (const std::exception& e) {
+                        gui->addLog(std::string("[Error] Engine: ") + e.what());
+                    }
+                }).detach();
+
+                crypto::GuiState st;
+                st.connected = true;
+                st.trading = true;
+                st.statusMessage = "Connected to " + cfg.exchangeName +
+                                   " (" + cfg.symbol + " " + cfg.interval + ")";
+                st.equity = cfg.initialCapital;
+                st.initialCapital = cfg.initialCapital;
+                gui->updateState(st);
+                gui->addLog("[OK] Connected successfully");
+            } catch (const std::exception& e) {
+                gui->addLog(std::string("[Error] Connection failed: ") + e.what());
+            }
+        });
+
+        gui->setDisconnectCallback([&]() {
+            gui->addLog("[Info] Disconnecting...");
+            if (engine) {
+                engine->stop();
+                engine.reset();
+                g_engine = nullptr;
+            }
+            crypto::GuiState st;
+            st.connected = false;
+            st.trading = false;
+            st.statusMessage = "Disconnected";
+            gui->updateState(st);
+            gui->addLog("[OK] Disconnected");
+        });
+
+        gui->setStartCallback([&]() {
+            gui->addLog("[Info] Trading started");
+        });
+
+        gui->setStopCallback([&]() {
+            gui->addLog("[Info] Trading stopped");
+        });
+
+        gui->addLog("[Info] Crypto ML Trader v1.0.0 ready");
+        gui->addLog("[Info] Configure exchange settings and press Connect");
+
+        // Run the GUI event loop (blocks until window close)
+        gui->run();
+
+        // Cleanup
+        if (engine) {
+            engine->stop();
+            engine.reset();
+        }
+        gui->shutdown();
+
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal: " << e.what() << "\n";
+        return 1;
+    }
+    return 0;
+}
+#else
+// ── Console mode (fallback when ImGui not available) ─────────────────────────
+int main(int argc, char* argv[]) {
+    std::string configPath = "config/settings.json";
+    if (argc > 1) configPath = argv[1];
+
+    std::signal(SIGINT,  signalHandler);
+    std::signal(SIGTERM, signalHandler);
+
+#ifdef _WIN32
+    SetConsoleCtrlHandler(consoleCtrlHandler, TRUE);
+#endif
+
+    try {
+        crypto::Logger::init();
+        crypto::Logger::get()->info("CryptoTrader starting (console mode)...");
 
         auto engine = std::make_unique<crypto::Engine>(configPath);
         g_engine = engine.get();
@@ -56,3 +160,4 @@ int main(int argc, char* argv[]) {
     }
     return 0;
 }
+#endif

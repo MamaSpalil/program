@@ -23,6 +23,8 @@ find_package(Curses QUIET)
 find_package(Torch QUIET)
 find_package(XGBoost QUIET)
 find_package(GTest QUIET)
+find_package(glfw3 QUIET)
+find_package(OpenGL QUIET)
 
 # ── Compile options ────────────────────────────────────────────────────────────
 if(MSVC)
@@ -79,6 +81,17 @@ set(STRATEGY_SOURCES
 
 set(UI_SOURCES
     src/ui/Dashboard.cpp
+)
+
+# ── ImGui sources (vendored in third_party/imgui) ────────────────────────────
+set(IMGUI_SOURCES
+    third_party/imgui/imgui.cpp
+    third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp
+    third_party/imgui/imgui_widgets.cpp
+    third_party/imgui/imgui_impl_glfw.cpp
+    third_party/imgui/imgui_impl_opengl3.cpp
+    src/ui/AppGui.cpp
 )
 
 set(ALL_LIB_SOURCES
@@ -151,6 +164,28 @@ endif()
 add_executable(crypto_trader src/main.cpp)
 target_compile_options(crypto_trader PRIVATE ${COMMON_FLAGS})
 target_link_libraries(crypto_trader PRIVATE crypto_lib)
+
+# ── ImGui / GLFW / OpenGL (optional — provides windowed GUI) ──────────────────
+if(glfw3_FOUND AND OPENGL_FOUND)
+    add_library(imgui_lib STATIC ${IMGUI_SOURCES})
+    target_include_directories(imgui_lib PUBLIC
+        third_party/imgui
+        src
+    )
+    target_compile_options(imgui_lib PRIVATE ${COMMON_FLAGS})
+    # Link imgui_lib against everything crypto_lib already exposes (json, spdlog, etc.)
+    target_link_libraries(imgui_lib PUBLIC
+        crypto_lib
+        glfw
+        OpenGL::GL
+    )
+
+    target_link_libraries(crypto_trader PRIVATE imgui_lib)
+    target_compile_definitions(crypto_trader PRIVATE USE_IMGUI)
+    message(STATUS "GLFW + OpenGL found — GUI enabled")
+else()
+    message(STATUS "GLFW or OpenGL not found — GUI disabled (console mode)")
+endif()
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
 if(GTest_FOUND OR GTEST_FOUND)
