@@ -62,6 +62,16 @@ void Engine::initComponents() {
     std::string wsPort     = ex.value("ws_port", "");
     bool testnet           = ex.value("testnet", true);
 
+    // Validate exchange name against known values for path safety
+    static const std::vector<std::string> validNames = {
+        "binance", "bybit", "okx", "bitget", "kucoin"
+    };
+    bool nameValid = false;
+    for (auto& v : validNames) {
+        if (name == v) { nameValid = true; break; }
+    }
+    if (!nameValid) name = "binance";
+
     Logger::get()->debug("[Engine] Creating exchange: name={} baseUrl={} wsHost={} wsPort={} testnet={}",
                          name, baseUrl, wsHost, wsPort, testnet);
 

@@ -1078,7 +1078,7 @@ std::string PineConverter::generateCpp(const PineScript& script,
         << "#include \"RSI.h\"\n"
         << "#include \"ATR.h\"\n"
         << "#include \"PineScriptIndicator.h\"\n"
-        << "#include <map>\n#include <string>\n#include <cmath>\n#include <deque>\n\n"
+        << "#include <map>\n#include <string>\n#include <cmath>\n\n"
         << "namespace crypto {\n\n"
         << "class " << className << " {\n"
         << "public:\n";
@@ -1152,7 +1152,7 @@ std::string PineConverter::generateCpp(const PineScript& script,
         out << "        double " << ind.key << " = " << ind.key << "_.value();\n";
     for (auto& sv : simpleVars)
         out << "        double " << sv.name << " = " << sv.defaultVal << ";\n";
-    out << "        (void)barIndex_;\n";
+    out << "        (void)barIndex_; // bar count available for threshold checks\n";
 
     // Wire plots to their source variables
     out << "\n        plots_.clear();\n";
