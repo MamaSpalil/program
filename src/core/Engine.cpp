@@ -325,4 +325,45 @@ double Engine::winRate() const {
     return 0.0;
 }
 
+void Engine::setMarketType(const std::string& marketType) {
+    if (impl_ && impl_->exchange)
+        impl_->exchange->setMarketType(marketType);
+}
+
+double Engine::getPrice(const std::string& symbol) const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getPrice(symbol);
+    return 0.0;
+}
+
+std::vector<OpenOrderInfo> Engine::getOpenOrders(const std::string& symbol) const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getOpenOrders(symbol);
+    return {};
+}
+
+std::vector<UserTradeInfo> Engine::getMyTrades(const std::string& symbol, int limit) const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getMyTrades(symbol, limit);
+    return {};
+}
+
+std::vector<PositionInfo> Engine::getPositionRisk(const std::string& symbol) const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getPositionRisk(symbol);
+    return {};
+}
+
+FuturesBalanceInfo Engine::getFuturesBalance() const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getFuturesBalance();
+    return {};
+}
+
+std::vector<AccountBalanceDetail> Engine::getAccountBalanceDetails() const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getAccountBalanceDetails();
+    return {};
+}
+
 } // namespace crypto

@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
 
                 // Fetch available trading pairs in background
                 try {
-                    auto symbols = engine->getSymbols();
+                    auto symbols = engine->getSymbols(cfg.marketType);
                     if (!symbols.empty()) {
                         crypto::GuiState st;
                         {
@@ -140,11 +140,18 @@ int main(int argc, char* argv[]) {
                     gui->addLog("[Warn] Could not fetch trading pairs");
                 }
 
+                // Set market type on exchange
+                engine->setMarketType(cfg.marketType);
+
                 // Show User Panel automatically after successful connection
                 // (the panel visibility flag is set from within the GUI)
 
                 // Wire engine updates to the GUI so chart and indicators are displayed
                 engine->setOnUpdateCallback([&gui, &cfg, &engine](const crypto::EngineUpdate& upd) {
+                    static auto lastPriceTime = std::chrono::steady_clock::now();
+                    static auto lastUserDataTime = std::chrono::steady_clock::time_point{};
+                    auto now = std::chrono::steady_clock::now();
+
                     crypto::GuiState st;
                     st.connected = true;
                     st.trading   = true;
@@ -171,6 +178,33 @@ int main(int argc, char* argv[]) {
                         st.trades   = engine->listTrades();
                         st.totalPnl = engine->totalPnl();
                         st.winRate  = engine->winRate();
+
+                        // Fetch current price (every 1 second)
+                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastPriceTime).count() >= 1) {
+                            try {
+                                st.currentPrice = engine->getPrice(cfg.symbol);
+                            } catch (...) {
+                                st.currentPriceError = "Price error";
+                            }
+                            lastPriceTime = now;
+                        }
+
+                        // Fetch user data (every 5 seconds)
+                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUserDataTime).count() >= 5) {
+                            try {
+                                st.openOrders = engine->getOpenOrders(cfg.symbol);
+                                st.userTrades = engine->getMyTrades(cfg.symbol, 20);
+                                if (cfg.marketType == "futures") {
+                                    st.futuresBalance = engine->getFuturesBalance();
+                                    st.futuresPositions = engine->getPositionRisk(cfg.symbol);
+                                } else {
+                                    st.accountBalanceDetails = engine->getAccountBalanceDetails();
+                                }
+                            } catch (...) {
+                                // Silently skip user data errors
+                            }
+                            lastUserDataTime = now;
+                        }
                     }
 
                     gui->updateState(st);
@@ -260,6 +294,25 @@ int main(int argc, char* argv[]) {
             } catch (const std::exception& e) {
                 gui->addLog(std::string("[Error] Order: ") + e.what());
             }
+        });
+
+        // Load pairs callback — reload pair list when market type changes
+        gui->setLoadPairsCallback([&](const std::string& marketType) {
+            if (!engine) return;
+            std::thread([&gui, &engine, marketType]() {
+                try {
+                    engine->setMarketType(marketType);
+                    auto symbols = engine->getSymbols(marketType);
+                    crypto::GuiState st;
+                    st.availableSymbols = std::move(symbols);
+                    st.connected = true;
+                    st.trading = true;
+                    gui->updateState(st);
+                    gui->addLog("[OK] Reloaded " + std::to_string(st.availableSymbols.size()) + " pairs for " + marketType);
+                } catch (const std::exception& e) {
+                    gui->addLog(std::string("[Error] Load pairs: ") + e.what());
+                }
+            }).detach();
         });
 
         gui->addLog("[Info] Crypto ML Trader v1.0.0 ready");

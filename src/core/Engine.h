@@ -48,6 +48,27 @@ public:
     // Get available trading pairs from the exchange
     std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") const;
 
+    // Set market type on the exchange (spot/futures)
+    void setMarketType(const std::string& marketType);
+
+    // Get current ticker price
+    double getPrice(const std::string& symbol) const;
+
+    // Get open orders (signed)
+    std::vector<OpenOrderInfo> getOpenOrders(const std::string& symbol = "") const;
+
+    // Get user's recent trades (signed)
+    std::vector<UserTradeInfo> getMyTrades(const std::string& symbol, int limit = 20) const;
+
+    // Get futures position risk (signed)
+    std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") const;
+
+    // Get futures balance (signed)
+    FuturesBalanceInfo getFuturesBalance() const;
+
+    // Get account balance details (OKX style)
+    std::vector<AccountBalanceDetail> getAccountBalanceDetails() const;
+
     // Record a trade in the database
     void recordTrade(const TradeRecord& tr);
 
