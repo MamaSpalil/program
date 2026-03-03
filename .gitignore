@@ -16,3 +16,4 @@ logs/
 *.obj
 *.ilk
 *.exp
+*.generated.h

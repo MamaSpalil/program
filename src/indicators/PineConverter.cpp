@@ -1,4 +1,5 @@
 #include "PineConverter.h"
+#include "PineScriptIndicator.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -33,7 +34,6 @@ std::vector<PineToken> PineConverter::tokenize(const std::string& src) {
         // Comments
         if (ch == '/' && i + 1 < src.size() && src[i + 1] == '/') {
             // Check for version annotation: //@version=N
-            size_t start = i;
             while (i < src.size() && src[i] != '\n') ++i;
             // Comments are skipped; version is detected in parser via regex on source
             continue;
