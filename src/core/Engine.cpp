@@ -75,8 +75,8 @@ void Engine::initComponents() {
         impl_->exchange = std::make_unique<BinanceExchange>(apiKey, apiSec, baseUrl);
     }
 
-    // Save credentials to ExchangeDB for persistence
-    ExchangeDB db;
+    // Save credentials to a per-exchange ExchangeDB for persistence
+    ExchangeDB db("config/db_" + name + ".json");
     db.load();
     ExchangeProfile prof;
     prof.name         = name;

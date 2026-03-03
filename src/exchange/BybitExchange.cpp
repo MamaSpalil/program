@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <algorithm>
 #include <stdexcept>
 
 namespace crypto {
@@ -99,6 +100,8 @@ std::vector<Candle> BybitExchange::getKlines(const std::string& symbol,
         c.closed   = true;
         candles.push_back(c);
     }
+    // Bybit v5 API returns candles newest-first; reverse to chronological order
+    std::reverse(candles.begin(), candles.end());
     Logger::get()->debug("[Bybit] getKlines parsed {} candles", candles.size());
     return candles;
 }
