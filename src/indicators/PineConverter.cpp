@@ -1070,8 +1070,9 @@ void PineRuntime::store(const std::string& name, double v) {
 std::string PineConverter::generateCpp(const PineScript& script,
                                        const std::string& className) {
     std::ostringstream out;
-    out << "// Auto-generated from Pine Script v" << script.version << ": "
+    out << "// Auto-generated C++ indicator from Pine Script v" << script.version << ": "
         << script.name << "\n"
+        << "// This indicator reads candle (bar) data and computes values.\n"
         << "#pragma once\n"
         << "#include \"EMA.h\"\n"
         << "#include \"RSI.h\"\n"
@@ -1082,10 +1083,15 @@ std::string PineConverter::generateCpp(const PineScript& script,
         << "class " << className << " {\n"
         << "public:\n";
 
-    // Collect indicator instances needed
+    // Collect indicator instances needed & build plot-to-variable mapping
     struct IndInfo { std::string type; std::string key; int period; };
     std::vector<IndInfo> inds;
-    std::vector<std::string> plotNames;
+    struct PlotInfo { std::string title; std::string sourceVar; };
+    std::vector<PlotInfo> plotInfos;
+
+    // Also collect simple variable assignments (numeric literals, expressions)
+    struct VarInfo { std::string name; double defaultVal; };
+    std::vector<VarInfo> simpleVars;
 
     for (auto& stmt : script.statements) {
         if (stmt.kind == PineStmt::Kind::ASSIGN ||
@@ -1101,21 +1107,40 @@ std::string PineConverter::generateCpp(const PineScript& script,
                 if (fn == "ta.ema") inds.push_back({"EMA", stmt.name, period});
                 if (fn == "ta.rsi") inds.push_back({"RSI", stmt.name, period});
                 if (fn == "ta.atr") inds.push_back({"ATR", stmt.name, period});
+            } else if (stmt.expr && stmt.expr->kind == PineExpr::Kind::LITERAL_NUM) {
+                simpleVars.push_back({stmt.name, stmt.expr->numVal});
             }
         }
-        if (stmt.kind == PineStmt::Kind::PLOT) plotNames.push_back(stmt.plotTitle);
+        if (stmt.kind == PineStmt::Kind::PLOT) {
+            std::string src;
+            // Determine which variable feeds this plot
+            if (stmt.expr && stmt.expr->kind == PineExpr::Kind::VARIABLE)
+                src = stmt.expr->strVal;
+            else if (stmt.expr && stmt.expr->kind == PineExpr::Kind::FUNC_CALL &&
+                     !stmt.expr->children.empty() &&
+                     stmt.expr->children[0]->kind == PineExpr::Kind::VARIABLE)
+                src = stmt.expr->children[0]->strVal;
+            plotInfos.push_back({stmt.plotTitle, src});
+        }
     }
 
     // Constructor
     out << "    " << className << "()\n        : ";
-    for (size_t i = 0; i < inds.size(); ++i) {
-        out << inds[i].key << "_(" << inds[i].period << ")";
-        if (i + 1 < inds.size()) out << ", ";
+    bool first = true;
+    for (auto& ind : inds) {
+        if (!first) out << ", ";
+        out << ind.key << "_(" << ind.period << ")";
+        first = false;
     }
+    if (first) out << "barIndex_(0)";
+    else out << ", barIndex_(0)";
     out << " {}\n\n";
 
-    // Update method
-    out << "    void update(const Candle& c) {\n";
+    // Update method — reads candle data and computes indicator values
+    out << "    /// Update indicator with new candle bar data\n"
+        << "    void update(const Candle& c) {\n"
+        << "        ++barIndex_;\n";
+
     for (auto& ind : inds) {
         if (ind.type == "ATR")
             out << "        " << ind.key << "_.update(c);\n";
@@ -1125,19 +1150,46 @@ std::string PineConverter::generateCpp(const PineScript& script,
     out << "\n";
     for (auto& ind : inds)
         out << "        double " << ind.key << " = " << ind.key << "_.value();\n";
+    for (auto& sv : simpleVars)
+        out << "        double " << sv.name << " = " << sv.defaultVal << ";\n";
+    out << "        (void)barIndex_; // bar count available for threshold checks\n";
 
+    // Wire plots to their source variables
     out << "\n        plots_.clear();\n";
-    for (auto& p : plotNames)
-        out << "        plots_[\"" << p << "\"] = 0.0; // wire to computed value\n";
+    for (auto& p : plotInfos) {
+        if (!p.sourceVar.empty()) {
+            // Check if the source variable is a known indicator or simple var
+            bool found = false;
+            for (auto& ind : inds) {
+                if (ind.key == p.sourceVar) { found = true; break; }
+            }
+            if (!found) {
+                for (auto& sv : simpleVars) {
+                    if (sv.name == p.sourceVar) { found = true; break; }
+                }
+            }
+            if (found)
+                out << "        plots_[\"" << p.title << "\"] = " << p.sourceVar << ";\n";
+            else
+                out << "        plots_[\"" << p.title << "\"] = 0.0; // source: " << p.sourceVar << "\n";
+        } else {
+            out << "        plots_[\"" << p.title << "\"] = 0.0;\n";
+        }
+    }
     out << "    }\n\n";
 
-    out << "    std::map<std::string, double> plots() const { return plots_; }\n\n";
+    out << "    /// Get all computed plot values (read from bar data)\n"
+        << "    std::map<std::string, double> plots() const { return plots_; }\n\n"
+        << "    /// Check if indicator has enough bar data\n"
+        << "    bool ready() const { return barIndex_ >= 2; }\n\n"
+        << "    int barIndex() const { return barIndex_; }\n\n";
 
     // Private members
     out << "private:\n";
     for (auto& ind : inds)
         out << "    " << ind.type << " " << ind.key << "_;\n";
-    out << "    std::map<std::string, double> plots_;\n";
+    out << "    std::map<std::string, double> plots_;\n"
+        << "    int barIndex_{0};\n";
     out << "};\n\n} // namespace crypto\n";
 
     return out.str();

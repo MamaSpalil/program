@@ -1,5 +1,6 @@
 #pragma once
 #include "../exchange/IExchange.h"
+#include "../data/ExchangeDB.h"
 #include "../indicators/PineScriptIndicator.h"
 #include <atomic>
 #include <memory>
@@ -42,6 +43,17 @@ public:
 
     // Get user indicator plots (thread-safe snapshot)
     std::map<std::string, std::map<std::string, double>> getUserIndicatorPlots() const;
+
+    // Get available trading pairs from the exchange
+    std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") const;
+
+    // Record a trade in the database
+    void recordTrade(const TradeRecord& tr);
+
+    // Get trade statistics
+    std::vector<TradeRecord> listTrades() const;
+    double totalPnl() const;
+    double winRate() const;
 
     // Callback invoked after each candle is processed (historical + live)
     using OnUpdateCallback = std::function<void(const EngineUpdate&)>;

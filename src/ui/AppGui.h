@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../data/CandleData.h"
+#include "../exchange/IExchange.h"
+#include "../data/ExchangeDB.h"
 #include "../indicators/IndicatorEngine.h"
 #include "../strategy/RiskManager.h"
 #include <nlohmann/json.hpp>
@@ -48,6 +50,14 @@ struct GuiState {
 
     // User indicator results from Pine Script files
     std::map<std::string, std::map<std::string, double>> userIndicatorPlots;
+
+    // Available trading pairs (populated after connection)
+    std::vector<SymbolInfo> availableSymbols;
+
+    // Trade statistics
+    std::vector<TradeRecord> trades;
+    double totalPnl{0.0};
+    double winRate{0.0};
 
     // Log lines
     std::deque<std::string> logLines;
@@ -181,6 +191,8 @@ private:
     void drawStatusBar();
     void drawFilterPanel();
     void drawUserIndicatorDashboard();
+    void drawUserPanel();
+    void drawPairSelector();
 
     // Load config from JSON file
     void loadConfig(const std::string& path);
@@ -197,6 +209,10 @@ private:
     bool showSettings_{false};
     bool showDemo_{false};
     bool showOrderBook_{false};  // Order book mode
+    bool showUserPanel_{false};  // User panel (separate window)
+
+    // Pair selector state
+    int selectedPairIdx_{-1};
 
     // Signal history for display
     std::deque<Signal> signalHistory_;

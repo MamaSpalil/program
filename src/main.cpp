@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <locale>
 #include <clocale>
+#include <chrono>
 
 #ifdef USE_IMGUI
 #include "ui/AppGui.h"
@@ -119,8 +120,31 @@ int main(int argc, char* argv[]) {
 
                 gui->addLog("[OK] API connection verified");
 
+                // Fetch available trading pairs in background
+                try {
+                    auto symbols = engine->getSymbols();
+                    if (!symbols.empty()) {
+                        crypto::GuiState st;
+                        {
+                            // Merge symbols into existing state
+                            st = crypto::GuiState{};
+                            st.availableSymbols = std::move(symbols);
+                            st.connected = true;
+                            st.trading = false;
+                            st.statusMessage = "Loading symbols...";
+                        }
+                        gui->updateState(st);
+                        gui->addLog("[OK] Loaded " + std::to_string(st.availableSymbols.size()) + " trading pairs");
+                    }
+                } catch (...) {
+                    gui->addLog("[Warn] Could not fetch trading pairs");
+                }
+
+                // Show User Panel automatically after successful connection
+                // (the panel visibility flag is set from within the GUI)
+
                 // Wire engine updates to the GUI so chart and indicators are displayed
-                engine->setOnUpdateCallback([&gui, &cfg](const crypto::EngineUpdate& upd) {
+                engine->setOnUpdateCallback([&gui, &cfg, &engine](const crypto::EngineUpdate& upd) {
                     crypto::GuiState st;
                     st.connected = true;
                     st.trading   = true;
@@ -140,6 +164,14 @@ int main(int argc, char* argv[]) {
                     st.initialCapital = cfg.initialCapital;
                     st.drawdown  = upd.drawdown;
                     st.userIndicatorPlots = upd.userIndicatorPlots;
+
+                    // Fetch trading pairs once (kept across updates)
+                    if (engine) {
+                        st.trades   = engine->listTrades();
+                        st.totalPnl = engine->totalPnl();
+                        st.winRate  = engine->winRate();
+                    }
+
                     gui->updateState(st);
                 });
 
@@ -211,6 +243,16 @@ int main(int argc, char* argv[]) {
                 if (!resp.orderId.empty()) {
                     gui->addLog("[OK] Order " + resp.orderId + " " + resp.status +
                                 " qty=" + std::to_string(resp.executedQty));
+                    // Record trade in database
+                    crypto::TradeRecord tr;
+                    tr.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    tr.symbol    = symbol;
+                    tr.side      = side;
+                    tr.orderType = type;
+                    tr.qty       = resp.executedQty;
+                    tr.price     = resp.executedPrice;
+                    engine->recordTrade(tr);
                 } else {
                     gui->addLog("[Error] Order failed: " + resp.status);
                 }

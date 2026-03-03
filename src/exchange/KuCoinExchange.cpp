@@ -259,4 +259,52 @@ bool KuCoinExchange::testConnection(std::string& outError) {
     }
 }
 
+std::vector<SymbolInfo> KuCoinExchange::getSymbols(const std::string& marketType) {
+#ifndef USE_CURL
+    (void)marketType;
+    return {};
+#else
+    std::vector<SymbolInfo> result;
+    try {
+        // Spot symbols
+        if (marketType.empty() || marketType == "spot") {
+            auto resp = httpGet("/api/v2/symbols");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("data") && j["data"].is_array()) {
+                for (auto& s : j["data"]) {
+                    if (!s.value("enableTrading", true)) continue;
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseCurrency", "");
+                    si.quoteAsset = s.value("quoteCurrency", "");
+                    si.marketType = "spot";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset;
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        // Futures symbols
+        if (marketType.empty() || marketType == "futures") {
+            auto resp = httpGet("/api/v1/contracts/active");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("data") && j["data"].is_array()) {
+                for (auto& s : j["data"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseCurrency", "");
+                    si.quoteAsset = s.value("quoteCurrency", "");
+                    si.marketType = "futures";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset + " Swap";
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        Logger::get()->info("[KuCoin] Fetched {} symbols", result.size());
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] getSymbols failed: {}", e.what());
+    }
+    return result;
+#endif
+}
+
 } // namespace crypto

@@ -32,6 +32,7 @@ public:
     void connect() override;
     void disconnect() override;
     bool testConnection(std::string& outError) override;
+    std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") override;
 
 private:
     std::string apiKey_;

@@ -50,8 +50,34 @@ void SignalEnhancer::recordOutcome(int predicted, int actual) {
 }
 
 void SignalEnhancer::updateWeights() {
-    // Simple: keep fixed weights for now; online update can be added
-    // In production, compare per-model accuracy and rebalance
+    if (outcomes_.size() < 10) return;  // Need enough data
+
+    // Compute rolling accuracy per model category
+    int correct = 0;
+    int total = static_cast<int>(outcomes_.size());
+    for (auto& [pred, act] : outcomes_) {
+        if (pred == act) ++correct;
+    }
+
+    double accuracy = static_cast<double>(correct) / total;
+
+    // Adaptive weight adjustment bounds
+    constexpr double kMaxIndicatorWeight = 0.55;
+    constexpr double kMinIndicatorWeight = 0.20;
+    constexpr double kWeightStep         = 0.01;
+
+    if (accuracy > 0.6) {
+        // Good performance — slightly favor indicators for stability
+        weightInd_  = std::min(kMaxIndicatorWeight, weightInd_  + kWeightStep);
+        weightLstm_ = (1.0 - weightInd_) * 0.5;
+        weightXgb_  = (1.0 - weightInd_) * 0.5;
+    } else if (accuracy < 0.4) {
+        // Poor performance — boost ML models for pattern detection
+        weightInd_  = std::max(kMinIndicatorWeight, weightInd_  - kWeightStep);
+        weightLstm_ = (1.0 - weightInd_) * 0.5;
+        weightXgb_  = (1.0 - weightInd_) * 0.5;
+    }
+    // Else: keep current weights (neutral zone)
 }
 
 } // namespace crypto

@@ -186,4 +186,51 @@ bool BybitExchange::testConnection(std::string& outError) {
     }
 }
 
+std::vector<SymbolInfo> BybitExchange::getSymbols(const std::string& marketType) {
+#ifndef USE_CURL
+    (void)marketType;
+    return {};
+#else
+    std::vector<SymbolInfo> result;
+    try {
+        // Fetch spot symbols
+        if (marketType.empty() || marketType == "spot") {
+            auto resp = httpGet("/v5/market/instruments-info?category=spot");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("result") && j["result"].contains("list")) {
+                for (auto& s : j["result"]["list"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseCoin", "");
+                    si.quoteAsset = s.value("quoteCoin", "");
+                    si.marketType = "spot";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset;
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        // Fetch futures (linear) symbols
+        if (marketType.empty() || marketType == "futures") {
+            auto resp = httpGet("/v5/market/instruments-info?category=linear");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("result") && j["result"].contains("list")) {
+                for (auto& s : j["result"]["list"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseCoin", "");
+                    si.quoteAsset = s.value("quoteCoin", "");
+                    si.marketType = "futures";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset + " Swap";
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        Logger::get()->info("[Bybit] Fetched {} symbols", result.size());
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] getSymbols failed: {}", e.what());
+    }
+    return result;
+#endif
+}
+
 } // namespace crypto

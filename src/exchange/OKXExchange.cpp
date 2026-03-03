@@ -264,4 +264,51 @@ bool OKXExchange::testConnection(std::string& outError) {
     }
 }
 
+std::vector<SymbolInfo> OKXExchange::getSymbols(const std::string& marketType) {
+#ifndef USE_CURL
+    (void)marketType;
+    return {};
+#else
+    std::vector<SymbolInfo> result;
+    try {
+        // Spot instruments
+        if (marketType.empty() || marketType == "spot") {
+            auto resp = httpGet("/api/v5/public/instruments?instType=SPOT");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("data") && j["data"].is_array()) {
+                for (auto& s : j["data"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("instId", "");
+                    si.baseAsset  = s.value("baseCcy", "");
+                    si.quoteAsset = s.value("quoteCcy", "");
+                    si.marketType = "spot";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset;
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        // Futures (SWAP) instruments
+        if (marketType.empty() || marketType == "futures") {
+            auto resp = httpGet("/api/v5/public/instruments?instType=SWAP");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("data") && j["data"].is_array()) {
+                for (auto& s : j["data"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("instId", "");
+                    si.baseAsset  = s.value("ctValCcy", "");
+                    si.quoteAsset = s.value("settleCcy", "");
+                    si.marketType = "futures";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset + " Swap";
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        Logger::get()->info("[OKX] Fetched {} symbols", result.size());
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getSymbols failed: {}", e.what());
+    }
+    return result;
+#endif
+}
+
 } // namespace crypto

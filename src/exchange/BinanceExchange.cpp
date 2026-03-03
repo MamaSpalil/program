@@ -313,4 +313,35 @@ bool BinanceExchange::testConnection(std::string& outError) {
     }
 }
 
+std::vector<SymbolInfo> BinanceExchange::getSymbols(const std::string& marketType) {
+#ifndef USE_CURL
+    (void)marketType;
+    return {};
+#else
+    try {
+        auto resp = httpGet("/api/v3/exchangeInfo");
+        auto j = nlohmann::json::parse(resp);
+        std::vector<SymbolInfo> result;
+        if (j.contains("symbols") && j["symbols"].is_array()) {
+            for (auto& s : j["symbols"]) {
+                if (s.value("status", "") != "TRADING") continue;
+                SymbolInfo si;
+                si.symbol     = s.value("symbol", "");
+                si.baseAsset  = s.value("baseAsset", "");
+                si.quoteAsset = s.value("quoteAsset", "");
+                si.marketType = "spot";
+                si.displayName = si.baseAsset + "/" + si.quoteAsset;
+                if (marketType.empty() || marketType == si.marketType)
+                    result.push_back(std::move(si));
+            }
+        }
+        Logger::get()->info("[Binance] Fetched {} symbols", result.size());
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] getSymbols failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
 } // namespace crypto
