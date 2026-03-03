@@ -457,6 +457,9 @@ void AppGui::renderFrame() {
     // Settings window (modal-like)
     if (showSettings_) drawSettingsPanel();
 
+    // User Panel (separate window, shown when connected)
+    if (showUserPanel_) drawUserPanel();
+
     // Render
     ImGui::Render();
     int dw, dh;
@@ -486,6 +489,7 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Settings Panel", nullptr, &showSettings_);
+            ImGui::MenuItem("User Panel",     nullptr, &showUserPanel_);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {
@@ -570,6 +574,22 @@ void AppGui::drawToolbar() {
         showOrderBook_ = !showOrderBook_;
     }
     ImGui::PopStyleColor(3);
+    ImGui::SameLine();
+
+    // User Panel toggle (shown after connection)
+    if (snap.connected) {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.25f, 0.45f, 0.65f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.32f, 0.55f, 0.75f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.20f, 0.38f, 0.55f, 1.0f));
+        if (ImGui::Button("  User Panel  ")) {
+            showUserPanel_ = !showUserPanel_;
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::SameLine();
+    }
+
+    // Pair selector dropdown
+    drawPairSelector();
     ImGui::SameLine();
 
     // Market type toggle (futures / spot)
@@ -1668,6 +1688,256 @@ void AppGui::drawStatusBar() {
     ImGui::SameLine(ImGui::GetWindowWidth() - 200);
     ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.47f, 1.0f),
                        "Crypto ML Trader v1.0.0");
+}
+
+// ---------------------------------------------------------------------------
+//  Pair Selector — dropdown for spot & futures pairs
+// ---------------------------------------------------------------------------
+void AppGui::drawPairSelector() {
+    std::vector<SymbolInfo> syms;
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        syms = state_.availableSymbols;
+    }
+
+    if (syms.empty()) {
+        // Show static symbol input when no pairs are loaded
+        ImGui::SetNextItemWidth(130);
+        static char pairBuf[32] = {};
+        static bool pairInit = false;
+        if (!pairInit) {
+            strncpy(pairBuf, config_.symbol.c_str(), sizeof(pairBuf) - 1);
+            pairInit = true;
+        }
+        if (ImGui::InputText("##PairInput", pairBuf, sizeof(pairBuf),
+                             ImGuiInputTextFlags_EnterReturnsTrue)) {
+            config_.symbol = pairBuf;
+        }
+        return;
+    }
+
+    // Filter by current market type
+    std::vector<const SymbolInfo*> filtered;
+    for (auto& s : syms) {
+        if (config_.marketType.empty() || s.marketType == config_.marketType)
+            filtered.push_back(&s);
+    }
+
+    // Find current selection
+    if (selectedPairIdx_ < 0) {
+        for (int i = 0; i < (int)filtered.size(); ++i) {
+            if (filtered[i]->symbol == config_.symbol) {
+                selectedPairIdx_ = i;
+                break;
+            }
+        }
+    }
+
+    const char* preview = (selectedPairIdx_ >= 0 && selectedPairIdx_ < (int)filtered.size())
+        ? filtered[selectedPairIdx_]->displayName.c_str()
+        : "Select PAIR";
+
+    ImGui::SetNextItemWidth(180);
+    if (ImGui::BeginCombo("##PairSelect", preview)) {
+        // Search filter
+        static char searchBuf[32] = {};
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##PairSearch", searchBuf, sizeof(searchBuf));
+        ImGui::Separator();
+
+        std::string filter(searchBuf);
+        for (auto& ch : filter) ch = static_cast<char>(std::toupper(ch));
+
+        for (int i = 0; i < (int)filtered.size(); ++i) {
+            // Apply text filter
+            if (!filter.empty()) {
+                std::string name = filtered[i]->displayName;
+                for (auto& ch : name) ch = static_cast<char>(std::toupper(ch));
+                if (name.find(filter) == std::string::npos) continue;
+            }
+
+            bool selected = (i == selectedPairIdx_);
+            // Color-code: spot=cyan, futures=orange
+            ImVec4 col = (filtered[i]->marketType == "futures")
+                ? ImVec4(0.90f, 0.65f, 0.20f, 1.0f)
+                : ImVec4(0.40f, 0.80f, 0.90f, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, col);
+            if (ImGui::Selectable(filtered[i]->displayName.c_str(), selected)) {
+                selectedPairIdx_ = i;
+                config_.symbol = filtered[i]->symbol;
+                config_.marketType = filtered[i]->marketType;
+                addLog("[Config] Pair changed to " + filtered[i]->displayName);
+            }
+            ImGui::PopStyleColor();
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  User Panel — separate window with account info, trade stats, ML status
+// ---------------------------------------------------------------------------
+void AppGui::drawUserPanel() {
+    GuiState snap;
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        snap = state_;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(520, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("User Panel", &showUserPanel_)) {
+        ImGui::End();
+        return;
+    }
+
+    // ── Connection Status ──
+    ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.72f, 1.0f), "Status:");
+    ImGui::SameLine();
+    if (snap.connected) {
+        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "Connected");
+    } else {
+        ImGui::TextColored(ImVec4(0.85f, 0.35f, 0.35f, 1.0f), "Disconnected");
+    }
+    ImGui::SameLine(300);
+    ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f), "Exchange: %s",
+                       config_.exchangeName.c_str());
+
+    ImGui::Separator();
+
+    // ── Account Overview ──
+    if (ImGui::CollapsingHeader("Account Overview", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Symbol:        %s", config_.symbol.c_str());
+        ImGui::Text("Interval:      %s", config_.interval.c_str());
+        ImGui::Text("Market Type:   %s", config_.marketType.c_str());
+        ImGui::Text("Mode:          %s", config_.mode.c_str());
+
+        ImGui::Separator();
+        double pnl = snap.equity - snap.initialCapital;
+        double pnlPct = snap.initialCapital > 0 ? (pnl / snap.initialCapital) * 100.0 : 0.0;
+        ImVec4 eqCol = pnl >= 0
+            ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+            : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+        ImGui::Text("Initial Capital: $%.2f", snap.initialCapital);
+        ImGui::TextColored(eqCol, "Equity:          $%.2f (%+.2f%%)", snap.equity, pnlPct);
+        ImGui::Text("Drawdown:        %.2f%%", snap.drawdown * 100.0);
+        ImGui::Text("Open Positions:  %d", snap.openPositions);
+    }
+
+    // ── Trade Statistics ──
+    if (ImGui::CollapsingHeader("Trade Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Total Trades: %d", (int)snap.trades.size());
+
+        int wins = 0, losses = 0;
+        double sumPnl = 0.0;
+        for (auto& t : snap.trades) {
+            sumPnl += t.pnl;
+            if (t.pnl > 0) ++wins;
+            else if (t.pnl < 0) ++losses;
+        }
+        int closedTrades = wins + losses;
+        double wr = closedTrades > 0 ? (double)wins / closedTrades * 100.0 : 0.0;
+
+        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "Wins:   %d", wins);
+        ImGui::SameLine(200);
+        ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f), "Losses: %d", losses);
+
+        ImVec4 wrCol = wr >= 50.0
+            ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+            : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+        ImGui::TextColored(wrCol, "Win Rate: %.1f%%", wr);
+
+        ImVec4 pnlCol = sumPnl >= 0
+            ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+            : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+        ImGui::TextColored(pnlCol, "Total P&L: $%.4f", sumPnl);
+
+        // Recent trades table
+        if (!snap.trades.empty()) {
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f), "Recent Trades");
+            if (ImGui::BeginTable("##TradeHist", 5,
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_ScrollY, ImVec2(0, 180))) {
+                ImGui::TableSetupColumn("Symbol");
+                ImGui::TableSetupColumn("Side");
+                ImGui::TableSetupColumn("Qty");
+                ImGui::TableSetupColumn("Price");
+                ImGui::TableSetupColumn("P&L");
+                ImGui::TableHeadersRow();
+
+                int showCount = std::min((int)snap.trades.size(), 50);
+                for (int i = (int)snap.trades.size() - 1;
+                     i >= (int)snap.trades.size() - showCount && i >= 0; --i) {
+                    auto& tr = snap.trades[i];
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%s", tr.symbol.c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImVec4 sideCol = (tr.side == "BUY")
+                        ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+                        : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+                    ImGui::TextColored(sideCol, "%s", tr.side.c_str());
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%.4f", tr.qty);
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::Text("%.4f", tr.price);
+                    ImGui::TableSetColumnIndex(4);
+                    ImVec4 pCol = tr.pnl >= 0
+                        ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+                        : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+                    ImGui::TextColored(pCol, "%.4f", tr.pnl);
+                }
+                ImGui::EndTable();
+            }
+        }
+    }
+
+    // ── ML Status ──
+    if (ImGui::CollapsingHeader("ML & Indicator Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Signal Confidence: %.1f%%", snap.lastSignal.confidence * 100.0);
+        const char* sigStr = "HOLD";
+        ImVec4 sigCol(0.60f, 0.60f, 0.60f, 1.0f);
+        if (snap.lastSignal.type == Signal::Type::BUY) {
+            sigStr = "BUY"; sigCol = ImVec4(0.20f, 0.85f, 0.30f, 1.0f);
+        } else if (snap.lastSignal.type == Signal::Type::SELL) {
+            sigStr = "SELL"; sigCol = ImVec4(0.90f, 0.25f, 0.25f, 1.0f);
+        }
+        ImGui::TextColored(sigCol, "Current Signal: %s", sigStr);
+        if (!snap.lastSignal.reason.empty())
+            ImGui::TextWrapped("Reason: %s", snap.lastSignal.reason.c_str());
+
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f), "ML Configuration");
+        ImGui::Text("LSTM Hidden: %d  Seq Len: %d", config_.lstmHidden, config_.lstmSeqLen);
+        ImGui::Text("XGBoost Depth: %d  Rounds: %d", config_.xgbMaxDepth, config_.xgbRounds);
+        ImGui::Text("Min Confidence: %.0f%%", config_.ensembleMinConfidence * 100.0);
+        ImGui::Text("Retrain Interval: %dh", config_.retrainIntervalHours);
+    }
+
+    // ── User Indicators ──
+    if (!snap.userIndicatorPlots.empty()) {
+        if (ImGui::CollapsingHeader("User Indicators", ImGuiTreeNodeFlags_DefaultOpen)) {
+            for (const auto& [indName, plots] : snap.userIndicatorPlots) {
+                ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f),
+                                   "%s", indName.c_str());
+                for (const auto& [pName, pVal] : plots) {
+                    ImVec4 vCol = std::isnan(pVal) ? ImVec4(0.50f, 0.50f, 0.52f, 1.0f)
+                                : pVal > 0 ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+                                : pVal < 0 ? ImVec4(0.90f, 0.30f, 0.30f, 1.0f)
+                                : ImVec4(0.80f, 0.80f, 0.82f, 1.0f);
+                    ImGui::Text("  %s: ", pName.c_str());
+                    ImGui::SameLine();
+                    if (std::isnan(pVal))
+                        ImGui::TextColored(vCol, "N/A");
+                    else
+                        ImGui::TextColored(vCol, "%.4f", pVal);
+                }
+            }
+        }
+    }
+
+    ImGui::End();
 }
 
 } // namespace crypto

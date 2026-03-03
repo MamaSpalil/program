@@ -23,9 +23,10 @@ struct Engine::Impl {
     std::unique_ptr<MLEnhancedStrategy>     strategy;
     std::unique_ptr<Dashboard>              dashboard;
     std::unique_ptr<UserIndicatorManager>   userIndicators;
+    std::unique_ptr<ExchangeDB>             tradeDB;
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
-    static constexpr int kMaxCandleHistory = 500; // matches typical chart display width
+    int                                     maxCandleHistory{1000};
 };
 
 Engine::Engine(const std::string& configPath)
@@ -114,6 +115,10 @@ void Engine::initComponents() {
         config_, config_["trading"].value("initial_capital", 1000.0));
     impl_->dashboard = std::make_unique<Dashboard>();
 
+    // Trade statistics database (per-exchange)
+    impl_->tradeDB = std::make_unique<ExchangeDB>("config/trades_" + name + ".json");
+    impl_->tradeDB->load();
+
     // Load user Pine Script indicators
     std::string indicatorDir = config_.value("user_indicator_dir", "user_indicator");
     impl_->userIndicators = std::make_unique<UserIndicatorManager>(indicatorDir);
@@ -153,12 +158,17 @@ void Engine::run() {
     std::string symbol   = trading.value("symbol", "BTCUSDT");
     std::string interval = trading.value("interval", "15m");
 
-    Logger::get()->info("Starting engine: {} {} mode={}",
-        symbol, interval, trading.value("mode", "paper"));
+    // Set max candle history based on timeframe for deep analysis
+    impl_->maxCandleHistory = maxBarsForTimeframe(interval);
 
-    // Load historical candles first
+    Logger::get()->info("Starting engine: {} {} mode={} maxBars={}",
+        symbol, interval, trading.value("mode", "paper"),
+        impl_->maxCandleHistory);
+
+    // Load historical candles — request maximum available for deep analysis
     try {
-        auto hist = impl_->exchange->getKlines(symbol, interval, 500);
+        int requestLimit = impl_->maxCandleHistory;
+        auto hist = impl_->exchange->getKlines(symbol, interval, requestLimit);
         Logger::get()->info("Loaded {} historical candles", hist.size());
         for (auto& c : hist) {
             impl_->feed->onCandle(c);
@@ -201,7 +211,7 @@ void Engine::updateDashboard(const Candle& c) {
 
     // Maintain candle history
     impl_->candleHistory.push_back(c);
-    if (static_cast<int>(impl_->candleHistory.size()) > Impl::kMaxCandleHistory)
+    if (static_cast<int>(impl_->candleHistory.size()) > impl_->maxCandleHistory)
         impl_->candleHistory.pop_front();
 
     auto sig = impl_->strategy->getSignal();
@@ -253,6 +263,37 @@ std::map<std::string, std::map<std::string, double>> Engine::getUserIndicatorPlo
     if (impl_ && impl_->userIndicators)
         return impl_->userIndicators->getAllPlots();
     return {};
+}
+
+std::vector<SymbolInfo> Engine::getSymbols(const std::string& marketType) const {
+    if (impl_ && impl_->exchange)
+        return impl_->exchange->getSymbols(marketType);
+    return {};
+}
+
+void Engine::recordTrade(const TradeRecord& tr) {
+    if (impl_ && impl_->tradeDB) {
+        impl_->tradeDB->addTrade(tr);
+        impl_->tradeDB->save();
+    }
+}
+
+std::vector<TradeRecord> Engine::listTrades() const {
+    if (impl_ && impl_->tradeDB)
+        return impl_->tradeDB->listTrades();
+    return {};
+}
+
+double Engine::totalPnl() const {
+    if (impl_ && impl_->tradeDB)
+        return impl_->tradeDB->totalPnl();
+    return 0.0;
+}
+
+double Engine::winRate() const {
+    if (impl_ && impl_->tradeDB)
+        return impl_->tradeDB->winRate();
+    return 0.0;
 }
 
 } // namespace crypto

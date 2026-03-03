@@ -253,4 +253,51 @@ bool BitgetExchange::testConnection(std::string& outError) {
     }
 }
 
+std::vector<SymbolInfo> BitgetExchange::getSymbols(const std::string& marketType) {
+#ifndef USE_CURL
+    (void)marketType;
+    return {};
+#else
+    std::vector<SymbolInfo> result;
+    try {
+        // Spot symbols
+        if (marketType.empty() || marketType == "spot") {
+            auto resp = httpGet("/api/v2/spot/public/symbols");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("data") && j["data"].is_array()) {
+                for (auto& s : j["data"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseCoin", "");
+                    si.quoteAsset = s.value("quoteCoin", "");
+                    si.marketType = "spot";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset;
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        // Futures (USDT-FUTURES) symbols
+        if (marketType.empty() || marketType == "futures") {
+            auto resp = httpGet("/api/v2/mix/market/contracts?productType=USDT-FUTURES");
+            auto j = nlohmann::json::parse(resp);
+            if (j.contains("data") && j["data"].is_array()) {
+                for (auto& s : j["data"]) {
+                    SymbolInfo si;
+                    si.symbol     = s.value("symbol", "");
+                    si.baseAsset  = s.value("baseCoin", "");
+                    si.quoteAsset = s.value("quoteCoin", "");
+                    si.marketType = "futures";
+                    si.displayName = si.baseAsset + "/" + si.quoteAsset + " Swap";
+                    result.push_back(std::move(si));
+                }
+            }
+        }
+        Logger::get()->info("[Bitget] Fetched {} symbols", result.size());
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] getSymbols failed: {}", e.what());
+    }
+    return result;
+#endif
+}
+
 } // namespace crypto

@@ -44,8 +44,26 @@ bool ExchangeDB::load() {
             }
         }
 
-        Logger::get()->info("[ExchangeDB] Loaded {} profile(s), active='{}'",
-                            profiles_.size(), activeProfile_);
+        // Load trade records
+        trades_.clear();
+        if (j.contains("trades") && j["trades"].is_array()) {
+            for (auto& t : j["trades"]) {
+                TradeRecord tr;
+                tr.timestamp  = t.value("timestamp", int64_t{0});
+                tr.symbol     = t.value("symbol", "");
+                tr.side       = t.value("side", "");
+                tr.orderType  = t.value("order_type", "");
+                tr.qty        = t.value("qty", 0.0);
+                tr.price      = t.value("price", 0.0);
+                tr.pnl        = t.value("pnl", 0.0);
+                tr.confidence = t.value("confidence", 0.0);
+                tr.reason     = t.value("reason", "");
+                trades_.push_back(std::move(tr));
+            }
+        }
+
+        Logger::get()->info("[ExchangeDB] Loaded {} profile(s), {} trade(s), active='{}'",
+                            profiles_.size(), trades_.size(), activeProfile_);
         return true;
     } catch (const std::exception& e) {
         Logger::get()->warn("[ExchangeDB] Load error: {}", e.what());
@@ -79,13 +97,31 @@ bool ExchangeDB::save() const {
         }
         j["profiles"] = std::move(arr);
 
+        // Persist trade records
+        nlohmann::json tradeArr = nlohmann::json::array();
+        for (auto& t : trades_) {
+            nlohmann::json tj;
+            tj["timestamp"]  = t.timestamp;
+            tj["symbol"]     = t.symbol;
+            tj["side"]       = t.side;
+            tj["order_type"] = t.orderType;
+            tj["qty"]        = t.qty;
+            tj["price"]      = t.price;
+            tj["pnl"]        = t.pnl;
+            tj["confidence"] = t.confidence;
+            tj["reason"]     = t.reason;
+            tradeArr.push_back(std::move(tj));
+        }
+        j["trades"] = std::move(tradeArr);
+
         std::ofstream f(dbPath_);
         if (!f.is_open()) {
             Logger::get()->warn("[ExchangeDB] Cannot write {}", dbPath_);
             return false;
         }
         f << j.dump(2);
-        Logger::get()->debug("[ExchangeDB] Saved {} profile(s) to {}", profiles_.size(), dbPath_);
+        Logger::get()->debug("[ExchangeDB] Saved {} profile(s), {} trade(s) to {}",
+                              profiles_.size(), trades_.size(), dbPath_);
         return true;
     } catch (const std::exception& e) {
         Logger::get()->warn("[ExchangeDB] Save error: {}", e.what());
@@ -147,6 +183,54 @@ std::optional<ExchangeProfile> ExchangeDB::activeProfile() const {
         if (p.name == activeProfile_) return p;
     }
     return std::nullopt;
+}
+
+// ── Trade statistics ──────────────────────────────────────────────────────
+
+void ExchangeDB::addTrade(const TradeRecord& tr) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    trades_.push_back(tr);
+}
+
+std::vector<TradeRecord> ExchangeDB::listTrades() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return trades_;
+}
+
+int ExchangeDB::totalTrades() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return static_cast<int>(trades_.size());
+}
+
+int ExchangeDB::winCount() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    int w = 0;
+    for (auto& t : trades_) if (t.pnl > 0.0) ++w;
+    return w;
+}
+
+int ExchangeDB::lossCount() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    int l = 0;
+    for (auto& t : trades_) if (t.pnl < 0.0) ++l;
+    return l;
+}
+
+double ExchangeDB::totalPnl() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    double sum = 0.0;
+    for (auto& t : trades_) sum += t.pnl;
+    return sum;
+}
+
+double ExchangeDB::winRate() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    int total = 0;
+    int wins = 0;
+    for (auto& t : trades_) {
+        if (t.pnl != 0.0) { ++total; if (t.pnl > 0.0) ++wins; }
+    }
+    return total > 0 ? static_cast<double>(wins) / total : 0.0;
 }
 
 } // namespace crypto

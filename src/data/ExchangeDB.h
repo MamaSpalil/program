@@ -20,6 +20,19 @@ struct ExchangeProfile {
     bool testnet{false};
 };
 
+// A single trade record for statistics tracking
+struct TradeRecord {
+    int64_t     timestamp{0};       // epoch ms when the trade occurred
+    std::string symbol;
+    std::string side;               // "BUY" or "SELL"
+    std::string orderType;          // "MARKET", "LIMIT"
+    double      qty{0.0};
+    double      price{0.0};
+    double      pnl{0.0};          // realised P&L (0 for entries)
+    double      confidence{0.0};    // ML signal confidence at the time
+    std::string reason;             // signal reason / description
+};
+
 // JSON-file-based storage for exchange profiles.
 // Allows saving, loading, listing and switching between exchange profiles.
 class ExchangeDB {
@@ -51,10 +64,25 @@ public:
     // Convenience: get the currently active profile
     std::optional<ExchangeProfile> activeProfile() const;
 
+    // ── Trade statistics ──────────────────────────────────────────────────
+    // Add a trade record (persisted on next save())
+    void addTrade(const TradeRecord& tr);
+
+    // Get all recorded trades
+    std::vector<TradeRecord> listTrades() const;
+
+    // Summary statistics
+    int    totalTrades() const;
+    int    winCount() const;
+    int    lossCount() const;
+    double totalPnl() const;
+    double winRate() const;
+
 private:
     std::string dbPath_;
     std::vector<ExchangeProfile> profiles_;
     std::string activeProfile_;
+    std::vector<TradeRecord> trades_;
     mutable std::mutex mutex_;
 };
 

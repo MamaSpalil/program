@@ -50,8 +50,33 @@ void SignalEnhancer::recordOutcome(int predicted, int actual) {
 }
 
 void SignalEnhancer::updateWeights() {
-    // Simple: keep fixed weights for now; online update can be added
-    // In production, compare per-model accuracy and rebalance
+    if (outcomes_.size() < 10) return;  // Need enough data
+
+    // Compute rolling accuracy per model category
+    // We track predicted vs actual, and use this to adjust ensemble weights
+    int correct = 0;
+    int total = static_cast<int>(outcomes_.size());
+    for (auto& [pred, act] : outcomes_) {
+        if (pred == act) ++correct;
+    }
+
+    double accuracy = static_cast<double>(correct) / total;
+
+    // Adaptive weight adjustment:
+    // If overall accuracy is high, increase indicator trust slightly.
+    // If low, boost ML weights to let the models learn patterns.
+    if (accuracy > 0.6) {
+        // Good performance — slightly favor indicators for stability
+        weightInd_  = std::min(0.55, weightInd_  + 0.01);
+        weightLstm_ = (1.0 - weightInd_) * 0.5;
+        weightXgb_  = (1.0 - weightInd_) * 0.5;
+    } else if (accuracy < 0.4) {
+        // Poor performance — boost ML models for pattern detection
+        weightInd_  = std::max(0.20, weightInd_  - 0.01);
+        weightLstm_ = (1.0 - weightInd_) * 0.5;
+        weightXgb_  = (1.0 - weightInd_) * 0.5;
+    }
+    // Else: keep current weights (neutral zone)
 }
 
 } // namespace crypto
