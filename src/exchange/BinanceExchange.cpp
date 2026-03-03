@@ -265,7 +265,7 @@ void BinanceExchange::subscribeKline(const std::string& symbol,
                                       std::function<void(const Candle&)> cb) {
     klineCb_ = std::move(cb);
     std::string path = "/stream?streams=" +
-        [&]{ std::string s = symbol; for(auto& c : s) c = std::tolower(c); return s; }() +
+        [&]{ std::string s = symbol; for(auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }() +
         "@kline_" + interval;
     ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, path);
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });

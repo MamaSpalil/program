@@ -2,6 +2,7 @@
 #include "../core/Logger.h"
 #include <chrono>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 #ifdef USE_NCURSES
