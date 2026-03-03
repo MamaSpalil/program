@@ -10,6 +10,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: read
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows
 
@@ -20,6 +22,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
+          # Pinned to a known-stable vcpkg commit; update periodically
           vcpkgGitCommitId: '962e5e39f8a25f42522f51fffc574e05a3efd26b'
 
       - name: Install dependencies via vcpkg
