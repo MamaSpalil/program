@@ -25,11 +25,16 @@ find_package(XGBoost QUIET)
 find_package(GTest QUIET)
 
 # ── Compile options ────────────────────────────────────────────────────────────
-set(COMMON_FLAGS
-    -Wall -Wextra -Wpedantic
-    $<$<CONFIG:Release>:-O3 -DNDEBUG>
-    $<$<CONFIG:Debug>:-g -O0>
-)
+if(MSVC)
+    set(COMMON_FLAGS /W4 /permissive-)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX -DWIN32_LEAN_AND_MEAN)
+else()
+    set(COMMON_FLAGS
+        -Wall -Wextra -Wpedantic
+        $<$<CONFIG:Release>:-O3 -DNDEBUG>
+        $<$<CONFIG:Debug>:-g -O0>
+    )
+endif()
 
 # ── Source files ──────────────────────────────────────────────────────────────
 set(CORE_SOURCES
@@ -95,8 +100,17 @@ target_link_libraries(crypto_lib PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     Boost::system
-    pthread
 )
+
+# Link pthread on non-Windows platforms
+if(NOT WIN32)
+    target_link_libraries(crypto_lib PUBLIC pthread)
+endif()
+
+# Link Winsock on Windows (needed for Boost.Asio / networking)
+if(WIN32)
+    target_link_libraries(crypto_lib PUBLIC ws2_32 wsock32 crypt32)
+endif()
 
 # CURL (optional — needed for REST API)
 if(CURL_FOUND)

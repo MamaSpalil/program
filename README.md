@@ -121,11 +121,20 @@ make -j$(sysctl -n hw.ncpu)
 ### Windows (vcpkg)
 
 ```powershell
-vcpkg install curl openssl boost-beast nlohmann-json spdlog gtest eigen3
+vcpkg install curl openssl boost-system boost-beast boost-asio nlohmann-json spdlog gtest eigen3
 mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=<vcpkg-root>/scripts/buildsystems/vcpkg.cmake
 cmake --build . --config Release
 ```
+
+The built executable will be at `build\Release\crypto_trader.exe`.
+
+### Windows (CI / GitHub Actions)
+
+A pre-configured GitHub Actions workflow automatically builds the Windows EXE on every push
+and pull request to `main`/`master`. Download the artifact (`CryptoTrader-Windows-x64`)
+from the Actions tab on GitHub. You can also trigger a build manually via the
+"Build Windows EXE" workflow dispatch.
 
 ### Optional: LibTorch (LSTM)
 
