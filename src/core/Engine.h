@@ -24,6 +24,7 @@ struct EngineUpdate {
     double equity{0};
     double drawdown{0};
     std::map<std::string, std::map<std::string, double>> userIndicatorPlots;
+    OrderBook orderBook;
 };
 
 class Engine {
