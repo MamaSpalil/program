@@ -49,6 +49,7 @@ set(EXCHANGE_SOURCES
     src/exchange/WebSocketClient.cpp
     src/exchange/BinanceExchange.cpp
     src/exchange/BybitExchange.cpp
+    src/exchange/OKXExchange.cpp
 )
 
 set(DATA_SOURCES
