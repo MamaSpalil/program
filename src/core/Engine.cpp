@@ -25,7 +25,7 @@ struct Engine::Impl {
     std::unique_ptr<UserIndicatorManager>   userIndicators;
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
-    static constexpr int kMaxCandleHistory = 500;
+    static constexpr int kMaxCandleHistory = 500; // matches typical chart display width
 };
 
 Engine::Engine(const std::string& configPath)

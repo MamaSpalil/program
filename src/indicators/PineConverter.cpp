@@ -986,9 +986,11 @@ double PineRuntime::callFunc(const std::string& fn, const std::vector<double>& a
         double downMove = loB[static_cast<size_t>(n-2)] - loB[static_cast<size_t>(n-1)];
         double plusDM  = (upMove > downMove && upMove > 0) ? upMove : 0;
         double minusDM = (downMove > upMove && downMove > 0) ? downMove : 0;
+        double prevClose = (history_.size() >= 2)
+                           ? history_[history_.size()-2].close : cur_.close;
         double tr = std::max(cur_.high - cur_.low,
-                    std::max(std::abs(cur_.high - (n >= 2 ? history_[history_.size()-2].close : cur_.close)),
-                             std::abs(cur_.low  - (n >= 2 ? history_[history_.size()-2].close : cur_.close))));
+                    std::max(std::abs(cur_.high - prevClose),
+                             std::abs(cur_.low  - prevClose)));
         if (tr < 1e-12) tr = 1e-12;
         double diPlus  = (plusDM / tr) * 100.0;
         double diMinus = (minusDM / tr) * 100.0;

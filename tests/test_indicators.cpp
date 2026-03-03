@@ -277,7 +277,9 @@ plot(lb, "lbars")
         c.close = prices[i]; c.open = c.close - 1; c.high = c.close + 1; c.low = c.close - 1;
         rt.update(c);
     }
-    auto plots = rt.update(c); // one more bar with same price
+    // Use a distinct new price to validate against fresh data
+    c.close = 106; c.open = 105; c.high = 107; c.low = 104;
+    auto plots = rt.update(c);
     // hbars should be negative (bars since highest)
     EXPECT_LE(plots["hbars"], 0.0);
 }
