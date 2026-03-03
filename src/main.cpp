@@ -5,6 +5,8 @@
 #include <iostream>
 #include <memory>
 #include <filesystem>
+#include <locale>
+#include <clocale>
 
 #ifdef USE_IMGUI
 #include "ui/AppGui.h"
@@ -60,6 +62,12 @@ BOOL WINAPI consoleCtrlHandler(DWORD ctrlType) {
 #ifdef USE_IMGUI
 // ── GUI mode ─────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+    std::setlocale(LC_ALL, "en_US.UTF-8");
+
     std::string configPath = "config/settings.json";
     if (argc > 1) configPath = argv[1];
     configPath = resolveConfigPath(configPath, argv[0]);
@@ -158,6 +166,12 @@ int main(int argc, char* argv[]) {
 #else
 // ── Console mode (fallback when ImGui not available) ─────────────────────────
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+    std::setlocale(LC_ALL, "en_US.UTF-8");
+
     std::string configPath = "config/settings.json";
     if (argc > 1) configPath = argv[1];
     configPath = resolveConfigPath(configPath, argv[0]);

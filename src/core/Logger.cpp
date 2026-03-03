@@ -6,6 +6,8 @@ namespace crypto {
 std::shared_ptr<spdlog::logger> Logger::logger_;
 
 void Logger::init(const std::string& logFile, size_t maxSizeBytes, size_t maxFiles) {
+    if (logger_) return;  // already initialized
+
     std::filesystem::create_directories(
         std::filesystem::path(logFile).parent_path());
 
