@@ -1,8 +1,8 @@
 {
-  "version": 3,
+  "version": 2,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 21,
+    "minor": 16,
     "patch": 0
   },
   "configurePresets": [
@@ -91,23 +91,6 @@
       "name": "linux-release",
       "displayName": "Linux Release",
       "configurePreset": "linux-release"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "windows-test",
-      "configurePreset": "windows-x64-release",
-      "configuration": "Release",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "linux-test",
-      "configurePreset": "linux-release",
-      "output": {
-        "outputOnFailure": true
-      }
     }
   ]
 }
