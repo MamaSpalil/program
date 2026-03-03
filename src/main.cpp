@@ -98,6 +98,24 @@ int main(int argc, char* argv[]) {
                 engine = std::make_unique<crypto::Engine>(configPath);
                 g_engine = engine.get();
 
+                // Verify API connection before reporting success
+                std::string connError;
+                bool connected = engine->initAndTestConnection(connError);
+
+                if (!connected) {
+                    gui->addLog("[Error] API connection test failed: " + connError);
+                    crypto::GuiState st;
+                    st.connected = false;
+                    st.trading = false;
+                    st.statusMessage = "Connection failed: " + connError;
+                    gui->updateState(st);
+                    engine.reset();
+                    g_engine = nullptr;
+                    return;
+                }
+
+                gui->addLog("[OK] API connection verified");
+
                 // Start the engine on a background thread
                 std::thread([&]() {
                     try {

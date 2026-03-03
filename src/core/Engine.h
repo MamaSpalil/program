@@ -14,6 +14,10 @@ public:
     void run();
     void stop();
 
+    // Initialize exchange and verify connection. Returns true if API test succeeds.
+    // On failure, sets outError with a description. Must be called before run().
+    bool initAndTestConnection(std::string& outError);
+
 private:
     void loadConfig(const std::string& path);
     void initComponents();
@@ -21,6 +25,7 @@ private:
 
     nlohmann::json config_;
     std::atomic<bool> running_{false};
+    bool componentsInitialized_{false};
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

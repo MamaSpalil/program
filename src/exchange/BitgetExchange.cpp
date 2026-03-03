@@ -142,12 +142,19 @@ std::string BitgetExchange::httpGet(const std::string& path, bool signed_) const
 std::vector<Candle> BitgetExchange::getKlines(const std::string& symbol,
                                                const std::string& interval,
                                                int limit) {
+    Logger::get()->debug("[Bitget] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/api/v2/mix/market/candles?symbol=" + symbol +
                        "&granularity=" + interval +
                        "&limit=" + std::to_string(limit);
-    auto json = nlohmann::json::parse(httpGet(path));
+    auto response = httpGet(path);
+    Logger::get()->debug("[Bitget] getKlines response size={}", response.size());
+    auto json = nlohmann::json::parse(response);
     std::vector<Candle> candles;
-    if (json["code"].get<std::string>() != "00000") return candles;
+    if (json["code"].get<std::string>() != "00000") {
+        Logger::get()->warn("[Bitget] getKlines API error: code={} msg={}",
+            json["code"].get<std::string>(), json.value("msg", ""));
+        return candles;
+    }
     for (auto& k : json["data"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
@@ -159,14 +166,21 @@ std::vector<Candle> BitgetExchange::getKlines(const std::string& symbol,
         c.closed   = true;
         candles.push_back(c);
     }
+    Logger::get()->debug("[Bitget] getKlines parsed {} candles", candles.size());
     return candles;
 }
 
 double BitgetExchange::getPrice(const std::string& symbol) {
+    Logger::get()->debug("[Bitget] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(
         httpGet("/api/v2/mix/market/ticker?symbol=" + symbol));
-    if (json["code"].get<std::string>() != "00000") return 0.0;
-    return std::stod(json["data"][0]["lastPr"].get<std::string>());
+    if (json["code"].get<std::string>() != "00000") {
+        Logger::get()->warn("[Bitget] getPrice API error: code={}", json["code"].get<std::string>());
+        return 0.0;
+    }
+    double price = std::stod(json["data"][0]["lastPr"].get<std::string>());
+    Logger::get()->debug("[Bitget] getPrice result={}", price);
+    return price;
 }
 
 OrderResponse BitgetExchange::placeOrder(const OrderRequest& req) {
@@ -210,7 +224,31 @@ void BitgetExchange::subscribeKline(const std::string& symbol,
     (void)symbol; (void)interval;
 }
 
-void BitgetExchange::connect() { if (ws_) ws_->connect(); }
-void BitgetExchange::disconnect() { if (ws_) ws_->disconnect(); }
+void BitgetExchange::connect() {
+    Logger::get()->debug("[Bitget] Connecting WebSocket to {}:{}", wsHost_, wsPort_);
+    if (ws_) ws_->connect();
+}
+void BitgetExchange::disconnect() {
+    Logger::get()->debug("[Bitget] Disconnecting");
+    if (ws_) ws_->disconnect();
+}
+
+bool BitgetExchange::testConnection(std::string& outError) {
+    Logger::get()->debug("[Bitget] Testing connection to {}", baseUrl_);
+    try {
+        double price = getPrice("BTCUSDT");
+        if (price > 0) {
+            Logger::get()->info("[Bitget] Connection test OK, BTCUSDT={}", price);
+            return true;
+        }
+        outError = "Received invalid price (0) from Bitget API";
+        Logger::get()->warn("[Bitget] Connection test failed: {}", outError);
+        return false;
+    } catch (const std::exception& e) {
+        outError = std::string("Bitget API error: ") + e.what();
+        Logger::get()->warn("[Bitget] Connection test failed: {}", outError);
+        return false;
+    }
+}
 
 } // namespace crypto

@@ -35,6 +35,10 @@ class IExchange {
 public:
     virtual ~IExchange() = default;
 
+    // Test connection by making a lightweight API call (e.g. getPrice).
+    // Returns true on success; on failure sets outError and returns false.
+    virtual bool testConnection(std::string& outError) = 0;
+
     virtual std::vector<Candle> getKlines(const std::string& symbol,
                                            const std::string& interval,
                                            int limit = 500) = 0;
