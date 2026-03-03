@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 #include <stdexcept>
 
 namespace crypto {
@@ -176,6 +177,8 @@ std::vector<Candle> OKXExchange::getKlines(const std::string& symbol,
         c.closed   = true;
         candles.push_back(c);
     }
+    // OKX API returns candles newest-first; reverse to chronological order
+    std::reverse(candles.begin(), candles.end());
     Logger::get()->debug("[OKX] getKlines parsed {} candles", candles.size());
     return candles;
 }

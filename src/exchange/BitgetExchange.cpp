@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 #include <stdexcept>
 
 namespace crypto {
@@ -144,6 +145,7 @@ std::vector<Candle> BitgetExchange::getKlines(const std::string& symbol,
                                                int limit) {
     Logger::get()->debug("[Bitget] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/api/v2/mix/market/candles?symbol=" + symbol +
+                       "&productType=USDT-FUTURES" +
                        "&granularity=" + interval +
                        "&limit=" + std::to_string(limit);
     auto response = httpGet(path);
@@ -173,7 +175,7 @@ std::vector<Candle> BitgetExchange::getKlines(const std::string& symbol,
 double BitgetExchange::getPrice(const std::string& symbol) {
     Logger::get()->debug("[Bitget] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(
-        httpGet("/api/v2/mix/market/ticker?symbol=" + symbol));
+        httpGet("/api/v2/mix/market/ticker?symbol=" + symbol + "&productType=USDT-FUTURES"));
     if (json["code"].get<std::string>() != "00000") {
         Logger::get()->warn("[Bitget] getPrice API error: code={}", json["code"].get<std::string>());
         return 0.0;
