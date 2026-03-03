@@ -4,6 +4,7 @@
 #include <atomic>
 #include <iostream>
 #include <memory>
+#include <filesystem>
 
 #ifdef USE_IMGUI
 #include "ui/AppGui.h"
@@ -17,6 +18,25 @@
 namespace {
 std::atomic<bool> g_shutdown{false};
 crypto::Engine*   g_engine{nullptr};
+
+// Resolve config path: try as-is, then relative to executable directory
+std::string resolveConfigPath(const std::string& path, const char* argv0) {
+    namespace fs = std::filesystem;
+    if (fs::exists(path)) return path;
+
+    fs::path exeDir = fs::path(argv0).parent_path();
+    if (!exeDir.empty()) {
+        // Try relative to executable, then 1-2 levels up (build/<preset>/ layouts)
+        fs::path base = exeDir;
+        for (int i = 0; i <= 2; ++i) {
+            fs::path altPath = base / path;
+            if (fs::exists(altPath)) return fs::weakly_canonical(altPath).string();
+            base = base / "..";
+        }
+    }
+
+    return path; // return original; Engine will report the error
+}
 
 void signalHandler(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
@@ -42,6 +62,7 @@ BOOL WINAPI consoleCtrlHandler(DWORD ctrlType) {
 int main(int argc, char* argv[]) {
     std::string configPath = "config/settings.json";
     if (argc > 1) configPath = argv[1];
+    configPath = resolveConfigPath(configPath, argv[0]);
 
     std::signal(SIGINT,  signalHandler);
     std::signal(SIGTERM, signalHandler);
@@ -139,6 +160,7 @@ int main(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     std::string configPath = "config/settings.json";
     if (argc > 1) configPath = argv[1];
+    configPath = resolveConfigPath(configPath, argv[0]);
 
     std::signal(SIGINT,  signalHandler);
     std::signal(SIGTERM, signalHandler);

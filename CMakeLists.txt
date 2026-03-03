@@ -163,6 +163,9 @@ if(XGBoost_FOUND)
     target_compile_definitions(crypto_lib PUBLIC USE_XGBOOST)
 endif()
 
+# ── Copy config to build directory so relative paths work ──────────────────────
+file(COPY ${CMAKE_SOURCE_DIR}/config DESTINATION ${CMAKE_BINARY_DIR})
+
 # ── Main executable ────────────────────────────────────────────────────────────
 add_executable(crypto_trader src/main.cpp)
 target_compile_options(crypto_trader PRIVATE ${COMMON_FLAGS})

@@ -104,7 +104,11 @@ std::string OKXExchange::httpGet(const std::string& path, bool signed_) const {
             std::time_t secs = static_cast<std::time_t>(ts / 1000);
             int millis = static_cast<int>(ts % 1000);
             std::tm tm{};
+#ifdef _WIN32
+            gmtime_s(&tm, &secs);
+#else
             gmtime_r(&secs, &tm);
+#endif
             char tsBuf[32];
             std::strftime(tsBuf, sizeof(tsBuf), "%Y-%m-%dT%H:%M:%S", &tm);
             std::string timestamp = std::string(tsBuf) + "." +
