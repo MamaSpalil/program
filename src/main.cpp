@@ -24,23 +24,15 @@ std::string resolveConfigPath(const std::string& path, const char* argv0) {
     namespace fs = std::filesystem;
     if (fs::exists(path)) return path;
 
-    // Try relative to executable's directory
     fs::path exeDir = fs::path(argv0).parent_path();
     if (!exeDir.empty()) {
-        fs::path altPath = exeDir / path;
-        if (fs::exists(altPath)) return altPath.string();
-    }
-
-    // Try one level up from executable (common for build/<preset>/ layouts)
-    if (!exeDir.empty()) {
-        fs::path altPath = exeDir / ".." / path;
-        if (fs::exists(altPath)) return fs::canonical(altPath).string();
-    }
-
-    // Try two levels up from executable
-    if (!exeDir.empty()) {
-        fs::path altPath = exeDir / ".." / ".." / path;
-        if (fs::exists(altPath)) return fs::canonical(altPath).string();
+        // Try relative to executable, then 1-2 levels up (build/<preset>/ layouts)
+        fs::path base = exeDir;
+        for (int i = 0; i <= 2; ++i) {
+            fs::path altPath = base / path;
+            if (fs::exists(altPath)) return fs::weakly_canonical(altPath).string();
+            base = base / "..";
+        }
     }
 
     return path; // return original; Engine will report the error
