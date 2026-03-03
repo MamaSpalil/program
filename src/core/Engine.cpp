@@ -75,14 +75,6 @@ void Engine::initComponents() {
         impl_->exchange = std::make_unique<BinanceExchange>(apiKey, apiSec, baseUrl);
     }
 
-    // Verify connection with a test API call
-    std::string connError;
-    if (impl_->exchange->testConnection(connError)) {
-        Logger::get()->info("[Engine] Exchange '{}' connection verified", name);
-    } else {
-        Logger::get()->warn("[Engine] Exchange '{}' connection test failed: {}", name, connError);
-    }
-
     // Save credentials to ExchangeDB for persistence
     ExchangeDB db;
     db.load();
