@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <map>
 #include <functional>
 
 struct GLFWwindow;
@@ -44,6 +45,9 @@ struct GuiState {
     bool connected{false};
     bool trading{false};
     std::string statusMessage{"Disconnected"};
+
+    // User indicator results from Pine Script files
+    std::map<std::string, std::map<std::string, double>> userIndicatorPlots;
 
     // Log lines
     std::deque<std::string> logLines;

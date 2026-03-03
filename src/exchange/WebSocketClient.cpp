@@ -8,6 +8,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <openssl/ssl.h>
 #include <stdexcept>
 #include <chrono>
 
@@ -54,8 +55,9 @@ void WebSocketClient::workerLoop() {
     while (shouldRun_) {
         try {
             net::io_context ioc;
-            ssl::context ctx(ssl::context::tlsv12_client);
+            ssl::context ctx(ssl::context::tls_client);
             ctx.set_default_verify_paths();
+            ctx.set_verify_mode(ssl::verify_peer);
 
             tcp::resolver resolver(ioc);
             auto results = resolver.resolve(host_, port_);
@@ -64,6 +66,14 @@ void WebSocketClient::workerLoop() {
                 websocket::stream<beast::ssl_stream<tcp::socket>>>(ioc, ctx);
 
             net::connect(stream->next_layer().next_layer(), results);
+
+            // Set SNI hostname — required by most modern TLS servers (e.g. Binance)
+            if (!SSL_set_tlsext_host_name(stream->next_layer().native_handle(), host_.c_str())) {
+                throw beast::system_error(
+                    beast::error_code(static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()),
+                    "Failed to set SNI hostname");
+            }
+
             stream->next_layer().handshake(ssl::stream_base::client);
 
             stream->set_option(websocket::stream_base::decorator(

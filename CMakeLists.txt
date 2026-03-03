@@ -164,8 +164,9 @@ if(XGBoost_FOUND)
     target_compile_definitions(crypto_lib PUBLIC USE_XGBOOST)
 endif()
 
-# ── Copy config to build directory so relative paths work ──────────────────────
+# ── Copy config and user indicators to build directory so relative paths work ──
 file(COPY ${CMAKE_SOURCE_DIR}/config DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/user_indicator DESTINATION ${CMAKE_BINARY_DIR})
 
 # ── Main executable ────────────────────────────────────────────────────────────
 add_executable(crypto_trader src/main.cpp)
@@ -200,6 +201,7 @@ if(GTest_FOUND OR GTEST_FOUND)
 
     add_executable(test_indicators tests/test_indicators.cpp)
     target_link_libraries(test_indicators PRIVATE crypto_lib GTest::GTest GTest::Main)
+    target_compile_definitions(test_indicators PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME test_indicators COMMAND test_indicators)
 
     add_executable(test_features tests/test_features.cpp)

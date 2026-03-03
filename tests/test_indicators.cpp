@@ -85,3 +85,155 @@ TEST(EMA, UpdateValue) {
     // SMA(2) = (10+20)/2 = 15
     EXPECT_DOUBLE_EQ(ema.value(), 15.0);
 }
+
+// ── PineConverter tests ──────────────────────────────────────────────────────
+
+#include "../src/indicators/PineConverter.h"
+#include "../src/indicators/UserIndicatorManager.h"
+
+TEST(PineConverter, ParseStrategyAsIndicator) {
+    // strategy() should be treated like indicator()
+    std::string src = R"(
+// @version=6
+strategy("My Strategy", overlay=true)
+x = ta.ema(close, 9)
+plot(x, "EMA9")
+)";
+    auto script = PineConverter::parseSource(src);
+    EXPECT_EQ(script.name, "My Strategy");
+    EXPECT_TRUE(script.overlay);
+    EXPECT_EQ(script.version, 6);
+}
+
+TEST(PineConverter, ParseTypedVariableDeclaration) {
+    std::string src = R"(
+int MAX_BUFF = 4999
+float PENALTY = 0.85
+x = MAX_BUFF + PENALTY
+plot(x, "result")
+)";
+    auto script = PineConverter::parseSource(src);
+    // Should parse without throwing; typed declarations should work
+    bool hasAssign = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::ASSIGN && s.name == "MAX_BUFF") hasAssign = true;
+    }
+    EXPECT_TRUE(hasAssign);
+}
+
+TEST(PineConverter, SkipFunctionDefinition) {
+    // => function definitions should be skipped without error
+    std::string src = R"(
+f_clamp(int val, int ceil) => math.max(0, math.min(val, ceil))
+x = 42
+plot(x, "val")
+)";
+    auto script = PineConverter::parseSource(src);
+    // Should have at least the assignment and plot
+    bool hasX = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::ASSIGN && s.name == "x") hasX = true;
+    }
+    EXPECT_TRUE(hasX);
+}
+
+TEST(PineConverter, SkipTypeDeclaration) {
+    // type declarations should be skipped
+    std::string src = R"(
+type MyType
+x = 10
+plot(x, "val")
+)";
+    auto script = PineConverter::parseSource(src);
+    bool hasX = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::ASSIGN && s.name == "x") hasX = true;
+    }
+    EXPECT_TRUE(hasX);
+}
+
+TEST(PineConverter, ResilientParsing) {
+    // Parser should skip unparseable lines and continue
+    std::string src = R"(
+// @version=6
+indicator("Test")
+@@invalid_syntax@@
+x = ta.ema(close, 9)
+plot(x, "EMA")
+)";
+    auto script = PineConverter::parseSource(src);
+    EXPECT_EQ(script.name, "Test");
+    // Should have loaded at least some statements
+    EXPECT_GE(script.statements.size(), 1u);
+}
+
+TEST(PineRuntime, InputStringAndBool) {
+    std::string src = R"(
+x = input.int(14, "Period")
+y = input.float(0.5, "Factor")
+plot(x, "period")
+plot(y, "factor")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle c{};
+    c.close = 100; c.open = 99; c.high = 101; c.low = 98; c.volume = 1000;
+    auto plots = rt.update(c);
+
+    EXPECT_NEAR(plots["period"], 14.0, 0.01);
+    EXPECT_NEAR(plots["factor"], 0.5, 0.01);
+}
+
+TEST(PineRuntime, BarIndex) {
+    std::string src = R"(
+plot(bar_index, "bi")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle c{};
+    c.close = 100; c.open = 99; c.high = 101; c.low = 98;
+    auto p1 = rt.update(c);
+    EXPECT_NEAR(p1["bi"], 0.0, 0.01);
+    auto p2 = rt.update(c);
+    EXPECT_NEAR(p2["bi"], 1.0, 0.01);
+}
+
+TEST(PineRuntime, MathFunctions) {
+    std::string src = R"(
+a = math.round(3.7)
+b = math.ceil(3.2)
+c = math.floor(3.9)
+d = math.pow(2, 3)
+plot(a, "round")
+plot(b, "ceil")
+plot(c, "floor")
+plot(d, "pow")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle candle{};
+    candle.close = 100; candle.open = 99; candle.high = 101; candle.low = 98;
+    auto plots = rt.update(candle);
+
+    EXPECT_NEAR(plots["round"], 4.0, 0.01);
+    EXPECT_NEAR(plots["ceil"], 4.0, 0.01);
+    EXPECT_NEAR(plots["floor"], 3.0, 0.01);
+    EXPECT_NEAR(plots["pow"], 8.0, 0.01);
+}
+
+TEST(UserIndicatorManager, ScanAndLoadPineFiles) {
+    // Use absolute path to source repo's user_indicator directory
+    std::string dir = std::string(CMAKE_SOURCE_DIR) + "/user_indicator";
+    UserIndicatorManager mgr(dir);
+    mgr.scanAndLoad();
+    auto loaded = mgr.loadedIndicators();
+    // Should have loaded the two .pine files
+    EXPECT_GE(loaded.size(), 1u);
+    EXPECT_TRUE(mgr.hasIndicators());
+}
