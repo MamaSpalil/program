@@ -46,6 +46,7 @@ inline std::vector<Bar> parseBars(const std::string& json) {
     std::vector<Bar> bars;
     bars.reserve(j.size());
     for (auto& k : j) {
+        if (!k.is_array() || k.size() < 6) continue;
         Bar b;
         b.openTime = k[0].get<long long>();
         b.open     = std::stod(k[1].get<std::string>());

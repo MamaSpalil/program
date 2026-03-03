@@ -620,3 +620,14 @@ TEST(DataStructures, ParseBarsEmpty) {
 TEST(DataStructures, ParseBarsInvalidJson) {
     EXPECT_THROW(parseBars("not json"), nlohmann::json::parse_error);
 }
+
+TEST(DataStructures, ParseBarsShortArray) {
+    // Elements with fewer than 6 fields should be skipped
+    std::string json = R"([
+        [1700000000000, "42000.00", "42500.00"],
+        [1700000060000, "42300.00", "42600.00", "42200.00", "42550.00", "98.765"]
+    ])";
+    auto bars = parseBars(json);
+    ASSERT_EQ(bars.size(), 1u);
+    EXPECT_EQ(bars[0].openTime, 1700000060000LL);
+}
