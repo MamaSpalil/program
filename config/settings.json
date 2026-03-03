@@ -14,6 +14,7 @@
     "symbol": "BTCUSDT",
     "interval": "15m",
     "mode": "paper",
+    "market_type": "futures",
     "initial_capital": 1000.0
   },
   "indicator": {

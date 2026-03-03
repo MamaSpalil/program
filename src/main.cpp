@@ -147,6 +147,9 @@ int main(int argc, char* argv[]) {
                 // (the panel visibility flag is set from within the GUI)
 
                 // Wire engine updates to the GUI so chart and indicators are displayed
+                static constexpr int kPricePollIntervalSec = 1;
+                static constexpr int kUserDataPollIntervalSec = 5;
+
                 engine->setOnUpdateCallback([&gui, &cfg, &engine](const crypto::EngineUpdate& upd) {
                     static auto lastPriceTime = std::chrono::steady_clock::now();
                     static auto lastUserDataTime = std::chrono::steady_clock::time_point{};
@@ -179,8 +182,8 @@ int main(int argc, char* argv[]) {
                         st.totalPnl = engine->totalPnl();
                         st.winRate  = engine->winRate();
 
-                        // Fetch current price (every 1 second)
-                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastPriceTime).count() >= 1) {
+                        // Fetch current price periodically
+                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastPriceTime).count() >= kPricePollIntervalSec) {
                             try {
                                 st.currentPrice = engine->getPrice(cfg.symbol);
                             } catch (...) {
@@ -189,8 +192,8 @@ int main(int argc, char* argv[]) {
                             lastPriceTime = now;
                         }
 
-                        // Fetch user data (every 5 seconds)
-                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUserDataTime).count() >= 5) {
+                        // Fetch user data periodically
+                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUserDataTime).count() >= kUserDataPollIntervalSec) {
                             try {
                                 st.openOrders = engine->getOpenOrders(cfg.symbol);
                                 st.userTrades = engine->getMyTrades(cfg.symbol, 20);

@@ -1,0 +1,25 @@
+{
+  "active": "binance",
+  "exchanges": {
+    "binance": {
+      "name": "binance",
+      "api_key": "",
+      "api_secret": "",
+      "passphrase": "",
+      "testnet": true,
+      "base_url": "https://testnet.binance.vision",
+      "ws_host": "testnet.binance.vision",
+      "ws_port": "443"
+    },
+    "okx": {
+      "name": "okx",
+      "api_key": "",
+      "api_secret": "",
+      "passphrase": "",
+      "testnet": false,
+      "base_url": "https://www.okx.com",
+      "ws_host": "ws.okx.com",
+      "ws_port": "8443"
+    }
+  }
+}

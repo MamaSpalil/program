@@ -7,6 +7,7 @@
 
 #include <GLFW/glfw3.h>
 #include <fstream>
+#include <filesystem>
 #include <sstream>
 #include <iomanip>
 #include <cmath>
@@ -289,6 +290,38 @@ void AppGui::loadConfig(const std::string& path) {
 
     nlohmann::json j;
     f >> j;
+
+    // Try to load active exchange from profiles.json (if it exists)
+    {
+        namespace fs = std::filesystem;
+        fs::path profilesPath = fs::path(path).parent_path() / "profiles.json";
+        std::ifstream pf(profilesPath);
+        if (pf.is_open()) {
+            try {
+                nlohmann::json pj;
+                pf >> pj;
+                std::string activeExchange = pj.value("active", "");
+                if (!activeExchange.empty() && pj.contains("exchanges") &&
+                    pj["exchanges"].contains(activeExchange)) {
+                    auto& exchangeProfile = pj["exchanges"][activeExchange];
+                    // Override exchange config from profiles.json
+                    if (j.contains("exchange")) {
+                        auto& ex = j["exchange"];
+                        ex["name"]       = exchangeProfile.value("name", activeExchange);
+                        ex["api_key"]    = exchangeProfile.value("api_key", ex.value("api_key", ""));
+                        ex["api_secret"] = exchangeProfile.value("api_secret", ex.value("api_secret", ""));
+                        ex["passphrase"] = exchangeProfile.value("passphrase", ex.value("passphrase", ""));
+                        ex["testnet"]    = exchangeProfile.value("testnet", ex.value("testnet", true));
+                        ex["base_url"]   = exchangeProfile.value("base_url", ex.value("base_url", ""));
+                        ex["ws_host"]    = exchangeProfile.value("ws_host", ex.value("ws_host", ""));
+                        ex["ws_port"]    = exchangeProfile.value("ws_port", ex.value("ws_port", ""));
+                    }
+                }
+            } catch (...) {
+                // Ignore profiles.json parse errors
+            }
+        }
+    }
 
     auto& ex = j["exchange"];
     config_.exchangeName = ex.value("name", "binance");
@@ -1428,7 +1461,7 @@ void AppGui::drawCandlestickChart() {
         // ── Timeframe quick-switch buttons ──
         {
             const char* tfButtons[] = {"1m","3m","5m","15m","1h","4h","1d"};
-            for (int i = 0; i < 7; ++i) {
+            for (int i = 0; i < (int)(sizeof(tfButtons)/sizeof(tfButtons[0])); ++i) {
                 if (i > 0) ImGui::SameLine();
                 bool active = (config_.interval == tfButtons[i]);
                 if (active) {
