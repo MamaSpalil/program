@@ -56,34 +56,36 @@ void Engine::initComponents() {
     std::string baseUrl    = ex.value("base_url", "");
     std::string wsHost     = ex.value("ws_host", "");
     std::string wsPort     = ex.value("ws_port", "");
+    bool testnet           = ex.value("testnet", true);
 
-    Logger::get()->debug("[Engine] Creating exchange: name={} baseUrl={} wsHost={} wsPort={}", name, baseUrl, wsHost, wsPort);
+    Logger::get()->debug("[Engine] Creating exchange: name={} baseUrl={} wsHost={} wsPort={} testnet={}",
+                         name, baseUrl, wsHost, wsPort, testnet);
 
     if (name == "bybit") {
-        if (baseUrl.empty()) baseUrl = "https://api-testnet.bybit.com";
-        if (wsHost.empty())  wsHost  = "stream-testnet.bybit.com";
+        if (baseUrl.empty()) baseUrl = testnet ? "https://api-testnet.bybit.com"      : "https://api.bybit.com";
+        if (wsHost.empty())  wsHost  = testnet ? "stream-testnet.bybit.com"            : "stream.bybit.com";
         if (wsPort.empty())  wsPort  = "443";
         impl_->exchange = std::make_unique<BybitExchange>(apiKey, apiSec, baseUrl, wsHost, wsPort);
     } else if (name == "okx") {
         if (baseUrl.empty()) baseUrl = "https://www.okx.com";
-        if (wsHost.empty())  wsHost  = "ws.okx.com";
+        if (wsHost.empty())  wsHost  = testnet ? "wspap.okx.com"                       : "ws.okx.com";
         if (wsPort.empty())  wsPort  = "8443";
         impl_->exchange = std::make_unique<OKXExchange>(apiKey, apiSec, passphrase, baseUrl, wsHost, wsPort);
     } else if (name == "bitget") {
-        if (baseUrl.empty()) baseUrl = "https://api.bitget.com";
+        if (baseUrl.empty()) baseUrl = testnet ? "https://api-simulated.bitget.com"    : "https://api.bitget.com";
         if (wsHost.empty())  wsHost  = "ws.bitget.com";
         if (wsPort.empty())  wsPort  = "443";
         impl_->exchange = std::make_unique<BitgetExchange>(apiKey, apiSec, passphrase, baseUrl, wsHost, wsPort);
     } else if (name == "kucoin") {
-        if (baseUrl.empty()) baseUrl = "https://api.kucoin.com";
-        if (wsHost.empty())  wsHost  = "ws-api-spot.kucoin.com";
+        if (baseUrl.empty()) baseUrl = testnet ? "https://api-sandbox.kucoin.com"      : "https://api.kucoin.com";
+        if (wsHost.empty())  wsHost  = testnet ? "ws-api-sandbox.kucoin.com"           : "ws-api.kucoin.com";
         if (wsPort.empty())  wsPort  = "443";
         impl_->exchange = std::make_unique<KuCoinExchange>(apiKey, apiSec, passphrase, baseUrl, wsHost, wsPort);
     } else {
         // default: binance
-        if (baseUrl.empty()) baseUrl = "https://testnet.binance.vision";
-        if (wsHost.empty())  wsHost  = "testnet.binance.vision";
-        if (wsPort.empty())  wsPort  = "443";
+        if (baseUrl.empty()) baseUrl = testnet ? "https://testnet.binance.vision"      : "https://api.binance.com";
+        if (wsHost.empty())  wsHost  = testnet ? "testnet.binance.vision"              : "stream.binance.com";
+        if (wsPort.empty())  wsPort  = testnet ? "443"                                 : "9443";
         impl_->exchange = std::make_unique<BinanceExchange>(apiKey, apiSec, baseUrl, wsHost, wsPort);
     }
 
@@ -99,7 +101,7 @@ void Engine::initComponents() {
     prof.baseUrl      = baseUrl;
     prof.wsHost       = wsHost;
     prof.wsPort       = wsPort;
-    prof.testnet      = ex.value("testnet", false);
+    prof.testnet      = testnet;
     db.upsertProfile(prof);
     db.setActiveProfile(name);
     db.save();

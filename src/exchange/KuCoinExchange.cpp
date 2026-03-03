@@ -227,7 +227,7 @@ void KuCoinExchange::subscribeKline(const std::string& symbol,
                                       const std::string& interval,
                                       std::function<void(const Candle&)> cb) {
     klineCb_ = std::move(cb);
-    ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/ws/v1/public");
+    ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/endpoint");
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
     (void)symbol; (void)interval;
 }
