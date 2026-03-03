@@ -530,3 +530,104 @@ TEST(EngineUpdate, ContainsOrderBook) {
     EXPECT_EQ(upd.orderBook.asks.size(), 1u);
     EXPECT_DOUBLE_EQ(upd.orderBook.bids[0].price, 50000.0);
 }
+
+// ── Tick struct tests ──
+
+TEST(DataStructures, TickDefaults) {
+    Tick t;
+    EXPECT_EQ(t.time, 0);
+    EXPECT_DOUBLE_EQ(t.price, 0.0);
+    EXPECT_DOUBLE_EQ(t.qty, 0.0);
+    EXPECT_FALSE(t.isSell);
+}
+
+TEST(DataStructures, TickValues) {
+    Tick t;
+    t.time = 1700000000000LL;
+    t.price = 42500.50;
+    t.qty = 0.15;
+    t.isSell = true;
+    EXPECT_EQ(t.time, 1700000000000LL);
+    EXPECT_DOUBLE_EQ(t.price, 42500.50);
+    EXPECT_DOUBLE_EQ(t.qty, 0.15);
+    EXPECT_TRUE(t.isSell);
+}
+
+// ── Bar struct tests ──
+
+TEST(DataStructures, BarDefaults) {
+    Bar b;
+    EXPECT_EQ(b.openTime, 0);
+    EXPECT_DOUBLE_EQ(b.open, 0.0);
+    EXPECT_DOUBLE_EQ(b.high, 0.0);
+    EXPECT_DOUBLE_EQ(b.low, 0.0);
+    EXPECT_DOUBLE_EQ(b.close, 0.0);
+    EXPECT_DOUBLE_EQ(b.volume, 0.0);
+    EXPECT_TRUE(b.isNew);
+    EXPECT_FALSE(b.isClosed);
+}
+
+TEST(DataStructures, BarValues) {
+    Bar b;
+    b.openTime = 1700000000000LL;
+    b.open = 42000.0;
+    b.high = 42500.0;
+    b.low = 41800.0;
+    b.close = 42300.0;
+    b.volume = 123.456;
+    b.isNew = false;
+    b.isClosed = true;
+    EXPECT_EQ(b.openTime, 1700000000000LL);
+    EXPECT_DOUBLE_EQ(b.open, 42000.0);
+    EXPECT_DOUBLE_EQ(b.high, 42500.0);
+    EXPECT_DOUBLE_EQ(b.low, 41800.0);
+    EXPECT_DOUBLE_EQ(b.close, 42300.0);
+    EXPECT_DOUBLE_EQ(b.volume, 123.456);
+    EXPECT_FALSE(b.isNew);
+    EXPECT_TRUE(b.isClosed);
+}
+
+// ── parseBars tests ──
+
+TEST(DataStructures, ParseBarsValid) {
+    // Mimics Binance kline JSON: [[openTime, "open", "high", "low", "close", "volume", ...]]
+    std::string json = R"([
+        [1700000000000, "42000.00", "42500.00", "41800.00", "42300.00", "123.456"],
+        [1700000060000, "42300.00", "42600.00", "42200.00", "42550.00", "98.765"]
+    ])";
+    auto bars = parseBars(json);
+    ASSERT_EQ(bars.size(), 2u);
+
+    EXPECT_EQ(bars[0].openTime, 1700000000000LL);
+    EXPECT_DOUBLE_EQ(bars[0].open, 42000.0);
+    EXPECT_DOUBLE_EQ(bars[0].high, 42500.0);
+    EXPECT_DOUBLE_EQ(bars[0].low, 41800.0);
+    EXPECT_DOUBLE_EQ(bars[0].close, 42300.0);
+    EXPECT_DOUBLE_EQ(bars[0].volume, 123.456);
+    EXPECT_FALSE(bars[0].isNew);
+    EXPECT_TRUE(bars[0].isClosed);
+
+    EXPECT_EQ(bars[1].openTime, 1700000060000LL);
+    EXPECT_DOUBLE_EQ(bars[1].open, 42300.0);
+    EXPECT_DOUBLE_EQ(bars[1].close, 42550.0);
+}
+
+TEST(DataStructures, ParseBarsEmpty) {
+    auto bars = parseBars("[]");
+    EXPECT_TRUE(bars.empty());
+}
+
+TEST(DataStructures, ParseBarsInvalidJson) {
+    EXPECT_THROW(parseBars("not json"), nlohmann::json::parse_error);
+}
+
+TEST(DataStructures, ParseBarsShortArray) {
+    // Elements with fewer than 6 fields should be skipped
+    std::string json = R"([
+        [1700000000000, "42000.00", "42500.00"],
+        [1700000060000, "42300.00", "42600.00", "42200.00", "42550.00", "98.765"]
+    ])";
+    auto bars = parseBars(json);
+    ASSERT_EQ(bars.size(), 1u);
+    EXPECT_EQ(bars[0].openTime, 1700000060000LL);
+}

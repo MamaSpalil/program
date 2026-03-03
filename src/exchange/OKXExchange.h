@@ -40,6 +40,7 @@ public:
     std::vector<UserTradeInfo> getMyTrades(const std::string& symbol, int limit = 20) override;
     std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
     std::vector<AccountBalanceDetail> getAccountBalanceDetails() override;
+    void setMarketType(const std::string& marketType) override;
 
 private:
     std::string apiKey_;
@@ -48,6 +49,7 @@ private:
     std::string baseUrl_;
     std::string wsHost_;
     std::string wsPort_;
+    std::string marketType_{"spot"};
     std::unique_ptr<WebSocketClient> ws_;
     std::function<void(const Candle&)> klineCb_;
     mutable std::mutex rateMutex_;

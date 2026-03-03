@@ -318,6 +318,21 @@ int main(int argc, char* argv[]) {
             }).detach();
         });
 
+        // Refresh data callback — reload candles when pair or timeframe changes
+        gui->setRefreshDataCallback([&]() {
+            if (!engine) return;
+            auto cfg = gui->getConfig();
+            engine->setMarketType(cfg.marketType);
+            std::thread([&gui, &engine, symbol = cfg.symbol, interval = cfg.interval]() {
+                try {
+                    engine->reloadCandles(symbol, interval);
+                    gui->addLog("[OK] Chart reloaded for " + symbol + " " + interval);
+                } catch (const std::exception& e) {
+                    gui->addLog(std::string("[Error] Reload: ") + e.what());
+                }
+            }).detach();
+        });
+
         gui->addLog("[Info] Crypto ML Trader v1.0.0 ready");
         gui->addLog("[Info] Configure exchange settings and press Connect");
 

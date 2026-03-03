@@ -1474,6 +1474,7 @@ void AppGui::drawCandlestickChart() {
                     config_.interval = tfButtons[i];
                     chartScrollOffset_ = 0;
                     addLog(std::string("[Chart] Timeframe: ") + tfButtons[i]);
+                    if (onRefreshData_) onRefreshData_();
                 }
                 if (active) ImGui::PopStyleColor(2);
             }
@@ -1957,7 +1958,9 @@ void AppGui::drawPairListPanel() {
             config_.symbol = filtered[i]->symbol;
             config_.marketType = filtered[i]->marketType;
             selectedPairIdx_ = i;
+            chartScrollOffset_ = 0;
             addLog("[Config] Pair changed to " + filtered[i]->displayName);
+            if (onRefreshData_) onRefreshData_();
         }
 
         if (isActive) {
