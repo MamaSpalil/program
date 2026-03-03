@@ -195,30 +195,20 @@ else()
     message(STATUS "GLFW or OpenGL not found — GUI disabled (console mode)")
 endif()
 
-# ── Tests ──────────────────────────────────────────────────────────────────────
+# ── Tests (single combined executable) ─────────────────────────────────────────
 if(GTest_FOUND OR GTEST_FOUND)
     enable_testing()
 
-    add_executable(test_indicators tests/test_indicators.cpp)
-    target_link_libraries(test_indicators PRIVATE crypto_lib GTest::GTest GTest::Main)
-    target_compile_definitions(test_indicators PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-    add_test(NAME test_indicators COMMAND test_indicators)
-
-    add_executable(test_features tests/test_features.cpp)
-    target_link_libraries(test_features PRIVATE crypto_lib GTest::GTest GTest::Main)
-    add_test(NAME test_features COMMAND test_features)
-
-    add_executable(test_risk tests/test_risk.cpp)
-    target_link_libraries(test_risk PRIVATE crypto_lib GTest::GTest GTest::Main)
-    add_test(NAME test_risk COMMAND test_risk)
-
-    add_executable(test_exchanges tests/test_exchanges.cpp)
-    target_link_libraries(test_exchanges PRIVATE crypto_lib GTest::GTest GTest::Main)
-    add_test(NAME test_exchanges COMMAND test_exchanges)
-
-    add_executable(test_logger tests/test_logger.cpp)
-    target_link_libraries(test_logger PRIVATE crypto_lib GTest::GTest GTest::Main)
-    add_test(NAME test_logger COMMAND test_logger)
+    add_executable(crypto_trader_tests
+        tests/test_indicators.cpp
+        tests/test_features.cpp
+        tests/test_risk.cpp
+        tests/test_exchanges.cpp
+        tests/test_logger.cpp
+    )
+    target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
+    target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME crypto_trader_tests COMMAND crypto_trader_tests)
 else()
     message(STATUS "GTest not found — unit tests will not be built")
 endif()
