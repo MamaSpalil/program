@@ -38,5 +38,6 @@
     "max_drawdown": 0.15,
     "atr_stop_multiplier": 1.5,
     "rr_ratio": 2.0
-  }
+  },
+  "user_indicator_dir": "user_indicator"
 }

@@ -4,6 +4,7 @@
 #include "../exchange/BybitExchange.h"
 #include "../data/DataFeed.h"
 #include "../strategy/MLEnhancedStrategy.h"
+#include "../indicators/UserIndicatorManager.h"
 #include "../ui/Dashboard.h"
 #include <fstream>
 #include <iostream>
@@ -13,10 +14,11 @@
 namespace crypto {
 
 struct Engine::Impl {
-    std::unique_ptr<IExchange>          exchange;
-    std::unique_ptr<DataFeed>           feed;
-    std::unique_ptr<MLEnhancedStrategy> strategy;
-    std::unique_ptr<Dashboard>          dashboard;
+    std::unique_ptr<IExchange>              exchange;
+    std::unique_ptr<DataFeed>               feed;
+    std::unique_ptr<MLEnhancedStrategy>     strategy;
+    std::unique_ptr<Dashboard>              dashboard;
+    std::unique_ptr<UserIndicatorManager>   userIndicators;
 };
 
 Engine::Engine(const std::string& configPath)
@@ -53,6 +55,16 @@ void Engine::initComponents() {
     impl_->strategy = std::make_unique<MLEnhancedStrategy>(
         config_, config_["trading"].value("initial_capital", 1000.0));
     impl_->dashboard = std::make_unique<Dashboard>();
+
+    // Load user Pine Script indicators
+    std::string indicatorDir = config_.value("user_indicator_dir", "user_indicator");
+    impl_->userIndicators = std::make_unique<UserIndicatorManager>(indicatorDir);
+    impl_->userIndicators->scanAndLoad();
+    auto loaded = impl_->userIndicators->loadedIndicators();
+    if (!loaded.empty()) {
+        Logger::get()->info("Loaded {} user indicator(s)", loaded.size());
+        for (auto& name : loaded) Logger::get()->info("  - {}", name);
+    }
 }
 
 void Engine::run() {
@@ -73,6 +85,7 @@ void Engine::run() {
         for (auto& c : hist) {
             impl_->feed->onCandle(c);
             impl_->strategy->onCandle(c);
+            if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
         }
     } catch (const std::exception& e) {
         Logger::get()->warn("Historical load failed: {}", e.what());
@@ -82,6 +95,7 @@ void Engine::run() {
     impl_->exchange->subscribeKline(symbol, interval, [this](const Candle& c) {
         impl_->feed->onCandle(c);
         impl_->strategy->onCandle(c);
+        if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
     });
     impl_->exchange->connect();
     impl_->dashboard->start();
