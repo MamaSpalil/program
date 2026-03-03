@@ -146,6 +146,10 @@ void Engine::run() {
             impl_->strategy->onCandle(c);
             if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
         }
+        // Update dashboard with last historical candle state
+        if (!hist.empty()) {
+            updateDashboard(hist.back());
+        }
     } catch (const std::exception& e) {
         Logger::get()->warn("Historical load failed: {}", e.what());
     }
@@ -156,6 +160,7 @@ void Engine::run() {
             impl_->feed->onCandle(c);
             impl_->strategy->onCandle(c);
             if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
+            updateDashboard(c);
         });
         impl_->exchange->connect();
     } catch (const std::exception& e) {
@@ -170,6 +175,14 @@ void Engine::mainLoop() {
     while (running_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+}
+
+void Engine::updateDashboard(const Candle& c) {
+    if (!impl_->dashboard || !impl_->strategy) return;
+    auto sig = impl_->strategy->getSignal();
+    impl_->dashboard->update(c, impl_->strategy->indicators(),
+                             impl_->strategy->riskManager(),
+                             sig.value_or(Signal{}));
 }
 
 void Engine::stop() {

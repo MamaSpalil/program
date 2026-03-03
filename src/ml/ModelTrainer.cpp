@@ -7,7 +7,9 @@ namespace crypto {
 
 ModelTrainer::ModelTrainer(LSTMModel& lstm, XGBoostModel& xgb,
                             FeatureExtractor& feat, const Config& cfg)
-    : lstm_(lstm), xgb_(xgb), feat_(feat), cfg_(cfg) {}
+    : lstm_(lstm), xgb_(xgb), feat_(feat), cfg_(cfg),
+      lastRetrainTime_(std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count()) {}
 
 void ModelTrainer::addCandle(const Candle& c) {
     candleHistory_.push_back(c);

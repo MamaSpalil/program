@@ -65,22 +65,25 @@ void WebSocketClient::workerLoop() {
             ctx.set_verify_mode(ssl::verify_peer);
 
 #ifdef _WIN32
-            // Load certificates from Windows certificate store
-            HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
-            if (hStore) {
+            // Load certificates from Windows certificate stores
+            {
                 X509_STORE* store = SSL_CTX_get_cert_store(ctx.native_handle());
                 if (store) {
-                    PCCERT_CONTEXT pContext = nullptr;
-                    while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != nullptr) {
-                        const unsigned char* certData = pContext->pbCertEncoded;
-                        X509* x509 = d2i_X509(nullptr, &certData, static_cast<long>(pContext->cbCertEncoded));
-                        if (x509) {
-                            X509_STORE_add_cert(store, x509);
-                            X509_free(x509);
+                    for (const char* storeName : {"ROOT", "CA", "AuthRoot"}) {
+                        HCERTSTORE hStore = CertOpenSystemStoreA(0, storeName);
+                        if (!hStore) continue;
+                        PCCERT_CONTEXT pContext = nullptr;
+                        while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != nullptr) {
+                            const unsigned char* certData = pContext->pbCertEncoded;
+                            X509* x509 = d2i_X509(nullptr, &certData, static_cast<long>(pContext->cbCertEncoded));
+                            if (x509) {
+                                X509_STORE_add_cert(store, x509);
+                                X509_free(x509);
+                            }
                         }
+                        CertCloseStore(hStore, 0);
                     }
                 }
-                CertCloseStore(hStore, 0);
             }
 #else
             ctx.set_default_verify_paths();

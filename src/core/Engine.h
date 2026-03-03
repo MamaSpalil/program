@@ -30,6 +30,7 @@ private:
     void loadConfig(const std::string& path);
     void initComponents();
     void mainLoop();
+    void updateDashboard(const Candle& c);
 
     nlohmann::json config_;
     std::atomic<bool> running_{false};
