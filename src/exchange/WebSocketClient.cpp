@@ -9,8 +9,14 @@
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 #include <stdexcept>
 #include <chrono>
+
+#ifdef _WIN32
+#include <wincrypt.h>
+#pragma comment(lib, "crypt32.lib")
+#endif
 
 namespace beast     = boost::beast;
 namespace websocket = boost::beast::websocket;
@@ -56,8 +62,27 @@ void WebSocketClient::workerLoop() {
         try {
             net::io_context ioc;
             ssl::context ctx(ssl::context::tls_client);
-            ctx.set_default_verify_paths();
             ctx.set_verify_mode(ssl::verify_peer);
+
+#ifdef _WIN32
+            // Load certificates from Windows certificate store
+            HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
+            if (hStore) {
+                X509_STORE* store = SSL_CTX_get_cert_store(ctx.native_handle());
+                PCCERT_CONTEXT pContext = nullptr;
+                while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != nullptr) {
+                    const unsigned char* certData = pContext->pbCertEncoded;
+                    X509* x509 = d2i_X509(nullptr, &certData, static_cast<long>(pContext->cbCertEncoded));
+                    if (x509) {
+                        X509_STORE_add_cert(store, x509);
+                        X509_free(x509);
+                    }
+                }
+                CertCloseStore(hStore, 0);
+            }
+#else
+            ctx.set_default_verify_paths();
+#endif
 
             tcp::resolver resolver(ioc);
             auto results = resolver.resolve(host_, port_);

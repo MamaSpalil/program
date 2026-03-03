@@ -600,7 +600,9 @@ static void PlotLineFromDeque(const char* label, const std::deque<double>& data,
         return;
     }
     // Convert deque to vector for PlotLines
-    std::vector<float> v(data.begin(), data.end());
+    std::vector<float> v;
+    v.reserve(data.size());
+    for (double d : data) v.push_back(static_cast<float>(d));
     ImGui::PushStyleColor(ImGuiCol_PlotLines, color);
     ImGui::PlotLines(label, v.data(), (int)v.size(), 0, nullptr,
                      FLT_MAX, FLT_MAX, ImVec2(-1, height));
@@ -732,7 +734,9 @@ void AppGui::drawIndicatorsPanel() {
         if (config_.indRsiEnabled) {
             std::lock_guard<std::mutex> lk(stateMutex_);
             if (!rsiHistory_.empty()) {
-                std::vector<float> v(rsiHistory_.begin(), rsiHistory_.end());
+                std::vector<float> v;
+                v.reserve(rsiHistory_.size());
+                for (double d : rsiHistory_) v.push_back(static_cast<float>(d));
                 ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.85f, 0.70f, 0.30f, 1.0f));
                 ImGui::PlotLines("RSI##chart", v.data(), (int)v.size(), 0,
                                  nullptr, 0.0f, 100.0f, ImVec2(-1, 40));

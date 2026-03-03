@@ -95,6 +95,9 @@ int main(int argc, char* argv[]) {
         gui->setConnectCallback([&](const crypto::GuiConfig& cfg) {
             gui->addLog("[Info] Connecting to " + cfg.exchangeName + "...");
             try {
+                // Save current GUI settings so Engine reads user-entered values
+                gui->saveConfigToFile(configPath);
+
                 engine = std::make_unique<crypto::Engine>(configPath);
                 g_engine = engine.get();
 
