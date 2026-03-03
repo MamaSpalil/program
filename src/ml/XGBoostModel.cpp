@@ -52,7 +52,9 @@ void XGBoostModel::train(const std::vector<std::vector<double>>& X,
 std::vector<double> XGBoostModel::predict(const std::vector<double>& features) {
     if (!ready_) return {0.333, 0.334, 0.333};
     int nCols = static_cast<int>(features.size());
-    std::vector<float> flat(features.begin(), features.end());
+    std::vector<float> flat;
+    flat.reserve(features.size());
+    for (double d : features) flat.push_back(static_cast<float>(d));
 
     DMatrixHandle dmat;
     XGDMatrixCreateFromMat(flat.data(), 1, nCols, NAN, &dmat);

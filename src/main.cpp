@@ -95,6 +95,9 @@ int main(int argc, char* argv[]) {
         gui->setConnectCallback([&](const crypto::GuiConfig& cfg) {
             gui->addLog("[Info] Connecting to " + cfg.exchangeName + "...");
             try {
+                // Save current GUI settings so Engine reads user-entered values
+                gui->saveConfigToFile(configPath);
+
                 engine = std::make_unique<crypto::Engine>(configPath);
                 g_engine = engine.get();
 
@@ -160,6 +163,36 @@ int main(int argc, char* argv[]) {
 
         gui->setStopCallback([&]() {
             gui->addLog("[Info] Trading stopped");
+        });
+
+        gui->setOrderCallback([&](const std::string& symbol,
+                                   const std::string& side,
+                                   const std::string& type,
+                                   double qty,
+                                   double price) {
+            if (!engine) {
+                gui->addLog("[Error] Engine not running");
+                return;
+            }
+            try {
+                crypto::OrderRequest req;
+                req.symbol = symbol;
+                req.side   = (side == "BUY") ? crypto::OrderRequest::Side::BUY
+                                             : crypto::OrderRequest::Side::SELL;
+                req.type   = (type == "LIMIT") ? crypto::OrderRequest::Type::LIMIT
+                                               : crypto::OrderRequest::Type::MARKET;
+                req.qty    = qty;
+                req.price  = price;
+                auto resp = engine->placeOrder(req);
+                if (!resp.orderId.empty()) {
+                    gui->addLog("[OK] Order " + resp.orderId + " " + resp.status +
+                                " qty=" + std::to_string(resp.executedQty));
+                } else {
+                    gui->addLog("[Error] Order failed: " + resp.status);
+                }
+            } catch (const std::exception& e) {
+                gui->addLog(std::string("[Error] Order: ") + e.what());
+            }
         });
 
         gui->addLog("[Info] Crypto ML Trader v1.0.0 ready");

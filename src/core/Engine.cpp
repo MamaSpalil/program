@@ -102,7 +102,7 @@ void Engine::initComponents() {
     auto loaded = impl_->userIndicators->loadedIndicators();
     if (!loaded.empty()) {
         Logger::get()->info("Loaded {} user indicator(s)", loaded.size());
-        for (auto& name : loaded) Logger::get()->info("  - {}", name);
+        for (auto& ind : loaded) Logger::get()->info("  - {}", ind);
     }
 
     componentsInitialized_ = true;
@@ -116,6 +116,12 @@ bool Engine::initAndTestConnection(std::string& outError) {
         outError = e.what();
         return false;
     }
+}
+
+OrderResponse Engine::placeOrder(const OrderRequest& req) {
+    if (!impl_ || !impl_->exchange)
+        return OrderResponse{"", "error: exchange not initialized", 0.0, 0.0};
+    return impl_->exchange->placeOrder(req);
 }
 
 void Engine::run() {

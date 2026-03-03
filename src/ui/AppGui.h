@@ -138,12 +138,18 @@ public:
     using StartCallback      = std::function<void()>;
     using StopCallback       = std::function<void()>;
     using SaveConfigCallback = std::function<void(const GuiConfig&)>;
+    using OrderCallback      = std::function<void(const std::string& symbol,
+                                                   const std::string& side,
+                                                   const std::string& type,
+                                                   double qty,
+                                                   double price)>;
 
     void setConnectCallback(ConnectCallback cb)       { onConnect_ = std::move(cb); }
     void setDisconnectCallback(DisconnectCallback cb)  { onDisconnect_ = std::move(cb); }
     void setStartCallback(StartCallback cb)            { onStart_ = std::move(cb); }
     void setStopCallback(StopCallback cb)              { onStop_ = std::move(cb); }
     void setSaveConfigCallback(SaveConfigCallback cb)  { onSaveConfig_ = std::move(cb); }
+    void setOrderCallback(OrderCallback cb)            { onOrder_ = std::move(cb); }
 
     // Add a log line (thread-safe)
     void addLog(const std::string& line);
@@ -163,6 +169,7 @@ private:
     void drawOrderBookPanel();
     void drawIndicatorsPanel();
     void drawSignalPanel();
+    void drawTradingPanel();
     void drawPortfolioPanel();
     void drawSettingsPanel();
     void drawLogPanel();
@@ -209,6 +216,12 @@ private:
     StartCallback      onStart_;
     StopCallback       onStop_;
     SaveConfigCallback onSaveConfig_;
+    OrderCallback      onOrder_;
+
+    // Trading panel state
+    double orderQty_{0.001};
+    double orderPrice_{0.0};
+    int    orderTypeIdx_{0};  // 0=Market, 1=Limit
 };
 
 } // namespace crypto

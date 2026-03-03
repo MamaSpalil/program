@@ -441,6 +441,7 @@ void AppGui::renderFrame() {
 
     ImGui::BeginChild("##RightCol", ImVec2(0, h), ImGuiChildFlags_None);
     drawSignalPanel();
+    drawTradingPanel();
     drawPortfolioPanel();
     ImGui::EndChild();
 
@@ -600,7 +601,9 @@ static void PlotLineFromDeque(const char* label, const std::deque<double>& data,
         return;
     }
     // Convert deque to vector for PlotLines
-    std::vector<float> v(data.begin(), data.end());
+    std::vector<float> v;
+    v.reserve(data.size());
+    for (double d : data) v.push_back(static_cast<float>(d));
     ImGui::PushStyleColor(ImGuiCol_PlotLines, color);
     ImGui::PlotLines(label, v.data(), (int)v.size(), 0, nullptr,
                      FLT_MAX, FLT_MAX, ImVec2(-1, height));
@@ -732,7 +735,9 @@ void AppGui::drawIndicatorsPanel() {
         if (config_.indRsiEnabled) {
             std::lock_guard<std::mutex> lk(stateMutex_);
             if (!rsiHistory_.empty()) {
-                std::vector<float> v(rsiHistory_.begin(), rsiHistory_.end());
+                std::vector<float> v;
+                v.reserve(rsiHistory_.size());
+                for (double d : rsiHistory_) v.push_back(static_cast<float>(d));
                 ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.85f, 0.70f, 0.30f, 1.0f));
                 ImGui::PlotLines("RSI##chart", v.data(), (int)v.size(), 0,
                                  nullptr, 0.0f, 100.0f, ImVec2(-1, 40));
@@ -831,6 +836,76 @@ void AppGui::drawSignalPanel() {
                                    t, sig.price, sig.confidence * 100.0);
             }
         }
+
+        ImGui::EndChild();
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  Trading Panel (Long / Short manual orders)
+// ---------------------------------------------------------------------------
+void AppGui::drawTradingPanel() {
+    bool connected;
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        connected = state_.connected;
+    }
+
+    if (ImGui::CollapsingHeader(u8"Manual Trading", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::BeginChild("##TradeChild", ImVec2(0, 180), ImGuiChildFlags_Border);
+
+        if (!connected) {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+                               u8"Connect to exchange to trade");
+            ImGui::EndChild();
+            return;
+        }
+
+        // Order type
+        const char* orderTypes[] = {"Market", "Limit"};
+        ImGui::SetNextItemWidth(120);
+        ImGui::Combo("Type", &orderTypeIdx_, orderTypes, 2);
+
+        // Quantity
+        ImGui::SetNextItemWidth(120);
+        ImGui::InputDouble("Qty", &orderQty_, 0.001, 0.01, "%.4f");
+        if (orderQty_ < 0.0) orderQty_ = 0.0;
+
+        // Limit price (only for Limit orders)
+        if (orderTypeIdx_ == 1) {
+            ImGui::SetNextItemWidth(120);
+            ImGui::InputDouble("Price", &orderPrice_, 1.0, 10.0, "%.2f");
+        }
+
+        ImGui::Separator();
+        float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        std::string typeStr = (orderTypeIdx_ == 0) ? "MARKET" : "LIMIT";
+
+        // Long button (green)
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.13f, 0.55f, 0.25f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.18f, 0.68f, 0.32f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.10f, 0.45f, 0.20f, 1.0f));
+        if (ImGui::Button("Long", ImVec2(btnW, 36))) {
+            if (onOrder_ && orderQty_ > 0.0) {
+                onOrder_(config_.symbol, "BUY", typeStr, orderQty_, orderPrice_);
+                addLog("[BUY] Long " + std::to_string(orderQty_) + " " + config_.symbol);
+            }
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+
+        // Short button (red)
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.60f, 0.15f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.75f, 0.20f, 0.20f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.50f, 0.12f, 0.12f, 1.0f));
+        if (ImGui::Button("Short", ImVec2(btnW, 36))) {
+            if (onOrder_ && orderQty_ > 0.0) {
+                onOrder_(config_.symbol, "SELL", typeStr, orderQty_, orderPrice_);
+                addLog("[SELL] Short " + std::to_string(orderQty_) + " " + config_.symbol);
+            }
+        }
+        ImGui::PopStyleColor(3);
 
         ImGui::EndChild();
     }
