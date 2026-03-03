@@ -277,6 +277,7 @@ std::vector<SymbolInfo> OKXExchange::getSymbols(const std::string& marketType) {
             auto j = nlohmann::json::parse(resp);
             if (j.contains("data") && j["data"].is_array()) {
                 for (auto& s : j["data"]) {
+                    if (s.value("state", "") != "live") continue;
                     SymbolInfo si;
                     si.symbol     = s.value("instId", "");
                     si.baseAsset  = s.value("baseCcy", "");
@@ -293,6 +294,7 @@ std::vector<SymbolInfo> OKXExchange::getSymbols(const std::string& marketType) {
             auto j = nlohmann::json::parse(resp);
             if (j.contains("data") && j["data"].is_array()) {
                 for (auto& s : j["data"]) {
+                    if (s.value("state", "") != "live") continue;
                     SymbolInfo si;
                     si.symbol     = s.value("instId", "");
                     si.baseAsset  = s.value("ctValCcy", "");
@@ -345,6 +347,135 @@ OrderBook OKXExchange::getOrderBook(const std::string& symbol, int depth) {
     (void)symbol; (void)depth;
 #endif
     return ob;
+}
+
+std::vector<OpenOrderInfo> OKXExchange::getOpenOrders(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        std::string path = "/api/v5/trade/orders-pending";
+        if (!symbol.empty()) path += "?instId=" + symbol;
+        auto resp = httpGet(path, true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<OpenOrderInfo> result;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& o : j["data"]) {
+                OpenOrderInfo info;
+                info.orderId = o.value("ordId", "");
+                info.symbol  = o.value("instId", "");
+                info.side    = o.value("side", "");
+                // Uppercase side for consistency
+                for (auto& ch : info.side) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                info.type    = o.value("ordType", "");
+                info.price   = std::stod(o.value("px", "0"));
+                info.qty     = std::stod(o.value("sz", "0"));
+                info.executedQty = std::stod(o.value("fillSz", "0"));
+                info.time    = std::stoll(o.value("cTime", "0"));
+                result.push_back(std::move(info));
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getOpenOrders failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+std::vector<UserTradeInfo> OKXExchange::getMyTrades(const std::string& symbol, int limit) {
+#ifndef USE_CURL
+    (void)symbol; (void)limit;
+    return {};
+#else
+    try {
+        std::string path = "/api/v5/trade/fills?instId=" + symbol +
+                           "&limit=" + std::to_string(limit);
+        auto resp = httpGet(path, true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<UserTradeInfo> result;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& t : j["data"]) {
+                UserTradeInfo info;
+                info.time    = std::stoll(t.value("ts", "0"));
+                info.symbol  = t.value("instId", "");
+                info.side    = t.value("side", "");
+                for (auto& ch : info.side) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                info.price   = std::stod(t.value("fillPx", "0"));
+                info.qty     = std::stod(t.value("fillSz", "0"));
+                info.commission     = std::stod(t.value("fee", "0"));
+                info.commissionAsset = t.value("feeCcy", "");
+                result.push_back(std::move(info));
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getMyTrades failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+std::vector<PositionInfo> OKXExchange::getPositionRisk(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        std::string path = "/api/v5/account/positions";
+        if (!symbol.empty()) path += "?instId=" + symbol;
+        auto resp = httpGet(path, true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<PositionInfo> result;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& p : j["data"]) {
+                PositionInfo info;
+                info.symbol           = p.value("instId", "");
+                info.positionAmt      = std::stod(p.value("pos", "0"));
+                info.entryPrice       = std::stod(p.value("avgPx", "0"));
+                info.unrealizedProfit = std::stod(p.value("upl", "0"));
+                info.realizedProfit   = std::stod(p.value("realizedPnl", "0"));
+                info.marginType       = p.value("mgnMode", "");
+                info.leverage         = std::stod(p.value("lever", "1"));
+                result.push_back(std::move(info));
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getPositionRisk failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+std::vector<AccountBalanceDetail> OKXExchange::getAccountBalanceDetails() {
+#ifndef USE_CURL
+    return {};
+#else
+    try {
+        auto resp = httpGet("/api/v5/account/balance", true);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<AccountBalanceDetail> result;
+        if (j.contains("data") && j["data"].is_array() && !j["data"].empty()) {
+            auto& details = j["data"][0]["details"];
+            if (details.is_array()) {
+                for (auto& d : details) {
+                    AccountBalanceDetail info;
+                    info.currency  = d.value("ccy", "");
+                    info.availBal  = std::stod(d.value("availBal", "0"));
+                    info.frozenBal = std::stod(d.value("frozenBal", "0"));
+                    info.usdValue  = std::stod(d.value("eqUsd", "0"));
+                    result.push_back(std::move(info));
+                }
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getAccountBalanceDetails failed: {}", e.what());
+        return {};
+    }
+#endif
 }
 
 } // namespace crypto

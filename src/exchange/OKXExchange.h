@@ -36,6 +36,10 @@ public:
     bool testConnection(std::string& outError) override;
     std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") override;
     OrderBook getOrderBook(const std::string& symbol, int depth = 20) override;
+    std::vector<OpenOrderInfo> getOpenOrders(const std::string& symbol = "") override;
+    std::vector<UserTradeInfo> getMyTrades(const std::string& symbol, int limit = 20) override;
+    std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
+    std::vector<AccountBalanceDetail> getAccountBalanceDetails() override;
 
 private:
     std::string apiKey_;

@@ -37,12 +37,21 @@ public:
     std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") override;
     OrderBook getOrderBook(const std::string& symbol, int depth = 20) override;
 
+    void setMarketType(const std::string& marketType) override;
+    std::vector<OpenOrderInfo> getOpenOrders(const std::string& symbol = "") override;
+    std::vector<UserTradeInfo> getMyTrades(const std::string& symbol, int limit = 20) override;
+    std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
+    FuturesBalanceInfo getFuturesBalance() override;
+
 private:
     std::string apiKey_;
     std::string apiSecret_;
     std::string baseUrl_;
     std::string wsHost_;
     std::string wsPort_;
+    std::string marketType_{"spot"};
+    std::string futuresBaseUrl_;
+    std::string futuresWsHost_;
 
     std::unique_ptr<WebSocketClient> ws_;
     std::function<void(const Candle&)> klineCb_;
@@ -54,6 +63,8 @@ private:
 
     std::string sign(const std::string& payload) const;
     std::string httpGet(const std::string& path, bool signed_ = false) const;
+    std::string httpGetUrl(const std::string& fullUrl, bool signed_ = false) const;
+    std::string effectiveBaseUrl() const;
     std::string httpPost(const std::string& path,
                           const std::string& body) const;
     void rateLimit() const;
