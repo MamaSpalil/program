@@ -25,24 +25,13 @@ jobs:
           # Pinned to a known-stable vcpkg commit; update periodically
           vcpkgGitCommitId: '962e5e39f8a25f42522f51fffc574e05a3efd26b'
 
-      - name: Install dependencies via vcpkg
-        run: >
-          vcpkg install
-          curl
-          openssl
-          boost-system
-          boost-beast
-          boost-asio
-          nlohmann-json
-          spdlog
-          eigen3
-          gtest
-
-      - name: Configure CMake
+      - name: Configure CMake (vcpkg manifest mode)
         run: >
           cmake -B build -S .
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
       - name: Build
         run: cmake --build build --config Release

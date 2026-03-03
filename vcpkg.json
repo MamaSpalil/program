@@ -1,0 +1,16 @@
+{
+  "name": "crypto-trader",
+  "version-string": "1.0.0",
+  "description": "Crypto ML Trader — algorithmic trading system with ML-enhanced signals",
+  "dependencies": [
+    "curl",
+    "openssl",
+    "boost-system",
+    "boost-beast",
+    "boost-asio",
+    "nlohmann-json",
+    "spdlog",
+    "eigen3",
+    "gtest"
+  ]
+}

@@ -51,6 +51,8 @@ Production-ready C++17/20 algorithmic trading system with ML-enhanced signals.
 
 ```
 ├── CMakeLists.txt
+├── CMakePresets.json         ← build presets for VS 2019 / VS 2022 / Linux
+├── vcpkg.json                ← vcpkg dependency manifest
 ├── README.md
 ├── config/
 │   └── settings.json        ← exchange keys, trading params, ML config
@@ -118,16 +120,54 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
 make -j$(sysctl -n hw.ncpu)
 ```
 
-### Windows (vcpkg)
+### Windows — Visual Studio 2019 (рекомендуемый способ)
+
+1. **Установите [vcpkg](https://github.com/microsoft/vcpkg)**
+
+   ```powershell
+   git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+   C:\vcpkg\bootstrap-vcpkg.bat
+   ```
+
+2. **Задайте переменную окружения `VCPKG_ROOT`**
+
+   ```powershell
+   [System.Environment]::SetEnvironmentVariable('VCPKG_ROOT','C:\vcpkg','User')
+   ```
+
+   После этого перезапустите Visual Studio, чтобы переменная подхватилась.
+
+3. **Откройте проект в Visual Studio 2019**
+
+   - `Файл → Открыть → Папку…` и выберите корневую папку репозитория.
+   - VS автоматически обнаружит `CMakeLists.txt` и `CMakePresets.json`.
+   - В выпадающем списке конфигураций выберите **Windows x64 Release** или
+     **Windows x64 Debug**.
+   - Зависимости из `vcpkg.json` установятся автоматически при первой сборке.
+
+4. **Соберите проект**
+
+   - `Сборка → Собрать всё` (Ctrl+Shift+B).
+   - Готовый `crypto_trader.exe` появится в папке `build\Release\`.
+
+> **Примечание:** требуется Visual Studio 2019 версии 16.10 или новее.
+> Если вы используете Visual Studio 2022, выберите пресет
+> **Windows x64 Release (VS 2022)**.
+
+### Windows — командная строка (vcpkg)
 
 ```powershell
-vcpkg install curl openssl boost-system boost-beast boost-asio nlohmann-json spdlog gtest eigen3
-mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=<vcpkg-root>/scripts/buildsystems/vcpkg.cmake
-cmake --build . --config Release
+# Настройка (один раз)
+git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+C:\vcpkg\bootstrap-vcpkg.bat
+set VCPKG_ROOT=C:\vcpkg
+
+# Сборка (из корня проекта)
+cmake --preset windows-x64-release
+cmake --build build --config Release
 ```
 
-The built executable will be at `build\Release\crypto_trader.exe`.
+Исполняемый файл: `build\Release\crypto_trader.exe`.
 
 ### Windows (CI / GitHub Actions)
 
