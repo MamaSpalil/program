@@ -92,12 +92,16 @@ void Engine::run() {
     }
 
     // Subscribe to live stream
-    impl_->exchange->subscribeKline(symbol, interval, [this](const Candle& c) {
-        impl_->feed->onCandle(c);
-        impl_->strategy->onCandle(c);
-        if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
-    });
-    impl_->exchange->connect();
+    try {
+        impl_->exchange->subscribeKline(symbol, interval, [this](const Candle& c) {
+            impl_->feed->onCandle(c);
+            impl_->strategy->onCandle(c);
+            if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
+        });
+        impl_->exchange->connect();
+    } catch (const std::exception& e) {
+        Logger::get()->warn("WebSocket connection failed: {}", e.what());
+    }
     impl_->dashboard->start();
 
     mainLoop();
@@ -111,8 +115,10 @@ void Engine::mainLoop() {
 
 void Engine::stop() {
     running_ = false;
-    if (impl_->exchange) impl_->exchange->disconnect();
-    if (impl_->dashboard) impl_->dashboard->stop();
+    if (impl_) {
+        if (impl_->exchange) impl_->exchange->disconnect();
+        if (impl_->dashboard) impl_->dashboard->stop();
+    }
     Logger::get()->info("Engine stopped");
 }
 
