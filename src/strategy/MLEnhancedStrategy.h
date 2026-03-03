@@ -20,6 +20,9 @@ public:
     std::optional<Signal> getSignal() override;
     void onFill(const Position& pos) override;
 
+    const IndicatorEngine& indicators() const { return indEngine_; }
+    const RiskManager& riskManager() const { return riskMgr_; }
+
 private:
     IndicatorEngine indEngine_;
     LSTMConfig lstmCfg_;

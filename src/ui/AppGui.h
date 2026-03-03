@@ -154,6 +154,9 @@ public:
     // Add a log line (thread-safe)
     void addLog(const std::string& line);
 
+    // Save current config to JSON file
+    void saveConfigToFile(const std::string& path);
+
     bool shouldClose() const { return shouldClose_; }
 
 private:
@@ -176,9 +179,8 @@ private:
     void drawStatusBar();
     void drawFilterPanel();
 
-    // Load/save config from/to JSON file
+    // Load config from JSON file
     void loadConfig(const std::string& path);
-    void saveConfigToFile(const std::string& path);
     nlohmann::json configToJson() const;
 
     GLFWwindow* window_{nullptr};
