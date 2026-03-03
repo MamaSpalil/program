@@ -16,7 +16,7 @@ public:
                    const std::string& apiSecret,
                    const std::string& passphrase,
                    const std::string& baseUrl = "https://api.kucoin.com",
-                   const std::string& wsHost  = "ws-api-spot.kucoin.com",
+                   const std::string& wsHost  = "ws-api.kucoin.com",
                    const std::string& wsPort  = "443");
     ~KuCoinExchange() override;
 

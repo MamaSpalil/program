@@ -154,7 +154,7 @@ void BybitExchange::subscribeKline(const std::string& symbol,
                                     const std::string& interval,
                                     std::function<void(const Candle&)> cb) {
     klineCb_ = std::move(cb);
-    ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/v5/public/linear");
+    ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/v5/public/spot");
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
     (void)symbol; (void)interval;
 }

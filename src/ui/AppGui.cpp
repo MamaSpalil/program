@@ -297,6 +297,8 @@ void AppGui::loadConfig(const std::string& path) {
     config_.passphrase   = ex.value("passphrase", "");
     config_.testnet      = ex.value("testnet", true);
     config_.baseUrl      = ex.value("base_url", "https://testnet.binance.vision");
+    config_.wsHost       = ex.value("ws_host", "testnet.binance.vision");
+    config_.wsPort       = ex.value("ws_port", "443");
 
     auto& tr = j["trading"];
     config_.symbol         = tr.value("symbol", "BTCUSDT");
@@ -350,7 +352,9 @@ nlohmann::json AppGui::configToJson() const {
         {"api_secret", config_.apiSecret},
         {"passphrase", config_.passphrase},
         {"testnet",    config_.testnet},
-        {"base_url",   config_.baseUrl}
+        {"base_url",   config_.baseUrl},
+        {"ws_host",    config_.wsHost},
+        {"ws_port",    config_.wsPort}
     };
     j["trading"] = {
         {"symbol",          config_.symbol},
@@ -993,12 +997,16 @@ void AppGui::drawSettingsPanel() {
             static char apiSecBuf[256] = {};
             static char passBuf[256] = {};
             static char baseUrlBuf[256] = {};
+            static char wsHostBuf[256] = {};
+            static char wsPortBuf[16] = {};
             static bool bufInit = false;
             if (!bufInit) {
                 strncpy(apiKeyBuf, config_.apiKey.c_str(), sizeof(apiKeyBuf) - 1);
                 strncpy(apiSecBuf, config_.apiSecret.c_str(), sizeof(apiSecBuf) - 1);
                 strncpy(passBuf, config_.passphrase.c_str(), sizeof(passBuf) - 1);
                 strncpy(baseUrlBuf, config_.baseUrl.c_str(), sizeof(baseUrlBuf) - 1);
+                strncpy(wsHostBuf, config_.wsHost.c_str(), sizeof(wsHostBuf) - 1);
+                strncpy(wsPortBuf, config_.wsPort.c_str(), sizeof(wsPortBuf) - 1);
                 bufInit = true;
             }
             ImGui::InputText("API Key", apiKeyBuf, sizeof(apiKeyBuf));
@@ -1007,6 +1015,8 @@ void AppGui::drawSettingsPanel() {
             ImGui::InputText("Passphrase", passBuf, sizeof(passBuf),
                              ImGuiInputTextFlags_Password);
             ImGui::InputText("Base URL", baseUrlBuf, sizeof(baseUrlBuf));
+            ImGui::InputText("WS Host", wsHostBuf, sizeof(wsHostBuf));
+            ImGui::InputText("WS Port", wsPortBuf, sizeof(wsPortBuf));
             ImGui::Checkbox("Testnet", &config_.testnet);
 
             if (ImGui::Button("Apply Exchange Settings")) {
@@ -1014,6 +1024,8 @@ void AppGui::drawSettingsPanel() {
                 config_.apiSecret = apiSecBuf;
                 config_.passphrase = passBuf;
                 config_.baseUrl = baseUrlBuf;
+                config_.wsHost = wsHostBuf;
+                config_.wsPort = wsPortBuf;
                 addLog("[Config] Exchange settings updated");
             }
             ImGui::EndTabItem();

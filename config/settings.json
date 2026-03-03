@@ -6,7 +6,9 @@
     "api_secret": "",
     "passphrase": "",
     "testnet": true,
-    "base_url": "https://testnet.binance.vision"
+    "base_url": "https://testnet.binance.vision",
+    "ws_host": "testnet.binance.vision",
+    "ws_port": "443"
   },
   "trading": {
     "symbol": "BTCUSDT",
