@@ -72,13 +72,13 @@ void OKXExchange::rateLimit() const {
     auto windowStart = now - std::chrono::seconds(1);
 
     while (!requestTimes_.empty() && requestTimes_.front() < windowStart) {
-        const_cast<OKXExchange*>(this)->requestTimes_.pop();
+        requestTimes_.pop();
     }
     if (static_cast<int>(requestTimes_.size()) >= MAX_REQUESTS_PER_SECOND) {
         auto sleepUntil = requestTimes_.front() + std::chrono::seconds(1);
         std::this_thread::sleep_until(sleepUntil);
     }
-    const_cast<OKXExchange*>(this)->requestTimes_.push(now);
+    requestTimes_.push(now);
 }
 
 std::string OKXExchange::httpGet(const std::string& path, bool signed_) const {

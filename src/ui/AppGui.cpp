@@ -254,6 +254,7 @@ void AppGui::updateState(const GuiState& s) {
         if ((int)rsiHistory_.size() > kMaxHistory) rsiHistory_.pop_front();
     }
     // Volume delta: approximate buy vs sell using candle direction
+    // Note: this is an approximation; real delta requires tick-level order flow data
     {
         double delta = (s.lastCandle.close >= s.lastCandle.open)
             ?  s.lastCandle.volume
