@@ -51,6 +51,7 @@ set(EXCHANGE_SOURCES
     src/exchange/BybitExchange.cpp
     src/exchange/OKXExchange.cpp
     src/exchange/BitgetExchange.cpp
+    src/exchange/KuCoinExchange.cpp
 )
 
 set(DATA_SOURCES
