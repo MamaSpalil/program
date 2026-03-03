@@ -33,6 +33,7 @@ public:
                         std::function<void(const Candle&)> cb) override;
     void connect() override;
     void disconnect() override;
+    bool testConnection(std::string& outError) override;
 
 private:
     std::string apiKey_;

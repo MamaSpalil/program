@@ -196,19 +196,26 @@ Candle BinanceExchange::parseKlineJson(const nlohmann::json& k) const {
 std::vector<Candle> BinanceExchange::getKlines(const std::string& symbol,
                                                  const std::string& interval,
                                                  int limit) {
+    Logger::get()->debug("[Binance] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/api/v3/klines?symbol=" + symbol +
                        "&interval=" + interval +
                        "&limit=" + std::to_string(limit);
-    auto json = nlohmann::json::parse(httpGet(path));
+    auto response = httpGet(path);
+    Logger::get()->debug("[Binance] getKlines response size={}", response.size());
+    auto json = nlohmann::json::parse(response);
     std::vector<Candle> candles;
     candles.reserve(json.size());
     for (auto& k : json) candles.push_back(parseKlineJson(k));
+    Logger::get()->debug("[Binance] getKlines parsed {} candles", candles.size());
     return candles;
 }
 
 double BinanceExchange::getPrice(const std::string& symbol) {
+    Logger::get()->debug("[Binance] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(httpGet("/api/v3/ticker/price?symbol=" + symbol));
-    return std::stod(json["price"].get<std::string>());
+    double price = std::stod(json["price"].get<std::string>());
+    Logger::get()->debug("[Binance] getPrice result={}", price);
+    return price;
 }
 
 OrderResponse BinanceExchange::placeOrder(const OrderRequest& req) {
@@ -279,11 +286,31 @@ void BinanceExchange::subscribeKline(const std::string& symbol,
 }
 
 void BinanceExchange::connect() {
+    Logger::get()->debug("[Binance] Connecting WebSocket to {}:{}", wsHost_, wsPort_);
     if (ws_) ws_->connect();
 }
 
 void BinanceExchange::disconnect() {
+    Logger::get()->debug("[Binance] Disconnecting");
     if (ws_) ws_->disconnect();
+}
+
+bool BinanceExchange::testConnection(std::string& outError) {
+    Logger::get()->debug("[Binance] Testing connection to {}", baseUrl_);
+    try {
+        double price = getPrice("BTCUSDT");
+        if (price > 0) {
+            Logger::get()->info("[Binance] Connection test OK, BTCUSDT={}", price);
+            return true;
+        }
+        outError = "Received invalid price (0) from Binance API";
+        Logger::get()->warn("[Binance] Connection test failed: {}", outError);
+        return false;
+    } catch (const std::exception& e) {
+        outError = std::string("Binance API error: ") + e.what();
+        Logger::get()->warn("[Binance] Connection test failed: {}", outError);
+        return false;
+    }
 }
 
 } // namespace crypto

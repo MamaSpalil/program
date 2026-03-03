@@ -57,6 +57,7 @@ set(EXCHANGE_SOURCES
 set(DATA_SOURCES
     src/data/DataFeed.cpp
     src/data/HistoricalLoader.cpp
+    src/data/ExchangeDB.cpp
 )
 
 set(INDICATOR_SOURCES

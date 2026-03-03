@@ -2,7 +2,11 @@
 #include "Logger.h"
 #include "../exchange/BinanceExchange.h"
 #include "../exchange/BybitExchange.h"
+#include "../exchange/OKXExchange.h"
+#include "../exchange/BitgetExchange.h"
+#include "../exchange/KuCoinExchange.h"
 #include "../data/DataFeed.h"
+#include "../data/ExchangeDB.h"
 #include "../strategy/MLEnhancedStrategy.h"
 #include "../indicators/UserIndicatorManager.h"
 #include "../ui/Dashboard.h"
@@ -25,6 +29,11 @@ Engine::Engine(const std::string& configPath)
     : impl_(std::make_unique<Impl>()) {
     loadConfig(configPath);
     Logger::init();
+
+    // Enable debug mode if configured
+    bool debug = false;
+    if (config_.contains("debug")) debug = config_["debug"].get<bool>();
+    if (debug) Logger::setDebugMode(true);
 }
 
 Engine::~Engine() {
@@ -40,16 +49,54 @@ void Engine::loadConfig(const std::string& path) {
 
 void Engine::initComponents() {
     auto& ex = config_["exchange"];
-    std::string name    = ex.value("name", "binance");
-    std::string apiKey  = ex.value("api_key", "");
-    std::string apiSec  = ex.value("api_secret", "");
-    std::string baseUrl = ex.value("base_url", "https://testnet.binance.vision");
+    std::string name       = ex.value("name", "binance");
+    std::string apiKey     = ex.value("api_key", "");
+    std::string apiSec     = ex.value("api_secret", "");
+    std::string passphrase = ex.value("passphrase", "");
+    std::string baseUrl    = ex.value("base_url", "");
+
+    Logger::get()->debug("[Engine] Creating exchange: name={} baseUrl={}", name, baseUrl);
 
     if (name == "bybit") {
+        if (baseUrl.empty()) baseUrl = "https://api-testnet.bybit.com";
         impl_->exchange = std::make_unique<BybitExchange>(apiKey, apiSec, baseUrl);
+    } else if (name == "okx") {
+        if (baseUrl.empty()) baseUrl = "https://www.okx.com";
+        impl_->exchange = std::make_unique<OKXExchange>(apiKey, apiSec, passphrase, baseUrl);
+    } else if (name == "bitget") {
+        if (baseUrl.empty()) baseUrl = "https://api.bitget.com";
+        impl_->exchange = std::make_unique<BitgetExchange>(apiKey, apiSec, passphrase, baseUrl);
+    } else if (name == "kucoin") {
+        if (baseUrl.empty()) baseUrl = "https://api.kucoin.com";
+        impl_->exchange = std::make_unique<KuCoinExchange>(apiKey, apiSec, passphrase, baseUrl);
     } else {
+        // default: binance
+        if (baseUrl.empty()) baseUrl = "https://testnet.binance.vision";
         impl_->exchange = std::make_unique<BinanceExchange>(apiKey, apiSec, baseUrl);
     }
+
+    // Verify connection with a test API call
+    std::string connError;
+    if (impl_->exchange->testConnection(connError)) {
+        Logger::get()->info("[Engine] Exchange '{}' connection verified", name);
+    } else {
+        Logger::get()->warn("[Engine] Exchange '{}' connection test failed: {}", name, connError);
+    }
+
+    // Save credentials to ExchangeDB for persistence
+    ExchangeDB db;
+    db.load();
+    ExchangeProfile prof;
+    prof.name         = name;
+    prof.exchangeType = name;
+    prof.apiKey       = apiKey;
+    prof.apiSecret    = apiSec;
+    prof.passphrase   = passphrase;
+    prof.baseUrl      = baseUrl;
+    prof.testnet      = ex.value("testnet", false);
+    db.upsertProfile(prof);
+    db.setActiveProfile(name);
+    db.save();
 
     impl_->feed     = std::make_unique<DataFeed>(500);
     impl_->strategy = std::make_unique<MLEnhancedStrategy>(
@@ -65,10 +112,24 @@ void Engine::initComponents() {
         Logger::get()->info("Loaded {} user indicator(s)", loaded.size());
         for (auto& name : loaded) Logger::get()->info("  - {}", name);
     }
+
+    componentsInitialized_ = true;
+}
+
+bool Engine::initAndTestConnection(std::string& outError) {
+    try {
+        initComponents();
+        return impl_->exchange->testConnection(outError);
+    } catch (const std::exception& e) {
+        outError = e.what();
+        return false;
+    }
 }
 
 void Engine::run() {
-    initComponents();
+    if (!componentsInitialized_) {
+        initComponents();
+    }
     running_ = true;
 
     auto& trading = config_["trading"];

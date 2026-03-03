@@ -1,8 +1,10 @@
 {
+  "debug": false,
   "exchange": {
     "name": "binance",
     "api_key": "",
     "api_secret": "",
+    "passphrase": "",
     "testnet": true,
     "base_url": "https://testnet.binance.vision"
   },

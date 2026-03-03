@@ -77,11 +77,17 @@ std::string BybitExchange::httpGet(const std::string& path) const {
 std::vector<Candle> BybitExchange::getKlines(const std::string& symbol,
                                                const std::string& interval,
                                                int limit) {
+    Logger::get()->debug("[Bybit] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/v5/market/kline?category=linear&symbol=" + symbol +
                        "&interval=" + interval + "&limit=" + std::to_string(limit);
-    auto json = nlohmann::json::parse(httpGet(path));
+    auto response = httpGet(path);
+    Logger::get()->debug("[Bybit] getKlines response size={}", response.size());
+    auto json = nlohmann::json::parse(response);
     std::vector<Candle> candles;
-    if (json["retCode"].get<int>() != 0) return candles;
+    if (json["retCode"].get<int>() != 0) {
+        Logger::get()->warn("[Bybit] getKlines API error: retCode={}", json["retCode"].get<int>());
+        return candles;
+    }
     for (auto& k : json["result"]["list"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
@@ -93,14 +99,21 @@ std::vector<Candle> BybitExchange::getKlines(const std::string& symbol,
         c.closed   = true;
         candles.push_back(c);
     }
+    Logger::get()->debug("[Bybit] getKlines parsed {} candles", candles.size());
     return candles;
 }
 
 double BybitExchange::getPrice(const std::string& symbol) {
+    Logger::get()->debug("[Bybit] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(
         httpGet("/v5/market/tickers?category=linear&symbol=" + symbol));
-    if (json["retCode"].get<int>() != 0) return 0.0;
-    return std::stod(json["result"]["list"][0]["lastPrice"].get<std::string>());
+    if (json["retCode"].get<int>() != 0) {
+        Logger::get()->warn("[Bybit] getPrice API error: retCode={}", json["retCode"].get<int>());
+        return 0.0;
+    }
+    double price = std::stod(json["result"]["list"][0]["lastPrice"].get<std::string>());
+    Logger::get()->debug("[Bybit] getPrice result={}", price);
+    return price;
 }
 
 OrderResponse BybitExchange::placeOrder(const OrderRequest& req) {
@@ -143,7 +156,31 @@ void BybitExchange::subscribeKline(const std::string& symbol,
     (void)symbol; (void)interval;
 }
 
-void BybitExchange::connect() { if (ws_) ws_->connect(); }
-void BybitExchange::disconnect() { if (ws_) ws_->disconnect(); }
+void BybitExchange::connect() {
+    Logger::get()->debug("[Bybit] Connecting WebSocket to {}:{}", wsHost_, wsPort_);
+    if (ws_) ws_->connect();
+}
+void BybitExchange::disconnect() {
+    Logger::get()->debug("[Bybit] Disconnecting");
+    if (ws_) ws_->disconnect();
+}
+
+bool BybitExchange::testConnection(std::string& outError) {
+    Logger::get()->debug("[Bybit] Testing connection to {}", baseUrl_);
+    try {
+        double price = getPrice("BTCUSDT");
+        if (price > 0) {
+            Logger::get()->info("[Bybit] Connection test OK, BTCUSDT={}", price);
+            return true;
+        }
+        outError = "Received invalid price (0) from Bybit API";
+        Logger::get()->warn("[Bybit] Connection test failed: {}", outError);
+        return false;
+    } catch (const std::exception& e) {
+        outError = std::string("Bybit API error: ") + e.what();
+        Logger::get()->warn("[Bybit] Connection test failed: {}", outError);
+        return false;
+    }
+}
 
 } // namespace crypto

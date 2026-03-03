@@ -152,12 +152,19 @@ std::string OKXExchange::httpGet(const std::string& path, bool signed_) const {
 std::vector<Candle> OKXExchange::getKlines(const std::string& symbol,
                                              const std::string& interval,
                                              int limit) {
+    Logger::get()->debug("[OKX] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/api/v5/market/candles?instId=" + symbol +
                        "&bar=" + interval +
                        "&limit=" + std::to_string(limit);
-    auto json = nlohmann::json::parse(httpGet(path));
+    auto response = httpGet(path);
+    Logger::get()->debug("[OKX] getKlines response size={}", response.size());
+    auto json = nlohmann::json::parse(response);
     std::vector<Candle> candles;
-    if (json["code"].get<std::string>() != "0") return candles;
+    if (json["code"].get<std::string>() != "0") {
+        Logger::get()->warn("[OKX] getKlines API error: code={} msg={}",
+            json["code"].get<std::string>(), json.value("msg", ""));
+        return candles;
+    }
     for (auto& k : json["data"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
@@ -169,14 +176,21 @@ std::vector<Candle> OKXExchange::getKlines(const std::string& symbol,
         c.closed   = true;
         candles.push_back(c);
     }
+    Logger::get()->debug("[OKX] getKlines parsed {} candles", candles.size());
     return candles;
 }
 
 double OKXExchange::getPrice(const std::string& symbol) {
+    Logger::get()->debug("[OKX] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(
         httpGet("/api/v5/market/ticker?instId=" + symbol));
-    if (json["code"].get<std::string>() != "0") return 0.0;
-    return std::stod(json["data"][0]["last"].get<std::string>());
+    if (json["code"].get<std::string>() != "0") {
+        Logger::get()->warn("[OKX] getPrice API error: code={}", json["code"].get<std::string>());
+        return 0.0;
+    }
+    double price = std::stod(json["data"][0]["last"].get<std::string>());
+    Logger::get()->debug("[OKX] getPrice result={}", price);
+    return price;
 }
 
 OrderResponse OKXExchange::placeOrder(const OrderRequest& req) {
@@ -220,7 +234,31 @@ void OKXExchange::subscribeKline(const std::string& symbol,
     (void)symbol; (void)interval;
 }
 
-void OKXExchange::connect() { if (ws_) ws_->connect(); }
-void OKXExchange::disconnect() { if (ws_) ws_->disconnect(); }
+void OKXExchange::connect() {
+    Logger::get()->debug("[OKX] Connecting WebSocket to {}:{}", wsHost_, wsPort_);
+    if (ws_) ws_->connect();
+}
+void OKXExchange::disconnect() {
+    Logger::get()->debug("[OKX] Disconnecting");
+    if (ws_) ws_->disconnect();
+}
+
+bool OKXExchange::testConnection(std::string& outError) {
+    Logger::get()->debug("[OKX] Testing connection to {}", baseUrl_);
+    try {
+        double price = getPrice("BTC-USDT");
+        if (price > 0) {
+            Logger::get()->info("[OKX] Connection test OK, BTC-USDT={}", price);
+            return true;
+        }
+        outError = "Received invalid price (0) from OKX API";
+        Logger::get()->warn("[OKX] Connection test failed: {}", outError);
+        return false;
+    } catch (const std::exception& e) {
+        outError = std::string("OKX API error: ") + e.what();
+        Logger::get()->warn("[OKX] Connection test failed: {}", outError);
+        return false;
+    }
+}
 
 } // namespace crypto

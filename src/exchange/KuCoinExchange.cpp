@@ -151,13 +151,19 @@ std::string KuCoinExchange::httpGet(const std::string& path, bool signed_) const
 std::vector<Candle> KuCoinExchange::getKlines(const std::string& symbol,
                                                 const std::string& interval,
                                                 int limit) {
-    // KuCoin candles endpoint uses startAt/endAt timestamps, not a limit param
+    Logger::get()->debug("[KuCoin] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     (void)limit;
     std::string path = "/api/v1/market/candles?type=" + interval +
                        "&symbol=" + symbol;
-    auto json = nlohmann::json::parse(httpGet(path));
+    auto response = httpGet(path);
+    Logger::get()->debug("[KuCoin] getKlines response size={}", response.size());
+    auto json = nlohmann::json::parse(response);
     std::vector<Candle> candles;
-    if (json["code"].get<std::string>() != "200000") return candles;
+    if (json["code"].get<std::string>() != "200000") {
+        Logger::get()->warn("[KuCoin] getKlines API error: code={} msg={}",
+            json["code"].get<std::string>(), json.value("msg", ""));
+        return candles;
+    }
     for (auto& k : json["data"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
@@ -169,14 +175,21 @@ std::vector<Candle> KuCoinExchange::getKlines(const std::string& symbol,
         c.closed   = true;
         candles.push_back(c);
     }
+    Logger::get()->debug("[KuCoin] getKlines parsed {} candles", candles.size());
     return candles;
 }
 
 double KuCoinExchange::getPrice(const std::string& symbol) {
+    Logger::get()->debug("[KuCoin] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(
         httpGet("/api/v1/market/orderbook/level1?symbol=" + symbol));
-    if (json["code"].get<std::string>() != "200000") return 0.0;
-    return std::stod(json["data"]["price"].get<std::string>());
+    if (json["code"].get<std::string>() != "200000") {
+        Logger::get()->warn("[KuCoin] getPrice API error: code={}", json["code"].get<std::string>());
+        return 0.0;
+    }
+    double price = std::stod(json["data"]["price"].get<std::string>());
+    Logger::get()->debug("[KuCoin] getPrice result={}", price);
+    return price;
 }
 
 OrderResponse KuCoinExchange::placeOrder(const OrderRequest& req) {
@@ -219,7 +232,31 @@ void KuCoinExchange::subscribeKline(const std::string& symbol,
     (void)symbol; (void)interval;
 }
 
-void KuCoinExchange::connect() { if (ws_) ws_->connect(); }
-void KuCoinExchange::disconnect() { if (ws_) ws_->disconnect(); }
+void KuCoinExchange::connect() {
+    Logger::get()->debug("[KuCoin] Connecting WebSocket to {}:{}", wsHost_, wsPort_);
+    if (ws_) ws_->connect();
+}
+void KuCoinExchange::disconnect() {
+    Logger::get()->debug("[KuCoin] Disconnecting");
+    if (ws_) ws_->disconnect();
+}
+
+bool KuCoinExchange::testConnection(std::string& outError) {
+    Logger::get()->debug("[KuCoin] Testing connection to {}", baseUrl_);
+    try {
+        double price = getPrice("BTC-USDT");
+        if (price > 0) {
+            Logger::get()->info("[KuCoin] Connection test OK, BTC-USDT={}", price);
+            return true;
+        }
+        outError = "Received invalid price (0) from KuCoin API";
+        Logger::get()->warn("[KuCoin] Connection test failed: {}", outError);
+        return false;
+    } catch (const std::exception& e) {
+        outError = std::string("KuCoin API error: ") + e.what();
+        Logger::get()->warn("[KuCoin] Connection test failed: {}", outError);
+        return false;
+    }
+}
 
 } // namespace crypto
