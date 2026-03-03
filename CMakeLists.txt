@@ -60,6 +60,8 @@ set(INDICATOR_SOURCES
     src/indicators/ATR.cpp
     src/indicators/PineScriptIndicator.cpp
     src/indicators/IndicatorEngine.cpp
+    src/indicators/PineConverter.cpp
+    src/indicators/UserIndicatorManager.cpp
 )
 
 set(ML_SOURCES
