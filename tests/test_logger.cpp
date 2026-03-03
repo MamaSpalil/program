@@ -16,3 +16,14 @@ TEST(Logger, GetAutoInits) {
     auto logger = Logger::get();
     EXPECT_NE(logger, nullptr);
 }
+
+TEST(Logger, DebugModeToggle) {
+    Logger::init();
+    EXPECT_FALSE(Logger::isDebugMode());
+
+    Logger::setDebugMode(true);
+    EXPECT_TRUE(Logger::isDebugMode());
+
+    Logger::setDebugMode(false);
+    EXPECT_FALSE(Logger::isDebugMode());
+}
