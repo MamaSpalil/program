@@ -1470,8 +1470,9 @@ void AppGui::drawCandlestickChart() {
                     chartBarWidth_ = std::clamp(chartBarWidth_ * zoomFactor,
                                                 chartMinBarWidth_, chartMaxBarWidth_);
                 } else {
-                    // Scroll: MouseWheel
-                    int scrollStep = std::max(1, (int)(20.0f / chartBarWidth_));
+                    // Scroll: MouseWheel — base speed scaled inversely by bar width
+                    static constexpr float kBaseScrollSpeed = 20.0f;
+                    int scrollStep = std::max(1, (int)(kBaseScrollSpeed / chartBarWidth_));
                     chartScrollOffset_ += (wheel > 0) ? scrollStep : -scrollStep;
                 }
             }

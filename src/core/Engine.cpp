@@ -26,7 +26,7 @@ struct Engine::Impl {
     std::unique_ptr<ExchangeDB>             tradeDB;
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
-    int                                     maxCandleHistory{5000};
+    int                                     maxCandleHistory{5000}; // minimum 5000 bars for full chart visualization
     OrderBook                               lastOrderBook;
     std::chrono::steady_clock::time_point   lastOrderBookFetch{};
 };
