@@ -237,3 +237,138 @@ TEST(UserIndicatorManager, ScanAndLoadPineFiles) {
     EXPECT_GE(loaded.size(), 1u);
     EXPECT_TRUE(mgr.hasIndicators());
 }
+
+// ── New Pine Script function tests ──────────────────────────────────────────
+
+TEST(PineRuntime, VwapCalculation) {
+    std::string src = R"(
+v = ta.vwap(close)
+plot(v, "vwap")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle c{};
+    c.close = 100; c.open = 99; c.high = 101; c.low = 98; c.volume = 1000;
+    auto p1 = rt.update(c);
+    EXPECT_NEAR(p1["vwap"], 100.0, 0.01);
+
+    c.close = 110; c.volume = 2000;
+    auto p2 = rt.update(c);
+    // VWAP = (100*1000 + 110*2000) / (1000 + 2000) = 320000/3000 = 106.67
+    EXPECT_NEAR(p2["vwap"], 106.67, 0.01);
+}
+
+TEST(PineRuntime, HighestBarsLowestBars) {
+    std::string src = R"(
+hb = ta.highestbars(close, 5)
+lb = ta.lowestbars(close, 5)
+plot(hb, "hbars")
+plot(lb, "lbars")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle c{};
+    double prices[] = {100, 105, 102, 108, 103};
+    for (int i = 0; i < 5; ++i) {
+        c.close = prices[i]; c.open = c.close - 1; c.high = c.close + 1; c.low = c.close - 1;
+        rt.update(c);
+    }
+    auto plots = rt.update(c); // one more bar with same price
+    // hbars should be negative (bars since highest)
+    EXPECT_LE(plots["hbars"], 0.0);
+}
+
+TEST(PineRuntime, MathExp) {
+    std::string src = R"(
+a = math.exp(1.0)
+plot(a, "exp1")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+    Candle c{};
+    c.close = 100; c.open = 99; c.high = 101; c.low = 98;
+    auto plots = rt.update(c);
+    EXPECT_NEAR(plots["exp1"], 2.71828, 0.001);
+}
+
+TEST(PineRuntime, BuiltinVariables) {
+    std::string src = R"(
+a = hl2
+b = hlc3
+c = ohlc4
+plot(a, "hl2")
+plot(b, "hlc3")
+plot(c, "ohlc4")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+    Candle c{};
+    c.open = 100; c.high = 110; c.low = 90; c.close = 105;
+    auto plots = rt.update(c);
+    EXPECT_NEAR(plots["hl2"],  100.0, 0.01);  // (110+90)/2
+    EXPECT_NEAR(plots["hlc3"], 101.67, 0.01); // (110+90+105)/3
+    EXPECT_NEAR(plots["ohlc4"], 101.25, 0.01); // (100+110+90+105)/4
+}
+
+TEST(PineConverter, ParsePlotshapeSkipped) {
+    std::string src = R"(
+// @version=6
+indicator("Test", overlay=true)
+x = ta.ema(close, 9)
+plotshape(x > 50, style=shape.triangleup, location=location.belowbar)
+plot(x, "EMA9")
+)";
+    auto script = PineConverter::parseSource(src);
+    EXPECT_EQ(script.name, "Test");
+    // Should have parsed plot(x, "EMA9") despite plotshape
+    bool hasPlot = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::PLOT && s.plotTitle == "EMA9") hasPlot = true;
+    }
+    EXPECT_TRUE(hasPlot);
+}
+
+TEST(PineConverter, ParseVarLinefill) {
+    std::string src = R"(
+var linefill lf = na
+var line myline = na
+x = 42
+plot(x, "val")
+)";
+    auto script = PineConverter::parseSource(src);
+    bool hasX = false;
+    bool hasLf = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::ASSIGN && s.name == "x") hasX = true;
+        if (s.kind == PineStmt::Kind::VAR_DECL && s.name == "lf") hasLf = true;
+    }
+    EXPECT_TRUE(hasX);
+    EXPECT_TRUE(hasLf);
+}
+
+TEST(UserIndicatorManager, UpdateAllProducesPlots) {
+    std::string dir = std::string(CMAKE_SOURCE_DIR) + "/user_indicator";
+    UserIndicatorManager mgr(dir);
+    mgr.scanAndLoad();
+    ASSERT_TRUE(mgr.hasIndicators());
+
+    // Feed candle data and verify plots are produced
+    Candle c{};
+    c.open = 60000; c.high = 61000; c.low = 59000; c.close = 60500; c.volume = 100;
+    for (int i = 0; i < 20; ++i) {
+        c.close = 60000 + i * 50;
+        c.high  = c.close + 500;
+        c.low   = c.close - 500;
+        c.open  = c.close - 100;
+        mgr.updateAll(c);
+    }
+    auto allPlots = mgr.getAllPlots();
+    // Should have produced some plot data from the loaded scripts
+    EXPECT_FALSE(allPlots.empty());
+}

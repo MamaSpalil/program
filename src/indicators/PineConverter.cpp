@@ -174,9 +174,12 @@ PineStmt PineConverter::Parser::parseStmt() {
     // var declaration
     if (check(PineTok::KW_VAR)) {
         advance();
-        // Optional type annotation after 'var': var int x = 0
+        // Optional type annotation after 'var': var int x = 0, var linefill x = na, etc.
         if (check(PineTok::IDENT) && (cur().value == "int" || cur().value == "float" ||
-            cur().value == "string" || cur().value == "bool")) {
+            cur().value == "string" || cur().value == "bool" ||
+            cur().value == "linefill" || cur().value == "label" ||
+            cur().value == "line" || cur().value == "box" || cur().value == "table" ||
+            cur().value == "color" || cur().value == "array")) {
             advance(); // skip the type
         }
         std::string name = cur().value;
@@ -211,6 +214,31 @@ PineStmt PineConverter::Parser::parseStmt() {
             while (!check(PineTok::RPAREN) && !check(PineTok::END_OF_FILE)) advance();
         }
         expect(PineTok::RPAREN);
+        return s;
+    }
+
+    // Visual statements: plotshape/plotchar/plotarrow/bgcolor/barcolor/fill/hline/alertcondition
+    // Skip arguments and treat as expression statement
+    if (check(PineTok::IDENT) && (
+            cur().value == "plotshape" || cur().value == "plotchar" ||
+            cur().value == "plotarrow" || cur().value == "bgcolor"  ||
+            cur().value == "barcolor"  || cur().value == "fill"     ||
+            cur().value == "hline"     || cur().value == "alertcondition")) {
+        advance();
+        if (check(PineTok::LPAREN)) {
+            advance(); // skip (
+            int depth = 1;
+            while (depth > 0 && !check(PineTok::END_OF_FILE)) {
+                if (check(PineTok::LPAREN)) depth++;
+                if (check(PineTok::RPAREN)) depth--;
+                if (depth > 0) advance();
+            }
+            if (check(PineTok::RPAREN)) advance();
+        }
+        s.kind = PineStmt::Kind::EXPR;
+        s.expr = std::make_shared<PineExpr>();
+        s.expr->kind = PineExpr::Kind::LITERAL_NUM;
+        s.expr->numVal = 0.0;
         return s;
     }
 
@@ -611,7 +639,46 @@ double PineRuntime::eval(const std::shared_ptr<PineExpr>& e) {
             if (n == "high")      return cur_.high;
             if (n == "low")       return cur_.low;
             if (n == "volume")    return cur_.volume;
+            if (n == "hl2")       return (cur_.high + cur_.low) / 2.0;
+            if (n == "hlc3")      return (cur_.high + cur_.low + cur_.close) / 3.0;
+            if (n == "ohlc4")     return (cur_.open + cur_.high + cur_.low + cur_.close) / 4.0;
             if (n == "bar_index") return static_cast<double>(barIndex_);
+            // syminfo.* defaults
+            if (n == "syminfo.mintick")    return 0.01;
+            if (n == "syminfo.pointvalue") return 1.0;
+            // timeframe.* defaults
+            if (n == "timeframe.multiplier") return 15.0;
+            if (n == "timeframe.isintraday") return 1.0;
+            if (n == "timeframe.isdaily")    return 0.0;
+            if (n == "timeframe.isweekly")   return 0.0;
+            if (n == "timeframe.ismonthly")  return 0.0;
+            if (n == "timeframe.period")     return 15.0;
+            // strategy.* defaults
+            if (n == "strategy.equity")          return 1000.0;
+            if (n == "strategy.initial_capital") return 1000.0;
+            if (n == "strategy.closedtrades")    return 0.0;
+            if (n == "strategy.opentrades")      return 0.0;
+            if (n == "strategy.wintrades")       return 0.0;
+            if (n == "strategy.grossprofit")     return 0.0;
+            if (n == "strategy.grossloss")       return 0.0;
+            if (n.find("strategy.") == 0)        return 0.0;
+            // format.* constants
+            if (n == "format.mintick") return 0.0;
+            // Pine enums
+            if (n == "order.ascending")  return 1.0;
+            if (n == "order.descending") return -1.0;
+            if (n == "xloc.bar_index")   return 0.0;
+            if (n == "yloc.price")       return 0.0;
+            if (n == "yloc.abovebar")    return 1.0;
+            if (n == "yloc.belowbar")    return -1.0;
+            if (n.find("color.") == 0)   return 0.0;
+            if (n.find("line.style_") == 0)  return 0.0;
+            if (n.find("label.style_") == 0) return 0.0;
+            if (n.find("text.align_") == 0)  return 0.0;
+            if (n.find("shape.") == 0)       return 0.0;
+            if (n.find("location.") == 0)    return 0.0;
+            if (n.find("display.") == 0)     return 0.0;
+            if (n.find("size.") == 0)        return 0.0;
             auto it = vars_.find(n);
             return it != vars_.end() ? it->second : 0.0;
         }
@@ -823,6 +890,121 @@ double PineRuntime::callFunc(const std::string& fn, const std::vector<double>& a
         return 0.0;
     }
 
+    // ta.vwap(source) — volume-weighted average price
+    if (fn == "ta.vwap") {
+        auto& cumPV = series_["__vwap_pv"];
+        auto& cumV  = series_["__vwap_v"];
+        double src = args.size() >= 1 ? args[0] : cur_.close;
+        double pv = (cumPV.empty() ? 0.0 : cumPV.back()) + src * cur_.volume;
+        double sv = (cumV.empty()  ? 0.0 : cumV.back())  + cur_.volume;
+        cumPV.push_back(pv);
+        cumV.push_back(sv);
+        if (cumPV.size() > 1000) { cumPV.pop_front(); cumV.pop_front(); }
+        return sv > 0.0 ? pv / sv : src;
+    }
+
+    // ta.highestbars(source, length) — bars since highest value
+    if (fn == "ta.highestbars" && args.size() >= 2) {
+        int len = static_cast<int>(args[1]);
+        auto& buf = series_["__highestbars_buf"];
+        buf.push_back(args[0]);
+        if (static_cast<int>(buf.size()) > len * 3) buf.pop_front();
+        int n = static_cast<int>(buf.size());
+        int start = std::max(0, n - len);
+        double maxV = buf[static_cast<size_t>(start)];
+        int maxIdx = start;
+        for (int i = start + 1; i < n; ++i) {
+            if (buf[static_cast<size_t>(i)] >= maxV) { maxV = buf[static_cast<size_t>(i)]; maxIdx = i; }
+        }
+        return static_cast<double>(maxIdx - (n - 1)); // negative offset
+    }
+
+    // ta.lowestbars(source, length) — bars since lowest value
+    if (fn == "ta.lowestbars" && args.size() >= 2) {
+        int len = static_cast<int>(args[1]);
+        auto& buf = series_["__lowestbars_buf"];
+        buf.push_back(args[0]);
+        if (static_cast<int>(buf.size()) > len * 3) buf.pop_front();
+        int n = static_cast<int>(buf.size());
+        int start = std::max(0, n - len);
+        double minV = buf[static_cast<size_t>(start)];
+        int minIdx = start;
+        for (int i = start + 1; i < n; ++i) {
+            if (buf[static_cast<size_t>(i)] <= minV) { minV = buf[static_cast<size_t>(i)]; minIdx = i; }
+        }
+        return static_cast<double>(minIdx - (n - 1)); // negative offset
+    }
+
+    // ta.pivothigh(source, leftbars, rightbars) — returns pivot high value or NaN
+    if (fn == "ta.pivothigh" && args.size() >= 3) {
+        int leftBars  = static_cast<int>(args[1]);
+        int rightBars = static_cast<int>(args[2]);
+        auto& buf = series_["__pivothigh_buf"];
+        buf.push_back(args[0]);
+        if (static_cast<int>(buf.size()) > 1000) buf.pop_front();
+        int n = static_cast<int>(buf.size());
+        int pivotIdx = n - 1 - rightBars;
+        if (pivotIdx < leftBars || pivotIdx < 0) return std::numeric_limits<double>::quiet_NaN();
+        double pivotVal = buf[static_cast<size_t>(pivotIdx)];
+        for (int i = pivotIdx - leftBars; i < pivotIdx; ++i)
+            if (buf[static_cast<size_t>(i)] >= pivotVal) return std::numeric_limits<double>::quiet_NaN();
+        for (int i = pivotIdx + 1; i <= pivotIdx + rightBars && i < n; ++i)
+            if (buf[static_cast<size_t>(i)] >= pivotVal) return std::numeric_limits<double>::quiet_NaN();
+        return pivotVal;
+    }
+
+    // ta.pivotlow(source, leftbars, rightbars) — returns pivot low value or NaN
+    if (fn == "ta.pivotlow" && args.size() >= 3) {
+        int leftBars  = static_cast<int>(args[1]);
+        int rightBars = static_cast<int>(args[2]);
+        auto& buf = series_["__pivotlow_buf"];
+        buf.push_back(args[0]);
+        if (static_cast<int>(buf.size()) > 1000) buf.pop_front();
+        int n = static_cast<int>(buf.size());
+        int pivotIdx = n - 1 - rightBars;
+        if (pivotIdx < leftBars || pivotIdx < 0) return std::numeric_limits<double>::quiet_NaN();
+        double pivotVal = buf[static_cast<size_t>(pivotIdx)];
+        for (int i = pivotIdx - leftBars; i < pivotIdx; ++i)
+            if (buf[static_cast<size_t>(i)] <= pivotVal) return std::numeric_limits<double>::quiet_NaN();
+        for (int i = pivotIdx + 1; i <= pivotIdx + rightBars && i < n; ++i)
+            if (buf[static_cast<size_t>(i)] <= pivotVal) return std::numeric_limits<double>::quiet_NaN();
+        return pivotVal;
+    }
+
+    // ta.dmi(diLength, adxSmoothing) — returns ADX value
+    if (fn == "ta.dmi" && args.size() >= 2) {
+        int len = static_cast<int>(args[0]);
+        auto& hiB = series_["__dmi_hi"];
+        auto& loB = series_["__dmi_lo"];
+        auto& adxB = series_["__dmi_adx"];
+        hiB.push_back(cur_.high);
+        loB.push_back(cur_.low);
+        if (hiB.size() > 1000) { hiB.pop_front(); loB.pop_front(); }
+        int n = static_cast<int>(hiB.size());
+        if (n < 2) { adxB.push_back(0); return 0.0; }
+        double upMove = hiB[static_cast<size_t>(n-1)] - hiB[static_cast<size_t>(n-2)];
+        double downMove = loB[static_cast<size_t>(n-2)] - loB[static_cast<size_t>(n-1)];
+        double plusDM  = (upMove > downMove && upMove > 0) ? upMove : 0;
+        double minusDM = (downMove > upMove && downMove > 0) ? downMove : 0;
+        double tr = std::max(cur_.high - cur_.low,
+                    std::max(std::abs(cur_.high - (n >= 2 ? history_[history_.size()-2].close : cur_.close)),
+                             std::abs(cur_.low  - (n >= 2 ? history_[history_.size()-2].close : cur_.close))));
+        if (tr < 1e-12) tr = 1e-12;
+        double diPlus  = (plusDM / tr) * 100.0;
+        double diMinus = (minusDM / tr) * 100.0;
+        double dx = (diPlus + diMinus > 0)
+                    ? std::abs(diPlus - diMinus) / (diPlus + diMinus) * 100.0
+                    : 0.0;
+        double prevAdx = adxB.empty() ? dx : adxB.back();
+        double adx = (prevAdx * (len - 1) + dx) / len;
+        adxB.push_back(adx);
+        if (adxB.size() > 1000) adxB.pop_front();
+        return adx;
+    }
+
+    // math.exp(x)
+    if (fn == "math.exp" && args.size() >= 1) return std::exp(args[0]);
+
     // str.tostring(v, ...) / str.length(...) — return 0 in numeric context
     if (fn.find("str.") == 0) return 0.0;
 
@@ -831,6 +1013,25 @@ double PineRuntime::callFunc(const std::string& fn, const std::vector<double>& a
 
     // color.* — return 0 (not used numerically)
     if (fn.find("color.") == 0) return 0.0;
+
+    // Visual/drawing functions — no-ops in C++ runtime
+    if (fn.find("label.") == 0 || fn.find("line.") == 0 ||
+        fn.find("box.") == 0 || fn.find("linefill.") == 0 ||
+        fn.find("table.") == 0 || fn.find("array.") == 0)
+        return args.empty() ? 0.0 : args[0];
+
+    // plotshape, plotchar, plotarrow, bgcolor, barcolor, fill, hline — visual no-ops
+    if (fn == "plotshape" || fn == "plotchar" || fn == "plotarrow" ||
+        fn == "bgcolor" || fn == "barcolor" || fn == "fill" || fn == "hline" ||
+        fn == "alertcondition")
+        return 0.0;
+
+    // input.color, input.session, input.time, input.timeframe — return default
+    if (fn.find("input.") == 0)
+        return args.size() >= 1 ? args[0] : 0.0;
+
+    // timeframe.* — return approximate values
+    if (fn == "timeframe.in_seconds") return 900.0; // 15m default
 
     return 0.0;
 }
