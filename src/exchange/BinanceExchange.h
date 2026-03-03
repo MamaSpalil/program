@@ -46,7 +46,7 @@ private:
     mutable std::mutex rateMutex_;
 
     // Rate limiting: track request times
-    std::queue<std::chrono::steady_clock::time_point> requestTimes_;
+    mutable std::queue<std::chrono::steady_clock::time_point> requestTimes_;
     static constexpr int MAX_REQUESTS_PER_SECOND = 10;
 
     std::string sign(const std::string& payload) const;

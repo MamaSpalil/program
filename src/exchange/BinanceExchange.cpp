@@ -67,13 +67,13 @@ void BinanceExchange::rateLimit() const {
     auto windowStart = now - std::chrono::seconds(1);
 
     while (!requestTimes_.empty() && requestTimes_.front() < windowStart) {
-        const_cast<BinanceExchange*>(this)->requestTimes_.pop();
+        requestTimes_.pop();
     }
     if (static_cast<int>(requestTimes_.size()) >= MAX_REQUESTS_PER_SECOND) {
         auto sleepUntil = requestTimes_.front() + std::chrono::seconds(1);
         std::this_thread::sleep_until(sleepUntil);
     }
-    const_cast<BinanceExchange*>(this)->requestTimes_.push(now);
+    requestTimes_.push(now);
 }
 
 std::string BinanceExchange::httpGet(const std::string& path, bool signed_) const {
@@ -86,10 +86,17 @@ std::string BinanceExchange::httpGet(const std::string& path, bool signed_) cons
     if (signed_) {
         auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
-        std::string params = (path.find('?') == std::string::npos ? "?timestamp=" : "&timestamp=")
-            + std::to_string(ts);
-        std::string sig = sign(params.substr(1));  // strip leading '?'
-        url += params + "&signature=" + sig;
+        auto qpos = path.find('?');
+        std::string queryString;
+        if (qpos != std::string::npos) {
+            queryString = path.substr(qpos + 1) + "&timestamp=" + std::to_string(ts);
+        } else {
+            queryString = "timestamp=" + std::to_string(ts);
+        }
+        std::string sig = sign(queryString);
+        url = baseUrl_ + path +
+              (qpos == std::string::npos ? "?" : "&") +
+              "timestamp=" + std::to_string(ts) + "&signature=" + sig;
     }
 
     int retries = 3;

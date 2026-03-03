@@ -6,14 +6,16 @@ namespace crypto {
 DataFeed::DataFeed(size_t maxHistory) : maxHistory_(maxHistory) {}
 
 void DataFeed::onCandle(const Candle& c) {
+    std::vector<CandleCallback> cbs;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         history_.push_back(c);
         if (history_.size() > maxHistory_) {
             history_.pop_front();
         }
+        cbs = callbacks_;
     }
-    for (auto& cb : callbacks_) {
+    for (auto& cb : cbs) {
         cb(c);
     }
 }
