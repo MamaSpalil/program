@@ -118,6 +118,12 @@ bool Engine::initAndTestConnection(std::string& outError) {
     }
 }
 
+OrderResponse Engine::placeOrder(const OrderRequest& req) {
+    if (!impl_ || !impl_->exchange)
+        return OrderResponse{"", "error: exchange not initialized", 0.0, 0.0};
+    return impl_->exchange->placeOrder(req);
+}
+
 void Engine::run() {
     if (!componentsInitialized_) {
         initComponents();

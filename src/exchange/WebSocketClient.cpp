@@ -69,13 +69,15 @@ void WebSocketClient::workerLoop() {
             HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
             if (hStore) {
                 X509_STORE* store = SSL_CTX_get_cert_store(ctx.native_handle());
-                PCCERT_CONTEXT pContext = nullptr;
-                while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != nullptr) {
-                    const unsigned char* certData = pContext->pbCertEncoded;
-                    X509* x509 = d2i_X509(nullptr, &certData, static_cast<long>(pContext->cbCertEncoded));
-                    if (x509) {
-                        X509_STORE_add_cert(store, x509);
-                        X509_free(x509);
+                if (store) {
+                    PCCERT_CONTEXT pContext = nullptr;
+                    while ((pContext = CertEnumCertificatesInStore(hStore, pContext)) != nullptr) {
+                        const unsigned char* certData = pContext->pbCertEncoded;
+                        X509* x509 = d2i_X509(nullptr, &certData, static_cast<long>(pContext->cbCertEncoded));
+                        if (x509) {
+                            X509_STORE_add_cert(store, x509);
+                            X509_free(x509);
+                        }
                     }
                 }
                 CertCloseStore(hStore, 0);
