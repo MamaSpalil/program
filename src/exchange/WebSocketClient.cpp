@@ -55,7 +55,7 @@ void WebSocketClient::workerLoop() {
     while (shouldRun_) {
         try {
             net::io_context ioc;
-            ssl::context ctx(ssl::context::sslv23_client);
+            ssl::context ctx(ssl::context::tls_client);
             ctx.set_default_verify_paths();
             ctx.set_verify_mode(ssl::verify_peer);
 

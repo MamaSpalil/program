@@ -824,13 +824,13 @@ double PineRuntime::callFunc(const std::string& fn, const std::vector<double>& a
     }
 
     // str.tostring(v, ...) / str.length(...) — return 0 in numeric context
-    if (fn.substr(0, 4) == "str.") return 0.0;
+    if (fn.find("str.") == 0) return 0.0;
 
     // strategy.* calls — ignore in indicator context
-    if (fn.substr(0, 9) == "strategy.") return 0.0;
+    if (fn.find("strategy.") == 0) return 0.0;
 
     // color.* — return 0 (not used numerically)
-    if (fn.substr(0, 6) == "color.") return 0.0;
+    if (fn.find("color.") == 0) return 0.0;
 
     return 0.0;
 }

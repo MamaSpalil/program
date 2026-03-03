@@ -1327,7 +1327,7 @@ void AppGui::drawCandlestickChart() {
                         draw->AddLine(ImVec2(p.x, yVal), ImVec2(p.x + w - 65, yVal),
                                       IM_COL32(140, 100, 200, 120), 1.0f);
                         char overlayLabel[64];
-                        snprintf(overlayLabel, sizeof(overlayLabel), "%s: %.2f", pName.c_str(), pVal);
+                        snprintf(overlayLabel, sizeof(overlayLabel), "%s: %.4f", pName.c_str(), pVal);
                         draw->AddText(ImVec2(p.x + 4, labelY),
                                       IM_COL32(180, 140, 240, 200), overlayLabel);
                         labelY += 14;
