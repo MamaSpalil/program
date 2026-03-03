@@ -562,8 +562,8 @@ double PineRuntime::eval(const std::shared_ptr<PineExpr>& e) {
             if (e->op == "+")  return l + r;
             if (e->op == "-")  return l - r;
             if (e->op == "*")  return l * r;
-            if (e->op == "/")  return r != 0.0 ? l / r : 0.0;
-            if (e->op == "%")  return r != 0.0 ? std::fmod(l, r) : 0.0;
+            if (e->op == "/")  return r != 0.0 ? l / r : std::numeric_limits<double>::quiet_NaN();
+            if (e->op == "%")  return r != 0.0 ? std::fmod(l, r) : std::numeric_limits<double>::quiet_NaN();
             if (e->op == ">")  return l > r  ? 1.0 : 0.0;
             if (e->op == "<")  return l < r  ? 1.0 : 0.0;
             if (e->op == ">=") return l >= r ? 1.0 : 0.0;
