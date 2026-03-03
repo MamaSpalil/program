@@ -740,6 +740,25 @@ void AppGui::drawIndicatorsPanel() {
             }
         }
 
+        // User Pine Script indicators
+        if (!snap.userIndicatorPlots.empty()) {
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f), "User Indicators (Pine Script)");
+            for (const auto& [indName, plots] : snap.userIndicatorPlots) {
+                if (plots.empty()) continue;
+                ImGui::Text("  %s:", indName.c_str());
+                ImGui::SameLine(180);
+                std::string plotStr;
+                for (const auto& [pName, pVal] : plots) {
+                    if (!plotStr.empty()) plotStr += "  ";
+                    char buf[64];
+                    std::snprintf(buf, sizeof(buf), "%s: %.4f", pName.c_str(), pVal);
+                    plotStr += buf;
+                }
+                ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", plotStr.c_str());
+            }
+        }
+
         ImGui::EndChild();
     }
 }
@@ -1296,6 +1315,25 @@ void AppGui::drawCandlestickChart() {
             draw->AddText(ImVec2(p.x + w - 60, yLine - 6), IM_COL32(130, 130, 135, 200), label);
             draw->AddLine(ImVec2(p.x, yLine), ImVec2(p.x + w - 65, yLine),
                           IM_COL32(50, 50, 55, 100), 1.0f);
+        }
+
+        // Draw user indicator overlay values as colored label on the chart
+        if (!snap.userIndicatorPlots.empty()) {
+            float labelY = p.y + 4;
+            for (const auto& [indName, plots] : snap.userIndicatorPlots) {
+                for (const auto& [pName, pVal] : plots) {
+                    if (pVal > pMin && pVal < pMax) {
+                        float yVal = p.y + h - (float)((pVal - pMin) / range) * h;
+                        draw->AddLine(ImVec2(p.x, yVal), ImVec2(p.x + w - 65, yVal),
+                                      IM_COL32(140, 100, 200, 120), 1.0f);
+                        char overlayLabel[64];
+                        snprintf(overlayLabel, sizeof(overlayLabel), "%s: %.2f", pName.c_str(), pVal);
+                        draw->AddText(ImVec2(p.x + 4, labelY),
+                                      IM_COL32(180, 140, 240, 200), overlayLabel);
+                        labelY += 14;
+                    }
+                }
+            }
         }
 
         ImGui::Dummy(canvasSize);

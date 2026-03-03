@@ -149,12 +149,20 @@ PineScript PineConverter::Parser::parse() {
     script.name = "user_indicator";
     skipNL();
     while (!check(PineTok::END_OF_FILE)) {
-        auto stmt = parseStmt();
-        if (stmt.kind == PineStmt::Kind::INDICATOR) {
-            script.name = stmt.name;
-            if (stmt.expr && stmt.expr->boolVal) script.overlay = true;
+        size_t savedPos = pos_;
+        try {
+            auto stmt = parseStmt();
+            if (stmt.kind == PineStmt::Kind::INDICATOR) {
+                script.name = stmt.name;
+                if (stmt.expr && stmt.expr->boolVal) script.overlay = true;
+            }
+            script.statements.push_back(std::move(stmt));
+        } catch (...) {
+            // Skip to next line on parse error (resilient parsing)
+            pos_ = savedPos;
+            while (!check(PineTok::NEWLINE) && !check(PineTok::END_OF_FILE))
+                advance();
         }
-        script.statements.push_back(std::move(stmt));
         skipNL();
     }
     return script;
@@ -166,6 +174,11 @@ PineStmt PineConverter::Parser::parseStmt() {
     // var declaration
     if (check(PineTok::KW_VAR)) {
         advance();
+        // Optional type annotation after 'var': var int x = 0
+        if (check(PineTok::IDENT) && (cur().value == "int" || cur().value == "float" ||
+            cur().value == "string" || cur().value == "bool")) {
+            advance(); // skip the type
+        }
         std::string name = cur().value;
         expect(PineTok::IDENT);
         expect(PineTok::ASSIGN);
@@ -201,8 +214,8 @@ PineStmt PineConverter::Parser::parseStmt() {
         return s;
     }
 
-    // indicator(...)
-    if (check(PineTok::IDENT) && cur().value == "indicator") {
+    // indicator(...) or strategy(...)
+    if (check(PineTok::IDENT) && (cur().value == "indicator" || cur().value == "strategy")) {
         advance();
         expect(PineTok::LPAREN);
         s.kind = PineStmt::Kind::INDICATOR;
@@ -228,12 +241,70 @@ PineStmt PineConverter::Parser::parseStmt() {
         return s;
     }
 
+    // 'type' declaration block — skip to end of block
+    if (check(PineTok::IDENT) && cur().value == "type") {
+        while (!check(PineTok::NEWLINE) && !check(PineTok::END_OF_FILE)) advance();
+        s.kind = PineStmt::Kind::EXPR;
+        s.expr = std::make_shared<PineExpr>();
+        s.expr->kind = PineExpr::Kind::LITERAL_NUM;
+        s.expr->numVal = 0.0;
+        return s;
+    }
+
+    // Typed variable declaration: int/float/string/bool IDENT = expr
+    if (check(PineTok::IDENT) && (cur().value == "int" || cur().value == "float" ||
+        cur().value == "string" || cur().value == "bool")) {
+        size_t save = pos_;
+        advance(); // skip type
+        if (check(PineTok::IDENT)) {
+            std::string name = cur().value;
+            advance();
+            if (match(PineTok::ASSIGN) || match(PineTok::REASSIGN)) {
+                s.kind = PineStmt::Kind::ASSIGN;
+                s.name = name;
+                s.expr = parseExpr();
+                return s;
+            }
+        }
+        pos_ = save;
+    }
+
     // Assignment: ident = expr  OR  ident := expr
+    // Also handle function definition: ident(params) => expr (skip it)
     if (check(PineTok::IDENT)) {
         size_t save = pos_;
         std::string name = cur().value;
         advance();
-        if (match(PineTok::ASSIGN) || match(PineTok::REASSIGN)) {
+
+        // Function definition with =>: name(params) => expr
+        if (check(PineTok::LPAREN)) {
+            advance(); // skip (
+            // Scan forward to see if there's '=>' after closing ')'
+            int depth = 1;
+            bool foundArrow = false;
+            while (!check(PineTok::END_OF_FILE) && !check(PineTok::NEWLINE)) {
+                if (check(PineTok::LPAREN)) depth++;
+                if (check(PineTok::RPAREN)) { depth--; if (depth == 0) { advance(); break; } }
+                advance();
+            }
+            // Check for '=>' pattern (ASSIGN followed by GT)
+            if (check(PineTok::ASSIGN) && pos_ + 1 < tok_.size() && tok_[pos_ + 1].type == PineTok::GT) {
+                foundArrow = true;
+            }
+            if (foundArrow) {
+                // Skip the rest of the function definition line
+                while (!check(PineTok::NEWLINE) && !check(PineTok::END_OF_FILE)) advance();
+                s.kind = PineStmt::Kind::EXPR;
+                s.expr = std::make_shared<PineExpr>();
+                s.expr->kind = PineExpr::Kind::LITERAL_NUM;
+                s.expr->numVal = 0.0;
+                return s;
+            }
+            pos_ = save; // rewind
+        }
+
+        // Regular assignment
+        if (pos_ == save + 1 && (match(PineTok::ASSIGN) || match(PineTok::REASSIGN))) {
             s.kind = PineStmt::Kind::ASSIGN;
             s.name = name;
             s.expr = parseExpr();
@@ -535,11 +606,12 @@ double PineRuntime::eval(const std::shared_ptr<PineExpr>& e) {
 
         case PineExpr::Kind::VARIABLE: {
             const auto& n = e->strVal;
-            if (n == "close")  return cur_.close;
-            if (n == "open")   return cur_.open;
-            if (n == "high")   return cur_.high;
-            if (n == "low")    return cur_.low;
-            if (n == "volume") return cur_.volume;
+            if (n == "close")     return cur_.close;
+            if (n == "open")      return cur_.open;
+            if (n == "high")      return cur_.high;
+            if (n == "low")       return cur_.low;
+            if (n == "volume")    return cur_.volume;
+            if (n == "bar_index") return static_cast<double>(barIndex_);
             auto it = vars_.find(n);
             return it != vars_.end() ? it->second : 0.0;
         }
@@ -695,9 +767,70 @@ double PineRuntime::callFunc(const std::string& fn, const std::vector<double>& a
     }
 
     // input.int(defval, ...) / input.float(defval, ...) / input.source(defval, ...)
-    if (fn == "input.int" || fn == "input.float" || fn == "input.source") {
+    // input.string(...) / input.bool(...) — return default or 0
+    if (fn == "input.int" || fn == "input.float" || fn == "input.source" ||
+        fn == "input.string" || fn == "input.bool") {
         return args.size() >= 1 ? args[0] : 0.0;
     }
+
+    // math.round(x)
+    if (fn == "math.round" && args.size() >= 1) return std::round(args[0]);
+    // math.ceil(x)
+    if (fn == "math.ceil" && args.size() >= 1) return std::ceil(args[0]);
+    // math.floor(x)
+    if (fn == "math.floor" && args.size() >= 1) return std::floor(args[0]);
+    // math.pow(base, exp)
+    if (fn == "math.pow" && args.size() >= 2) return std::pow(args[0], args[1]);
+    // math.sign(x)
+    if (fn == "math.sign" && args.size() >= 1)
+        return args[0] > 0 ? 1.0 : args[0] < 0 ? -1.0 : 0.0;
+    // math.avg(a, b)
+    if (fn == "math.avg" && args.size() >= 2) return (args[0] + args[1]) / 2.0;
+
+    // ta.stdev(source, length)
+    if (fn == "ta.stdev" && args.size() >= 2) {
+        int period = static_cast<int>(args[1]);
+        std::string key = "__stdev_buf_" + std::to_string(period);
+        auto& buf = series_[key];
+        buf.push_back(args[0]);
+        if (static_cast<int>(buf.size()) > period * 3) buf.pop_front();
+        int n = static_cast<int>(buf.size());
+        if (n >= period) {
+            double sum = 0.0;
+            for (int i = n - period; i < n; ++i) sum += buf[static_cast<size_t>(i)];
+            double mean = sum / period;
+            double var = 0.0;
+            for (int i = n - period; i < n; ++i) {
+                double d = buf[static_cast<size_t>(i)] - mean;
+                var += d * d;
+            }
+            return std::sqrt(var / period);
+        }
+        return 0.0;
+    }
+
+    // ta.change(source, length) — defaults to length=1
+    if (fn == "ta.change") {
+        if (args.size() >= 1) {
+            int len = args.size() >= 2 ? static_cast<int>(args[1]) : 1;
+            std::string key = "__change_buf";
+            auto& buf = series_[key];
+            buf.push_back(args[0]);
+            if (static_cast<int>(buf.size()) > 1000) buf.pop_front();
+            int idx = static_cast<int>(buf.size()) - 1 - len;
+            if (idx >= 0) return args[0] - buf[static_cast<size_t>(idx)];
+        }
+        return 0.0;
+    }
+
+    // str.tostring(v, ...) / str.length(...) — return 0 in numeric context
+    if (fn.substr(0, 4) == "str.") return 0.0;
+
+    // strategy.* calls — ignore in indicator context
+    if (fn.substr(0, 9) == "strategy.") return 0.0;
+
+    // color.* — return 0 (not used numerically)
+    if (fn.substr(0, 6) == "color.") return 0.0;
 
     return 0.0;
 }

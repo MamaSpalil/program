@@ -2,6 +2,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <map>
 #include <nlohmann/json.hpp>
 
 namespace crypto {
@@ -17,6 +18,9 @@ public:
     // Initialize exchange and verify connection. Returns true if API test succeeds.
     // On failure, sets outError with a description. Must be called before run().
     bool initAndTestConnection(std::string& outError);
+
+    // Get user indicator plots (thread-safe snapshot)
+    std::map<std::string, std::map<std::string, double>> getUserIndicatorPlots() const;
 
 private:
     void loadConfig(const std::string& path);

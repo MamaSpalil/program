@@ -175,4 +175,10 @@ void Engine::stop() {
     Logger::get()->info("Engine stopped");
 }
 
+std::map<std::string, std::map<std::string, double>> Engine::getUserIndicatorPlots() const {
+    if (impl_ && impl_->userIndicators)
+        return impl_->userIndicators->getAllPlots();
+    return {};
+}
+
 } // namespace crypto
