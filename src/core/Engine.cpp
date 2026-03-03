@@ -102,7 +102,7 @@ void Engine::initComponents() {
     auto loaded = impl_->userIndicators->loadedIndicators();
     if (!loaded.empty()) {
         Logger::get()->info("Loaded {} user indicator(s)", loaded.size());
-        for (auto& name : loaded) Logger::get()->info("  - {}", name);
+        for (auto& ind : loaded) Logger::get()->info("  - {}", ind);
     }
 
     componentsInitialized_ = true;

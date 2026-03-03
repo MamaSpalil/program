@@ -28,8 +28,8 @@ find_package(OpenGL QUIET)
 
 # ── Compile options ────────────────────────────────────────────────────────────
 if(MSVC)
-    set(COMMON_FLAGS /W4 /permissive-)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX -DWIN32_LEAN_AND_MEAN)
+    set(COMMON_FLAGS /W4 /permissive- /wd4267)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0601)
 else()
     set(COMMON_FLAGS
         -Wall -Wextra -Wpedantic
