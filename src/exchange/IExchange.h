@@ -40,6 +40,56 @@ struct SymbolInfo {
     std::string marketType;   // "spot" or "futures"
 };
 
+// Open order from exchange
+struct OpenOrderInfo {
+    std::string symbol;
+    std::string orderId;
+    std::string side;       // "BUY" or "SELL"
+    std::string type;       // "LIMIT", "MARKET", etc.
+    double price{0.0};
+    double qty{0.0};
+    double executedQty{0.0};
+    int64_t time{0};
+};
+
+// User trade (fill)
+struct UserTradeInfo {
+    int64_t time{0};
+    std::string symbol;
+    std::string side;       // "BUY" or "SELL"
+    double price{0.0};
+    double qty{0.0};
+    double commission{0.0};
+    std::string commissionAsset;
+};
+
+// Futures position info
+struct PositionInfo {
+    std::string symbol;
+    double positionAmt{0.0};
+    double entryPrice{0.0};
+    double unrealizedProfit{0.0};
+    double realizedProfit{0.0};
+    std::string marginType;  // "cross" or "isolated"
+    double leverage{1.0};
+};
+
+// Futures account balance
+struct FuturesBalanceInfo {
+    double totalWalletBalance{0.0};
+    double totalUnrealizedProfit{0.0};
+    double totalMarginBalance{0.0};
+    std::vector<PositionInfo> positions;
+};
+
+// OKX account balance detail
+struct AccountBalanceDetail {
+    std::string currency;
+    double availBal{0.0};
+    double frozenBal{0.0};
+    double usdValue{0.0};
+};
+
 // Compute maximum bar count for deep analysis based on timeframe.
 // Shorter timeframes get more bars to cover similar wall-clock spans.
 // Minimum 5000 bars for intraday timeframes for full chart visualization.
@@ -95,6 +145,37 @@ public:
     // Default implementation returns empty — exchanges override as supported.
     virtual OrderBook getOrderBook(const std::string& symbol, int depth = 20) {
         (void)symbol; (void)depth;
+        return {};
+    }
+
+    // Set the current market type ("spot" or "futures") for endpoint selection
+    virtual void setMarketType(const std::string& marketType) { (void)marketType; }
+
+    // Get open orders for a symbol (signed)
+    virtual std::vector<OpenOrderInfo> getOpenOrders(const std::string& symbol = "") {
+        (void)symbol;
+        return {};
+    }
+
+    // Get recent user trades (signed)
+    virtual std::vector<UserTradeInfo> getMyTrades(const std::string& symbol, int limit = 20) {
+        (void)symbol; (void)limit;
+        return {};
+    }
+
+    // Get futures position risk / positions (signed)
+    virtual std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") {
+        (void)symbol;
+        return {};
+    }
+
+    // Get futures account balance (signed)
+    virtual FuturesBalanceInfo getFuturesBalance() {
+        return {};
+    }
+
+    // Get account balance details (for OKX style balances)
+    virtual std::vector<AccountBalanceDetail> getAccountBalanceDetails() {
         return {};
     }
 };
