@@ -12,7 +12,9 @@
 #include <vector>
 #include <deque>
 #include <map>
+#include <chrono>
 #include <functional>
+#include <thread>
 
 struct GLFWwindow;
 
@@ -61,6 +63,25 @@ struct GuiState {
 
     // Log lines
     std::deque<std::string> logLines;
+
+    // Current price of active pair (updated via polling)
+    double currentPrice{0.0};
+    std::string currentPriceError;
+
+    // Open orders from exchange
+    std::vector<OpenOrderInfo> openOrders;
+
+    // User trades from exchange
+    std::vector<UserTradeInfo> userTrades;
+
+    // Futures positions
+    std::vector<PositionInfo> futuresPositions;
+
+    // Futures balance
+    FuturesBalanceInfo futuresBalance;
+
+    // Account balance details (OKX style)
+    std::vector<AccountBalanceDetail> accountBalanceDetails;
 };
 
 // Configuration that can be edited through the GUI
@@ -155,6 +176,8 @@ public:
                                                    const std::string& type,
                                                    double qty,
                                                    double price)>;
+    using LoadPairsCallback  = std::function<void(const std::string& marketType)>;
+    using RefreshDataCallback = std::function<void()>;
 
     void setConnectCallback(ConnectCallback cb)       { onConnect_ = std::move(cb); }
     void setDisconnectCallback(DisconnectCallback cb)  { onDisconnect_ = std::move(cb); }
@@ -162,6 +185,8 @@ public:
     void setStopCallback(StopCallback cb)              { onStop_ = std::move(cb); }
     void setSaveConfigCallback(SaveConfigCallback cb)  { onSaveConfig_ = std::move(cb); }
     void setOrderCallback(OrderCallback cb)            { onOrder_ = std::move(cb); }
+    void setLoadPairsCallback(LoadPairsCallback cb)    { onLoadPairs_ = std::move(cb); }
+    void setRefreshDataCallback(RefreshDataCallback cb) { onRefreshData_ = std::move(cb); }
 
     // Add a log line (thread-safe)
     void addLog(const std::string& line);
@@ -193,6 +218,7 @@ private:
     void drawUserIndicatorDashboard();
     void drawUserPanel();
     void drawPairSelector();
+    void drawPairListPanel();
 
     // Load config from JSON file
     void loadConfig(const std::string& path);
@@ -244,11 +270,29 @@ private:
     StopCallback       onStop_;
     SaveConfigCallback onSaveConfig_;
     OrderCallback      onOrder_;
+    LoadPairsCallback  onLoadPairs_;
+    RefreshDataCallback onRefreshData_;
 
     // Trading panel state
     double orderQty_{0.001};
     double orderPrice_{0.0};
     int    orderTypeIdx_{0};  // 0=Market, 1=Limit
+
+    // Pair list panel state
+    char pairSearchBuf_[64]{};
+    bool pairListLoading_{false};
+    std::vector<SymbolInfo> cachedPairs_;
+    std::chrono::steady_clock::time_point pairCacheTime_{};
+    std::string pairListError_;
+
+    // Active pair for highlight
+    std::string activePair_;
+
+    // User data refresh timing
+    std::chrono::steady_clock::time_point lastBalanceRefresh_{};
+    std::chrono::steady_clock::time_point lastPriceRefresh_{};
+    std::chrono::steady_clock::time_point lastOrderRefresh_{};
+    std::chrono::steady_clock::time_point lastTradeRefresh_{};
 };
 
 } // namespace crypto
