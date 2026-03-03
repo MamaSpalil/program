@@ -447,6 +447,7 @@ void AppGui::renderFrame() {
     drawSignalPanel();
     drawTradingPanel();
     drawPortfolioPanel();
+    drawUserIndicatorDashboard();
     ImGui::EndChild();
 
     drawStatusBar();
@@ -766,6 +767,65 @@ void AppGui::drawIndicatorsPanel() {
                 }
                 ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", plotStr.c_str());
             }
+        }
+
+        ImGui::EndChild();
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  User Indicator Dashboard (Pine Script)
+// ---------------------------------------------------------------------------
+void AppGui::drawUserIndicatorDashboard() {
+    GuiState snap;
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        snap = state_;
+    }
+
+    if (snap.userIndicatorPlots.empty()) return;
+
+    if (ImGui::CollapsingHeader("User Indicator Dashboard", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::BeginChild("##UserIndDash", ImVec2(0, 280), ImGuiChildFlags_Border);
+
+        for (const auto& [indName, plots] : snap.userIndicatorPlots) {
+            if (plots.empty()) continue;
+
+            ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f), "%s", indName.c_str());
+            ImGui::Separator();
+
+            // Display plots in a two-column table layout
+            if (ImGui::BeginTable(("##uind_" + indName).c_str(), 2,
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
+                ImGui::TableSetupColumn("Indicator", ImGuiTableColumnFlags_WidthStretch, 0.55f);
+                ImGui::TableSetupColumn("Value",     ImGuiTableColumnFlags_WidthStretch, 0.45f);
+                ImGui::TableHeadersRow();
+
+                for (const auto& [pName, pVal] : plots) {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", pName.c_str());
+                    ImGui::TableSetColumnIndex(1);
+
+                    // Color-code values: positive green, negative red, zero/NaN grey
+                    ImVec4 valColor;
+                    if (std::isnan(pVal)) {
+                        valColor = ImVec4(0.50f, 0.50f, 0.52f, 1.0f);
+                        ImGui::TextColored(valColor, "N/A");
+                    } else if (pVal > 0) {
+                        valColor = ImVec4(0.30f, 0.85f, 0.35f, 1.0f);
+                        ImGui::TextColored(valColor, "%.4f", pVal);
+                    } else if (pVal < 0) {
+                        valColor = ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+                        ImGui::TextColored(valColor, "%.4f", pVal);
+                    } else {
+                        valColor = ImVec4(0.80f, 0.80f, 0.82f, 1.0f);
+                        ImGui::TextColored(valColor, "%.4f", pVal);
+                    }
+                }
+                ImGui::EndTable();
+            }
+            ImGui::Spacing();
         }
 
         ImGui::EndChild();
@@ -1338,22 +1398,27 @@ void AppGui::drawCandlestickChart() {
     if (snap.candleHistory.empty()) return;
 
     if (ImGui::CollapsingHeader("Candlestick Chart", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, 220);
+        // Taller chart to include volume bars at the bottom
+        float totalH = 300;
+        float priceH = totalH * 0.75f; // 75% for price bars
+        float volH   = totalH * 0.25f; // 25% for volume bars
+        ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, totalH);
         ImGui::BeginChild("##CandleChart", canvasSize, ImGuiChildFlags_Border);
 
         ImDrawList* draw = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
         float w = canvasSize.x - 4;
-        float h = canvasSize.y - 4;
 
         int count = (int)snap.candleHistory.size();
         if (count < 2) { ImGui::EndChild(); return; }
 
         // Find price range
         double pMin = 1e18, pMax = -1e18;
+        double vMax = 1.0;
         for (auto& c : snap.candleHistory) {
             if (c.low  < pMin) pMin = c.low;
             if (c.high > pMax) pMax = c.high;
+            if (c.volume > vMax) vMax = c.volume;
         }
         double range = pMax - pMin;
         if (range < 1e-9) range = 1.0;
@@ -1361,41 +1426,54 @@ void AppGui::drawCandlestickChart() {
         float barWidth = std::max(2.0f, w / (float)count - 1.0f);
         float halfBar  = barWidth * 0.5f;
 
+        // ── Price candles (top section) ──
         for (int i = 0; i < count; ++i) {
             auto& c = snap.candleHistory[i];
             float x = p.x + 2.0f + (float)i * (barWidth + 1.0f);
 
-            // Map prices to pixel Y (top = high price, bottom = low price)
-            float yHigh  = p.y + h - (float)((c.high  - pMin) / range) * h;
-            float yLow   = p.y + h - (float)((c.low   - pMin) / range) * h;
-            float yOpen  = p.y + h - (float)((c.open  - pMin) / range) * h;
-            float yClose = p.y + h - (float)((c.close - pMin) / range) * h;
+            float yHigh  = p.y + priceH - (float)((c.high  - pMin) / range) * priceH;
+            float yLow   = p.y + priceH - (float)((c.low   - pMin) / range) * priceH;
+            float yOpen  = p.y + priceH - (float)((c.open  - pMin) / range) * priceH;
+            float yClose = p.y + priceH - (float)((c.close - pMin) / range) * priceH;
 
             bool bullish = c.close >= c.open;
             ImU32 color = bullish
-                ? IM_COL32(40, 200, 80, 255)    // green
-                : IM_COL32(220, 60, 60, 255);   // red
+                ? IM_COL32(40, 200, 80, 255)
+                : IM_COL32(220, 60, 60, 255);
 
-            // Wick (high-low line)
             float wickX = x + halfBar;
             draw->AddLine(ImVec2(wickX, yHigh), ImVec2(wickX, yLow), color, 1.0f);
 
-            // Body (open-close rect)
             float bodyTop = std::min(yOpen, yClose);
             float bodyBot = std::max(yOpen, yClose);
             if (bodyBot - bodyTop < 1.0f) bodyBot = bodyTop + 1.0f;
+            draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + barWidth, bodyBot), color);
+        }
 
-            if (bullish) {
-                draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + barWidth, bodyBot), color);
-            } else {
-                draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + barWidth, bodyBot), color);
-            }
+        // ── Volume bars (bottom section) ──
+        float volTop = p.y + priceH + 2;
+        // Separator between price and volume
+        draw->AddLine(ImVec2(p.x, volTop - 1), ImVec2(p.x + w, volTop - 1),
+                      IM_COL32(60, 60, 65, 180), 1.0f);
+
+        for (int i = 0; i < count; ++i) {
+            auto& c = snap.candleHistory[i];
+            float x = p.x + 2.0f + (float)i * (barWidth + 1.0f);
+            float barH = (float)(c.volume / vMax) * (volH - 6);
+
+            bool bullish = c.close >= c.open;
+            ImU32 vColor = bullish
+                ? IM_COL32(40, 180, 80, 140)
+                : IM_COL32(200, 60, 60, 140);
+
+            float volBot = volTop + volH - 4;
+            draw->AddRectFilled(ImVec2(x, volBot - barH), ImVec2(x + barWidth, volBot), vColor);
         }
 
         // Price scale on the right
         for (int i = 0; i <= 4; ++i) {
             float frac = (float)i / 4.0f;
-            float yLine = p.y + h - frac * h;
+            float yLine = p.y + priceH - frac * priceH;
             double priceVal = pMin + frac * range;
             char label[32];
             snprintf(label, sizeof(label), "%.2f", priceVal);
@@ -1410,7 +1488,7 @@ void AppGui::drawCandlestickChart() {
             for (const auto& [indName, plots] : snap.userIndicatorPlots) {
                 for (const auto& [pName, pVal] : plots) {
                     if (pVal > pMin && pVal < pMax) {
-                        float yVal = p.y + h - (float)((pVal - pMin) / range) * h;
+                        float yVal = p.y + priceH - (float)((pVal - pMin) / range) * priceH;
                         draw->AddLine(ImVec2(p.x, yVal), ImVec2(p.x + w - 65, yVal),
                                       IM_COL32(140, 100, 200, 120), 1.0f);
                         char overlayLabel[64];

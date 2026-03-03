@@ -1,12 +1,29 @@
 #pragma once
 #include "../exchange/IExchange.h"
+#include "../indicators/PineScriptIndicator.h"
 #include <atomic>
 #include <memory>
 #include <string>
 #include <map>
+#include <deque>
+#include <functional>
 #include <nlohmann/json.hpp>
 
 namespace crypto {
+
+/// Callback payload pushed to the GUI on every candle update
+struct EngineUpdate {
+    Candle candle;
+    std::deque<Candle> candleHistory;
+    double emaFast{0}, emaSlow{0}, emaTrend{0};
+    double rsi{50}, atr{0};
+    MACDResult macd;
+    BBResult bb;
+    Signal signal;
+    double equity{0};
+    double drawdown{0};
+    std::map<std::string, std::map<std::string, double>> userIndicatorPlots;
+};
 
 class Engine {
 public:
@@ -25,6 +42,10 @@ public:
 
     // Get user indicator plots (thread-safe snapshot)
     std::map<std::string, std::map<std::string, double>> getUserIndicatorPlots() const;
+
+    // Callback invoked after each candle is processed (historical + live)
+    using OnUpdateCallback = std::function<void(const EngineUpdate&)>;
+    void setOnUpdateCallback(OnUpdateCallback cb);
 
 private:
     void loadConfig(const std::string& path);

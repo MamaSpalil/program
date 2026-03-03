@@ -119,6 +119,30 @@ int main(int argc, char* argv[]) {
 
                 gui->addLog("[OK] API connection verified");
 
+                // Wire engine updates to the GUI so chart and indicators are displayed
+                engine->setOnUpdateCallback([&gui, &cfg](const crypto::EngineUpdate& upd) {
+                    crypto::GuiState st;
+                    st.connected = true;
+                    st.trading   = true;
+                    st.statusMessage = "Connected to " + cfg.exchangeName +
+                                       " (" + cfg.symbol + " " + cfg.interval + ")";
+                    st.lastCandle    = upd.candle;
+                    st.candleHistory = upd.candleHistory;
+                    st.emaFast  = upd.emaFast;
+                    st.emaSlow  = upd.emaSlow;
+                    st.emaTrend = upd.emaTrend;
+                    st.rsi      = upd.rsi;
+                    st.atr      = upd.atr;
+                    st.macd     = upd.macd;
+                    st.bb       = upd.bb;
+                    st.lastSignal = upd.signal;
+                    st.equity    = upd.equity;
+                    st.initialCapital = cfg.initialCapital;
+                    st.drawdown  = upd.drawdown;
+                    st.userIndicatorPlots = upd.userIndicatorPlots;
+                    gui->updateState(st);
+                });
+
                 // Start the engine on a background thread
                 std::thread([&]() {
                     try {

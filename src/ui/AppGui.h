@@ -180,6 +180,7 @@ private:
     void drawLogPanel();
     void drawStatusBar();
     void drawFilterPanel();
+    void drawUserIndicatorDashboard();
 
     // Load config from JSON file
     void loadConfig(const std::string& path);

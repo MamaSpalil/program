@@ -23,6 +23,9 @@ struct Engine::Impl {
     std::unique_ptr<MLEnhancedStrategy>     strategy;
     std::unique_ptr<Dashboard>              dashboard;
     std::unique_ptr<UserIndicatorManager>   userIndicators;
+    std::deque<Candle>                      candleHistory;
+    OnUpdateCallback                        onUpdateCb;
+    static constexpr int kMaxCandleHistory = 500; // matches typical chart display width
 };
 
 Engine::Engine(const std::string& configPath)
@@ -195,10 +198,42 @@ void Engine::mainLoop() {
 
 void Engine::updateDashboard(const Candle& c) {
     if (!impl_->dashboard || !impl_->strategy) return;
+
+    // Maintain candle history
+    impl_->candleHistory.push_back(c);
+    if (static_cast<int>(impl_->candleHistory.size()) > Impl::kMaxCandleHistory)
+        impl_->candleHistory.pop_front();
+
     auto sig = impl_->strategy->getSignal();
     impl_->dashboard->update(c, impl_->strategy->indicators(),
                              impl_->strategy->riskManager(),
                              sig.value_or(Signal{}));
+
+    // Push data to GUI callback
+    if (impl_->onUpdateCb) {
+        EngineUpdate upd;
+        upd.candle = c;
+        upd.candleHistory = impl_->candleHistory;
+
+        auto& ind = impl_->strategy->indicators();
+        upd.emaFast  = ind.emaFast();
+        upd.emaSlow  = ind.emaSlow();
+        upd.emaTrend = ind.emaTrend();
+        upd.rsi      = ind.rsi();
+        upd.atr      = ind.atr();
+        upd.macd     = ind.macd();
+        upd.bb       = ind.bb();
+        upd.signal   = sig.value_or(Signal{});
+
+        auto& rm = impl_->strategy->riskManager();
+        upd.equity   = rm.equity();
+        upd.drawdown = rm.drawdown();
+
+        if (impl_->userIndicators)
+            upd.userIndicatorPlots = impl_->userIndicators->getAllPlots();
+
+        impl_->onUpdateCb(upd);
+    }
 }
 
 void Engine::stop() {
@@ -208,6 +243,10 @@ void Engine::stop() {
         if (impl_->dashboard) impl_->dashboard->stop();
     }
     Logger::get()->info("Engine stopped");
+}
+
+void Engine::setOnUpdateCallback(OnUpdateCallback cb) {
+    if (impl_) impl_->onUpdateCb = std::move(cb);
 }
 
 std::map<std::string, std::map<std::string, double>> Engine::getUserIndicatorPlots() const {
