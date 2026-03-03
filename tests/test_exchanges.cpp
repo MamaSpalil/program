@@ -334,6 +334,7 @@ TEST(ExchangeDB, SeparateDbPerExchange) {
         ASSERT_EQ(profiles.size(), 1u);
         EXPECT_EQ(profiles[0].exchangeType, "bitget");
         EXPECT_EQ(profiles[0].apiKey, "bgkey");
+        EXPECT_EQ(profiles[0].passphrase, "bgpass");
     }
     {
         ExchangeDB db(kucoinPath);
@@ -342,6 +343,7 @@ TEST(ExchangeDB, SeparateDbPerExchange) {
         ASSERT_EQ(profiles.size(), 1u);
         EXPECT_EQ(profiles[0].exchangeType, "kucoin");
         EXPECT_EQ(profiles[0].apiKey, "kckey");
+        EXPECT_EQ(profiles[0].passphrase, "kcpass");
     }
 
     // Clean up
