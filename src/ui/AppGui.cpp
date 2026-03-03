@@ -1406,7 +1406,7 @@ void AppGui::drawFilterPanel() {
 }
 
 // ---------------------------------------------------------------------------
-//  Candlestick Chart — improved bar visualization
+//  Candlestick Chart — full visualization with zoom, scroll, timeframe switch
 // ---------------------------------------------------------------------------
 void AppGui::drawCandlestickChart() {
     GuiState snap;
@@ -1418,38 +1418,111 @@ void AppGui::drawCandlestickChart() {
     if (snap.candleHistory.empty()) return;
 
     if (ImGui::CollapsingHeader("Candlestick Chart", ImGuiTreeNodeFlags_DefaultOpen)) {
-        // Taller chart to include volume bars at the bottom
-        float totalH = 300;
-        float priceH = totalH * 0.75f; // 75% for price bars
-        float volH   = totalH * 0.25f; // 25% for volume bars
+
+        // ── Timeframe quick-switch buttons ──
+        {
+            const char* tfButtons[] = {"1m","5m","15m","30m","1h","4h","1d","1w"};
+            for (int i = 0; i < 8; ++i) {
+                if (i > 0) ImGui::SameLine();
+                bool active = (config_.interval == tfButtons[i]);
+                if (active) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.55f, 0.75f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.42f, 0.62f, 0.82f, 1.0f));
+                }
+                char btnLabel[16];
+                snprintf(btnLabel, sizeof(btnLabel), " %s ", tfButtons[i]);
+                if (ImGui::SmallButton(btnLabel)) {
+                    config_.interval = tfButtons[i];
+                    chartScrollOffset_ = 0;
+                    addLog(std::string("[Chart] Timeframe: ") + tfButtons[i]);
+                }
+                if (active) ImGui::PopStyleColor(2);
+            }
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.52f, 1.0f), " | Scroll: MouseWheel  Zoom: Ctrl+Wheel");
+        }
+
+        // ── Chart canvas — larger window ──
+        float availH = ImGui::GetContentRegionAvail().y;
+        float totalH = std::max(500.0f, std::min(availH * 0.65f, 800.0f));
+        float priceScaleW = 70.0f;
+        float priceH = totalH * 0.75f;
+        float volH   = totalH * 0.25f;
         ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, totalH);
         ImGui::BeginChild("##CandleChart", canvasSize, ImGuiChildFlags_Border);
 
         ImDrawList* draw = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
         float w = canvasSize.x - 4;
+        float chartW = w - priceScaleW; // drawing area excluding price labels
 
-        int count = (int)snap.candleHistory.size();
-        if (count < 2) { ImGui::EndChild(); return; }
+        int totalCount = (int)snap.candleHistory.size();
+        if (totalCount < 2) { ImGui::EndChild(); return; }
 
-        // Find price range
+        // ── Mouse interaction: zoom & scroll ──
+        bool hovered = ImGui::IsWindowHovered();
+        if (hovered) {
+            float wheel = ImGui::GetIO().MouseWheel;
+            if (wheel != 0.0f) {
+                if (ImGui::GetIO().KeyCtrl) {
+                    // Zoom: Ctrl + MouseWheel
+                    float zoomFactor = 1.0f + wheel * 0.15f;
+                    chartBarWidth_ = std::clamp(chartBarWidth_ * zoomFactor,
+                                                chartMinBarWidth_, chartMaxBarWidth_);
+                } else {
+                    // Scroll: MouseWheel — base speed scaled inversely by bar width
+                    static constexpr float kBaseScrollSpeed = 20.0f;
+                    int scrollStep = std::max(1, (int)(kBaseScrollSpeed / chartBarWidth_));
+                    chartScrollOffset_ += (wheel > 0) ? scrollStep : -scrollStep;
+                }
+            }
+        }
+
+        // ── Compute visible bar range ──
+        float barStep = chartBarWidth_ + 1.0f;
+        int visibleBars = std::max(2, (int)(chartW / barStep));
+
+        // Clamp scroll offset
+        int maxScroll = std::max(0, totalCount - visibleBars);
+        chartScrollOffset_ = std::clamp(chartScrollOffset_, 0, maxScroll);
+
+        int startIdx = totalCount - visibleBars - chartScrollOffset_;
+        if (startIdx < 0) startIdx = 0;
+        int endIdx = std::min(totalCount, startIdx + visibleBars);
+
+        // ── Find price/volume range for visible bars only ──
         double pMin = 1e18, pMax = -1e18;
         double vMax = 1.0;
-        for (auto& c : snap.candleHistory) {
+        for (int i = startIdx; i < endIdx; ++i) {
+            auto& c = snap.candleHistory[i];
             if (c.low  < pMin) pMin = c.low;
             if (c.high > pMax) pMax = c.high;
             if (c.volume > vMax) vMax = c.volume;
         }
+        // Add small padding to price range (2%)
         double range = pMax - pMin;
         if (range < 1e-9) range = 1.0;
+        double padding = range * 0.02;
+        pMin -= padding;
+        pMax += padding;
+        range = pMax - pMin;
 
-        float barWidth = std::max(2.0f, w / (float)count - 1.0f);
-        float halfBar  = barWidth * 0.5f;
+        float halfBar = chartBarWidth_ * 0.5f;
+
+        // ── Background grid lines ──
+        for (int i = 0; i <= 6; ++i) {
+            float frac = (float)i / 6.0f;
+            float yLine = p.y + priceH - frac * priceH;
+            draw->AddLine(ImVec2(p.x, yLine), ImVec2(p.x + chartW, yLine),
+                          IM_COL32(40, 40, 45, 80), 1.0f);
+        }
 
         // ── Price candles (top section) ──
-        for (int i = 0; i < count; ++i) {
+        for (int i = startIdx; i < endIdx; ++i) {
             auto& c = snap.candleHistory[i];
-            float x = p.x + 2.0f + (float)i * (barWidth + 1.0f);
+            int vi = i - startIdx;
+            float x = p.x + 2.0f + (float)vi * barStep;
+            if (x > p.x + chartW) break;
 
             float yHigh  = p.y + priceH - (float)((c.high  - pMin) / range) * priceH;
             float yLow   = p.y + priceH - (float)((c.low   - pMin) / range) * priceH;
@@ -1461,24 +1534,27 @@ void AppGui::drawCandlestickChart() {
                 ? IM_COL32(40, 200, 80, 255)
                 : IM_COL32(220, 60, 60, 255);
 
+            // Wick
             float wickX = x + halfBar;
             draw->AddLine(ImVec2(wickX, yHigh), ImVec2(wickX, yLow), color, 1.0f);
 
+            // Body
             float bodyTop = std::min(yOpen, yClose);
             float bodyBot = std::max(yOpen, yClose);
             if (bodyBot - bodyTop < 1.0f) bodyBot = bodyTop + 1.0f;
-            draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + barWidth, bodyBot), color);
+            draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + chartBarWidth_, bodyBot), color);
         }
 
         // ── Volume bars (bottom section) ──
         float volTop = p.y + priceH + 2;
-        // Separator between price and volume
-        draw->AddLine(ImVec2(p.x, volTop - 1), ImVec2(p.x + w, volTop - 1),
+        draw->AddLine(ImVec2(p.x, volTop - 1), ImVec2(p.x + chartW, volTop - 1),
                       IM_COL32(60, 60, 65, 180), 1.0f);
 
-        for (int i = 0; i < count; ++i) {
+        for (int i = startIdx; i < endIdx; ++i) {
             auto& c = snap.candleHistory[i];
-            float x = p.x + 2.0f + (float)i * (barWidth + 1.0f);
+            int vi = i - startIdx;
+            float x = p.x + 2.0f + (float)vi * barStep;
+            if (x > p.x + chartW) break;
             float barH = (float)(c.volume / vMax) * (volH - 6);
 
             bool bullish = c.close >= c.open;
@@ -1487,29 +1563,45 @@ void AppGui::drawCandlestickChart() {
                 : IM_COL32(200, 60, 60, 140);
 
             float volBot = volTop + volH - 4;
-            draw->AddRectFilled(ImVec2(x, volBot - barH), ImVec2(x + barWidth, volBot), vColor);
+            draw->AddRectFilled(ImVec2(x, volBot - barH), ImVec2(x + chartBarWidth_, volBot), vColor);
         }
 
-        // Price scale on the right
-        for (int i = 0; i <= 4; ++i) {
-            float frac = (float)i / 4.0f;
+        // ── Price scale on the right ──
+        for (int i = 0; i <= 6; ++i) {
+            float frac = (float)i / 6.0f;
             float yLine = p.y + priceH - frac * priceH;
             double priceVal = pMin + frac * range;
             char label[32];
             snprintf(label, sizeof(label), "%.2f", priceVal);
-            draw->AddText(ImVec2(p.x + w - 60, yLine - 6), IM_COL32(130, 130, 135, 200), label);
-            draw->AddLine(ImVec2(p.x, yLine), ImVec2(p.x + w - 65, yLine),
-                          IM_COL32(50, 50, 55, 100), 1.0f);
+            draw->AddText(ImVec2(p.x + chartW + 4, yLine - 6),
+                          IM_COL32(160, 160, 165, 220), label);
         }
 
-        // Draw user indicator overlay values as colored label on the chart
+        // ── Current price line (last close) ──
+        if (endIdx > 0) {
+            double lastPrice = snap.candleHistory[endIdx - 1].close;
+            if (lastPrice >= pMin && lastPrice <= pMax) {
+                float yLast = p.y + priceH - (float)((lastPrice - pMin) / range) * priceH;
+                draw->AddLine(ImVec2(p.x, yLast), ImVec2(p.x + chartW, yLast),
+                              IM_COL32(80, 140, 220, 150), 1.0f);
+                char priceLabel[32];
+                snprintf(priceLabel, sizeof(priceLabel), "%.2f", lastPrice);
+                draw->AddRectFilled(ImVec2(p.x + chartW + 1, yLast - 8),
+                                    ImVec2(p.x + w, yLast + 8),
+                                    IM_COL32(60, 120, 200, 200));
+                draw->AddText(ImVec2(p.x + chartW + 4, yLast - 6),
+                              IM_COL32(240, 240, 245, 255), priceLabel);
+            }
+        }
+
+        // ── User indicator overlay ──
         if (!snap.userIndicatorPlots.empty()) {
             float labelY = p.y + 4;
             for (const auto& [indName, plots] : snap.userIndicatorPlots) {
                 for (const auto& [pName, pVal] : plots) {
                     if (pVal > pMin && pVal < pMax) {
                         float yVal = p.y + priceH - (float)((pVal - pMin) / range) * priceH;
-                        draw->AddLine(ImVec2(p.x, yVal), ImVec2(p.x + w - 65, yVal),
+                        draw->AddLine(ImVec2(p.x, yVal), ImVec2(p.x + chartW, yVal),
                                       IM_COL32(140, 100, 200, 120), 1.0f);
                         char overlayLabel[64];
                         snprintf(overlayLabel, sizeof(overlayLabel), "%s: %.4f", pName.c_str(), pVal);
@@ -1519,6 +1611,16 @@ void AppGui::drawCandlestickChart() {
                     }
                 }
             }
+        }
+
+        // ── Info bar: bars, range, zoom ──
+        {
+            char info[128];
+            snprintf(info, sizeof(info), "Bars: %d/%d  Zoom: %.0f%%  Offset: %d",
+                     endIdx - startIdx, totalCount,
+                     (chartBarWidth_ / 8.0f) * 100.0f, chartScrollOffset_);
+            draw->AddText(ImVec2(p.x + 4, p.y + totalH - 16),
+                          IM_COL32(100, 100, 105, 180), info);
         }
 
         ImGui::Dummy(canvasSize);

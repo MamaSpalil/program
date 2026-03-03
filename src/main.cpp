@@ -164,6 +164,7 @@ int main(int argc, char* argv[]) {
                     st.initialCapital = cfg.initialCapital;
                     st.drawdown  = upd.drawdown;
                     st.userIndicatorPlots = upd.userIndicatorPlots;
+                    st.orderBook = upd.orderBook;
 
                     // Fetch trading pairs once (kept across updates)
                     if (engine) {

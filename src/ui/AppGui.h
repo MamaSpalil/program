@@ -232,6 +232,12 @@ private:
     static constexpr int kMaxHistory = 200;
     static constexpr int kMaxLogLines = 500;
 
+    // Candlestick chart interactive state
+    float chartBarWidth_{8.0f};    // current bar width (zoom level)
+    int   chartScrollOffset_{0};   // horizontal scroll offset (bars from end)
+    float chartMinBarWidth_{2.0f};
+    float chartMaxBarWidth_{30.0f};
+
     ConnectCallback    onConnect_;
     DisconnectCallback onDisconnect_;
     StartCallback      onStart_;

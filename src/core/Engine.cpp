@@ -26,7 +26,9 @@ struct Engine::Impl {
     std::unique_ptr<ExchangeDB>             tradeDB;
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
-    int                                     maxCandleHistory{1000};
+    int                                     maxCandleHistory{5000}; // minimum 5000 bars for full chart visualization
+    OrderBook                               lastOrderBook;
+    std::chrono::steady_clock::time_point   lastOrderBookFetch{};
 };
 
 Engine::Engine(const std::string& configPath)
@@ -229,6 +231,21 @@ void Engine::updateDashboard(const Candle& c) {
                              impl_->strategy->riskManager(),
                              sig.value_or(Signal{}));
 
+    // Periodically fetch order book (every 2 seconds)
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - impl_->lastOrderBookFetch).count();
+    if (elapsed > 2000) {
+        try {
+            auto& trading = config_["trading"];
+            std::string symbol = trading.value("symbol", "BTCUSDT");
+            impl_->lastOrderBook = impl_->exchange->getOrderBook(symbol, 20);
+            impl_->lastOrderBookFetch = now;
+        } catch (const std::exception& e) {
+            Logger::get()->debug("OrderBook fetch failed: {}", e.what());
+        }
+    }
+
     // Push data to GUI callback
     if (impl_->onUpdateCb) {
         EngineUpdate upd;
@@ -251,6 +268,8 @@ void Engine::updateDashboard(const Candle& c) {
 
         if (impl_->userIndicators)
             upd.userIndicatorPlots = impl_->userIndicators->getAllPlots();
+
+        upd.orderBook = impl_->lastOrderBook;
 
         impl_->onUpdateCb(upd);
     }

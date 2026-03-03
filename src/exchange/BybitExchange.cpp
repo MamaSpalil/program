@@ -233,4 +233,40 @@ std::vector<SymbolInfo> BybitExchange::getSymbols(const std::string& marketType)
 #endif
 }
 
+OrderBook BybitExchange::getOrderBook(const std::string& symbol, int depth) {
+    OrderBook ob;
+#ifdef USE_CURL
+    try {
+        Logger::get()->debug("[Bybit] getOrderBook symbol={} depth={}", symbol, depth);
+        std::string path = "/v5/market/orderbook?category=linear&symbol=" + symbol +
+                           "&limit=" + std::to_string(depth);
+        auto response = httpGet(path);
+        auto json = nlohmann::json::parse(response);
+        if (json["retCode"].get<int>() != 0) {
+            Logger::get()->warn("[Bybit] getOrderBook API error: retCode={}", json["retCode"].get<int>());
+            return ob;
+        }
+        auto& result = json["result"];
+        for (auto& b : result["b"]) {
+            OrderBook::Level lvl;
+            lvl.price = std::stod(b[0].get<std::string>());
+            lvl.qty   = std::stod(b[1].get<std::string>());
+            ob.bids.push_back(lvl);
+        }
+        for (auto& a : result["a"]) {
+            OrderBook::Level lvl;
+            lvl.price = std::stod(a[0].get<std::string>());
+            lvl.qty   = std::stod(a[1].get<std::string>());
+            ob.asks.push_back(lvl);
+        }
+        Logger::get()->debug("[Bybit] getOrderBook bids={} asks={}", ob.bids.size(), ob.asks.size());
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] getOrderBook failed: {}", e.what());
+    }
+#else
+    (void)symbol; (void)depth;
+#endif
+    return ob;
+}
+
 } // namespace crypto

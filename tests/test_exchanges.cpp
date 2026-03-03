@@ -6,6 +6,7 @@
 #include "../src/exchange/KuCoinExchange.h"
 #include "../src/data/ExchangeDB.h"
 #include "../src/ui/AppGui.h"
+#include "../src/core/Engine.h"
 
 using namespace crypto;
 
@@ -473,4 +474,59 @@ TEST(LiveData, BybitGetPrice) {
         // Bybit may be geo-restricted in some regions
         GTEST_SKIP() << "Bybit API unreachable: " << e.what();
     }
+}
+
+// ── maxBarsForTimeframe updated limits ──────────────────────────────────────
+
+TEST(MaxBars, MinimumFiveThousandForIntraday) {
+    EXPECT_GE(maxBarsForTimeframe("1m"),  5000);
+    EXPECT_GE(maxBarsForTimeframe("5m"),  5000);
+    EXPECT_GE(maxBarsForTimeframe("15m"), 5000);
+    EXPECT_GE(maxBarsForTimeframe("30m"), 5000);
+    EXPECT_GE(maxBarsForTimeframe("1h"),  5000);
+    EXPECT_GE(maxBarsForTimeframe("4h"),  5000);
+}
+
+TEST(MaxBars, LongerTimeframesScaled) {
+    EXPECT_GE(maxBarsForTimeframe("1d"),  1500);
+    EXPECT_GE(maxBarsForTimeframe("1w"),  500);
+    EXPECT_GE(maxBarsForTimeframe("1M"),  300);
+}
+
+TEST(MaxBars, DefaultReturnsFiveThousand) {
+    EXPECT_EQ(maxBarsForTimeframe("unknown"), 5000);
+}
+
+// ── getOrderBook interface ──────────────────────────────────────────────────
+
+TEST(OrderBookInterface, DefaultReturnsEmpty) {
+    // IExchange default implementation returns empty OrderBook
+    struct TestExchange : IExchange {
+        bool testConnection(std::string&) override { return false; }
+        std::vector<Candle> getKlines(const std::string&, const std::string&, int) override { return {}; }
+        double getPrice(const std::string&) override { return 0; }
+        OrderResponse placeOrder(const OrderRequest&) override { return {}; }
+        AccountBalance getBalance() override { return {}; }
+        void subscribeKline(const std::string&, const std::string&, std::function<void(const Candle&)>) override {}
+        void connect() override {}
+        void disconnect() override {}
+    };
+    TestExchange ex;
+    auto ob = ex.getOrderBook("BTCUSDT", 20);
+    EXPECT_TRUE(ob.bids.empty());
+    EXPECT_TRUE(ob.asks.empty());
+}
+
+// ── EngineUpdate includes OrderBook ─────────────────────────────────────────
+
+TEST(EngineUpdate, ContainsOrderBook) {
+    EngineUpdate upd;
+    EXPECT_TRUE(upd.orderBook.bids.empty());
+    EXPECT_TRUE(upd.orderBook.asks.empty());
+    // Populate and verify
+    upd.orderBook.bids.push_back({50000.0, 1.5});
+    upd.orderBook.asks.push_back({50001.0, 0.8});
+    EXPECT_EQ(upd.orderBook.bids.size(), 1u);
+    EXPECT_EQ(upd.orderBook.asks.size(), 1u);
+    EXPECT_DOUBLE_EQ(upd.orderBook.bids[0].price, 50000.0);
 }

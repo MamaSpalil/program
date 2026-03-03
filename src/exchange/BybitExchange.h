@@ -33,6 +33,7 @@ public:
     void disconnect() override;
     bool testConnection(std::string& outError) override;
     std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") override;
+    OrderBook getOrderBook(const std::string& symbol, int depth = 20) override;
 
 private:
     std::string apiKey_;

@@ -311,4 +311,40 @@ std::vector<SymbolInfo> OKXExchange::getSymbols(const std::string& marketType) {
 #endif
 }
 
+OrderBook OKXExchange::getOrderBook(const std::string& symbol, int depth) {
+    OrderBook ob;
+#ifdef USE_CURL
+    try {
+        Logger::get()->debug("[OKX] getOrderBook symbol={} depth={}", symbol, depth);
+        std::string path = "/api/v5/market/books?instId=" + symbol +
+                           "&sz=" + std::to_string(depth);
+        auto response = httpGet(path);
+        auto json = nlohmann::json::parse(response);
+        if (json["code"].get<std::string>() != "0") {
+            Logger::get()->warn("[OKX] getOrderBook API error: code={}", json["code"].get<std::string>());
+            return ob;
+        }
+        auto& data = json["data"][0];
+        for (auto& b : data["bids"]) {
+            OrderBook::Level lvl;
+            lvl.price = std::stod(b[0].get<std::string>());
+            lvl.qty   = std::stod(b[1].get<std::string>());
+            ob.bids.push_back(lvl);
+        }
+        for (auto& a : data["asks"]) {
+            OrderBook::Level lvl;
+            lvl.price = std::stod(a[0].get<std::string>());
+            lvl.qty   = std::stod(a[1].get<std::string>());
+            ob.asks.push_back(lvl);
+        }
+        Logger::get()->debug("[OKX] getOrderBook bids={} asks={}", ob.bids.size(), ob.asks.size());
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getOrderBook failed: {}", e.what());
+    }
+#else
+    (void)symbol; (void)depth;
+#endif
+    return ob;
+}
+
 } // namespace crypto

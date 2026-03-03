@@ -42,22 +42,23 @@ struct SymbolInfo {
 
 // Compute maximum bar count for deep analysis based on timeframe.
 // Shorter timeframes get more bars to cover similar wall-clock spans.
+// Minimum 5000 bars for intraday timeframes for full chart visualization.
 inline int maxBarsForTimeframe(const std::string& interval) {
-    if (interval == "1m")  return 1500;
-    if (interval == "3m")  return 1500;
-    if (interval == "5m")  return 1500;
-    if (interval == "15m") return 1000;
-    if (interval == "30m") return 1000;
-    if (interval == "1h")  return 1000;
-    if (interval == "2h")  return 750;
-    if (interval == "4h")  return 750;
-    if (interval == "6h")  return 500;
-    if (interval == "8h")  return 500;
-    if (interval == "12h") return 500;
-    if (interval == "1d")  return 365;
-    if (interval == "1w")  return 200;
-    if (interval == "1M")  return 120;
-    return 1000; // default
+    if (interval == "1m")  return 5000;
+    if (interval == "3m")  return 5000;
+    if (interval == "5m")  return 5000;
+    if (interval == "15m") return 5000;
+    if (interval == "30m") return 5000;
+    if (interval == "1h")  return 5000;
+    if (interval == "2h")  return 5000;
+    if (interval == "4h")  return 5000;
+    if (interval == "6h")  return 3000;
+    if (interval == "8h")  return 3000;
+    if (interval == "12h") return 2000;
+    if (interval == "1d")  return 1500;
+    if (interval == "1w")  return 500;
+    if (interval == "1M")  return 300;
+    return 5000; // default
 }
 
 class IExchange {
@@ -87,6 +88,13 @@ public:
     // Default implementation returns empty — exchanges override as supported.
     virtual std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") {
         (void)marketType;
+        return {};
+    }
+
+    // Fetch order book (depth) snapshot for a symbol.
+    // Default implementation returns empty — exchanges override as supported.
+    virtual OrderBook getOrderBook(const std::string& symbol, int depth = 20) {
+        (void)symbol; (void)depth;
         return {};
     }
 };
