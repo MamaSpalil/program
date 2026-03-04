@@ -15,7 +15,11 @@
 
 // Lightweight stub used only in non-GUI test builds
 namespace layout_detail {
-struct Vec2 { float x, y; Vec2() : x(0), y(0) {} Vec2(float _x, float _y) : x(_x), y(_y) {} };
+struct Vec2 {
+    float x, y;
+    Vec2() : x(0), y(0) {}
+    Vec2(float _x, float _y) : x(_x), y(_y) {}
+};
 enum StubFlags {
     SF_NoMove                = 1 << 1,
     SF_NoResize              = 1 << 2,
