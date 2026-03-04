@@ -113,6 +113,34 @@ set(SCANNER_SOURCES
     src/scanner/MarketScanner.cpp
 )
 
+set(AUTOMATION_SOURCES
+    src/automation/Scheduler.cpp
+    src/automation/GridBot.cpp
+)
+
+set(EXTERNAL_SOURCES
+    src/external/NewsFeed.cpp
+    src/external/FearGreed.cpp
+)
+
+set(INTEGRATION_SOURCES
+    src/integration/WebhookServer.cpp
+    src/integration/TelegramBot.cpp
+)
+
+set(TAX_SOURCES
+    src/tax/TaxReporter.cpp
+)
+
+set(DRAWING_SOURCES
+    src/ui/DrawingTools.cpp
+    src/ui/MultiTimeframe.cpp
+)
+
+set(DEPTH_SOURCES
+    src/exchange/DepthStream.cpp
+)
+
 set(UI_SOURCES
     src/ui/Dashboard.cpp
 )
@@ -151,6 +179,12 @@ set(ALL_LIB_SOURCES
     ${SCANNER_SOURCES}
     ${PINEVIZ_SOURCES}
     ${CSVEXPORT_SOURCES}
+    ${AUTOMATION_SOURCES}
+    ${EXTERNAL_SOURCES}
+    ${INTEGRATION_SOURCES}
+    ${TAX_SOURCES}
+    ${DRAWING_SOURCES}
+    ${DEPTH_SOURCES}
 )
 
 # ── Library target ─────────────────────────────────────────────────────────────
@@ -262,6 +296,8 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_modules.cpp
         tests/test_candle_cache.cpp
         tests/test_system.cpp
+        tests/test_regression_part1.cpp
+        tests/test_regression_part2.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
