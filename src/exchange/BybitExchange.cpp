@@ -15,6 +15,10 @@
 namespace crypto {
 
 namespace {
+inline double safeStod(const std::string& s, double defaultVal = 0.0) {
+    if (s.empty()) return defaultVal;
+    try { return safeStod(s); } catch (...) { return defaultVal; }
+}
 #ifdef USE_CURL
 size_t bybitWriteCb(char* ptr, size_t size, size_t nmemb, std::string* d) {
     d->append(ptr, size * nmemb);
@@ -92,11 +96,11 @@ std::vector<Candle> BybitExchange::getKlines(const std::string& symbol,
     for (auto& k : json["result"]["list"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
-        c.open     = std::stod(k[1].get<std::string>());
-        c.high     = std::stod(k[2].get<std::string>());
-        c.low      = std::stod(k[3].get<std::string>());
-        c.close    = std::stod(k[4].get<std::string>());
-        c.volume   = std::stod(k[5].get<std::string>());
+        c.open     = safeStod(k[1].get<std::string>());
+        c.high     = safeStod(k[2].get<std::string>());
+        c.low      = safeStod(k[3].get<std::string>());
+        c.close    = safeStod(k[4].get<std::string>());
+        c.volume   = safeStod(k[5].get<std::string>());
         c.closed   = true;
         candles.push_back(c);
     }
@@ -114,7 +118,7 @@ double BybitExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[Bybit] getPrice API error: retCode={}", json["retCode"].get<int>());
         return 0.0;
     }
-    double price = std::stod(json["result"]["list"][0]["lastPrice"].get<std::string>());
+    double price = safeStod(json["result"]["list"][0]["lastPrice"].get<std::string>());
     Logger::get()->debug("[Bybit] getPrice result={}", price);
     return price;
 }
@@ -137,11 +141,11 @@ void BybitExchange::onWsMessage(const std::string& msg) {
             auto& d = j["data"][0];
             Candle c;
             c.openTime = std::stoll(d["start"].get<std::string>());
-            c.open     = std::stod(d["open"].get<std::string>());
-            c.high     = std::stod(d["high"].get<std::string>());
-            c.low      = std::stod(d["low"].get<std::string>());
-            c.close    = std::stod(d["close"].get<std::string>());
-            c.volume   = std::stod(d["volume"].get<std::string>());
+            c.open     = safeStod(d["open"].get<std::string>());
+            c.high     = safeStod(d["high"].get<std::string>());
+            c.low      = safeStod(d["low"].get<std::string>());
+            c.close    = safeStod(d["close"].get<std::string>());
+            c.volume   = safeStod(d["volume"].get<std::string>());
             c.closed   = d["confirm"].get<bool>();
             klineCb_(c);
         }
@@ -249,14 +253,14 @@ OrderBook BybitExchange::getOrderBook(const std::string& symbol, int depth) {
         auto& result = json["result"];
         for (auto& b : result["b"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(b[0].get<std::string>());
-            lvl.qty   = std::stod(b[1].get<std::string>());
+            lvl.price = safeStod(b[0].get<std::string>());
+            lvl.qty   = safeStod(b[1].get<std::string>());
             ob.bids.push_back(lvl);
         }
         for (auto& a : result["a"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(a[0].get<std::string>());
-            lvl.qty   = std::stod(a[1].get<std::string>());
+            lvl.price = safeStod(a[0].get<std::string>());
+            lvl.qty   = safeStod(a[1].get<std::string>());
             ob.asks.push_back(lvl);
         }
         Logger::get()->debug("[Bybit] getOrderBook bids={} asks={}", ob.bids.size(), ob.asks.size());
