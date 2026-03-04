@@ -675,6 +675,38 @@ static void PlotLineFromDeque(const char* label, const std::deque<double>& data,
     ImGui::PopStyleColor();
 }
 
+// ── Local helpers for EMA / RSI computation from candle history ──
+static std::vector<double> calcEMAFromCandles(const std::deque<Candle>& bars, int period) {
+    std::vector<double> ema(bars.size(), 0.0);
+    if (bars.empty()) return ema;
+    double k = 2.0 / (period + 1);
+    ema[0] = bars[0].close;
+    for (size_t i = 1; i < bars.size(); ++i)
+        ema[i] = bars[i].close * k + ema[i - 1] * (1.0 - k);
+    return ema;
+}
+
+static std::vector<double> calcRSIFromCandles(const std::deque<Candle>& bars, int period = 14) {
+    std::vector<double> rsi(bars.size(), 50.0);
+    if ((int)bars.size() <= period) return rsi;
+    double avgGain = 0.0, avgLoss = 0.0;
+    for (int i = 1; i <= period; ++i) {
+        double d = bars[i].close - bars[i - 1].close;
+        if (d > 0) avgGain += d; else avgLoss -= d;
+    }
+    avgGain /= period;
+    avgLoss /= period;
+    for (int i = period; i < (int)bars.size(); ++i) {
+        double d = bars[i].close - bars[i - 1].close;
+        double gain = d > 0 ? d : 0;
+        double loss = d < 0 ? -d : 0;
+        avgGain = (avgGain * (period - 1) + gain) / period;
+        avgLoss = (avgLoss * (period - 1) + loss) / period;
+        rsi[i] = (avgLoss == 0.0) ? 100.0 : 100.0 - 100.0 / (1.0 + avgGain / avgLoss);
+    }
+    return rsi;
+}
+
 void AppGui::drawMarketDataWindow() {
     GuiState snap;
     {
@@ -690,7 +722,39 @@ void AppGui::drawMarketDataWindow() {
     ImGui::Begin("Market Data", nullptr,
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    // ── Price info bar ──
+    // ── 5.2: Signal panel — price, indicators, signal, confidence ──
+    {
+        // Compute latest EMA9 & RSI from history for display
+        double ema9Val = snap.emaFast;  // from engine
+        double rsiVal  = snap.rsi;
+        if (!snap.candleHistory.empty()) {
+            auto ema9vec = calcEMAFromCandles(snap.candleHistory, 9);
+            ema9Val = ema9vec.back();
+            auto rsivec = calcRSIFromCandles(snap.candleHistory, 14);
+            rsiVal = rsivec.back();
+        }
+
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Price: %.4f",
+                           snap.lastCandle.close);
+        ImGui::SameLine(0, 20);
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "RSI: %.1f", rsiVal);
+        ImGui::SameLine(0, 20);
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "EMA9: %.4f", ema9Val);
+        ImGui::SameLine(0, 20);
+
+        ImVec4 sigColor;
+        const char* sigText;
+        switch (snap.lastSignal.type) {
+            case Signal::Type::BUY:  sigColor = ImVec4(0.0f, 0.9f, 0.0f, 1.0f); sigText = "BUY";  break;
+            case Signal::Type::SELL: sigColor = ImVec4(0.9f, 0.1f, 0.1f, 1.0f); sigText = "SELL"; break;
+            default:                 sigColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f); sigText = "HOLD"; break;
+        }
+        ImGui::TextColored(sigColor, "Signal: %s", sigText);
+        ImGui::SameLine(0, 10);
+        ImGui::TextColored(sigColor, "(%.1f%%)", snap.lastSignal.confidence * 100.0);
+    }
+
+    // ── Price info bar (OHLCV) ──
     {
         double priceChange = 0.0;
         double pctChange = 0.0;
@@ -702,15 +766,8 @@ void AppGui::drawMarketDataWindow() {
             ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
             : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
 
-        ImGui::TextColored(ImVec4(0.90f, 0.90f, 0.92f, 1.0f), "Price");
-        ImGui::SameLine(100);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
-        ImGui::Text("%.4f", snap.lastCandle.close);
-        ImGui::PopStyleColor();
-        ImGui::SameLine();
         ImGui::TextColored(chgColor, "(%+.2f%%)", pctChange);
-
-        ImGui::SameLine(350);
+        ImGui::SameLine(0, 20);
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f),
             "O: %.4f  H: %.4f  L: %.4f  V: %.1f",
             snap.lastCandle.open, snap.lastCandle.high,
@@ -733,6 +790,7 @@ void AppGui::drawMarketDataWindow() {
             if (ImGui::SmallButton(btnLabel)) {
                 config_.interval = tfButtons[i];
                 needsChartReset_ = true;
+                chartScrollOffset_ = 0;
                 addLog(std::string("[Chart] Timeframe: ") + tfButtons[i]);
                 if (onRefreshData_) onRefreshData_();
             }
@@ -749,7 +807,6 @@ void AppGui::drawMarketDataWindow() {
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Fit All")) {
-        // Show all bars
         int totalCount = (int)snap.candleHistory.size();
         if (totalCount > 0) {
             float chartW = ImGui::GetContentRegionAvail().x - 70.0f;
@@ -760,12 +817,20 @@ void AppGui::drawMarketDataWindow() {
     }
 
     // ── Candlestick chart ──
-    if (!snap.candleHistory.empty()) {
+    if (snap.candleHistory.empty() || (int)snap.candleHistory.size() < 2) {
+        ImGui::End();
+        return;
+    }
+
+    {
+        static constexpr double kPricePadding = 0.05; // 5% Y-axis padding
         float priceScaleW = 70.0f;
         ImVec2 avail = ImGui::GetContentRegionAvail();
         float totalH = std::max(200.0f, avail.y - 4.0f);
-        float priceH = totalH * 0.75f;
-        float volH   = totalH * 0.25f;
+        // Layout: candles 65%, volume 20%, RSI 15%
+        float priceH = totalH * 0.65f;
+        float volH   = totalH * 0.20f;
+        float rsiH   = totalH * 0.15f;
         ImVec2 canvasSize = ImVec2(avail.x, totalH);
 
         int totalCount = (int)snap.candleHistory.size();
@@ -787,25 +852,20 @@ void AppGui::drawMarketDataWindow() {
         float w = canvasSize.x - 4;
         float chartW = w - priceScaleW;
 
-        if (totalCount < 2) { ImGui::EndChild(); ImGui::End(); return; }
-
         // ── Mouse interaction: wheel = zoom, drag = pan ──
         bool hovered = ImGui::IsWindowHovered();
         if (hovered) {
             float wheel = ImGui::GetIO().MouseWheel;
             if (wheel != 0.0f) {
-                // Zoom: MouseWheel (Shift+wheel handled the same for now)
                 float zoomFactor = 1.0f + wheel * 0.15f;
                 chartBarWidth_ = std::clamp(chartBarWidth_ * zoomFactor,
                                             chartMinBarWidth_, chartMaxBarWidth_);
             }
-
-            // Pan: left-mouse drag
             if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                 float dx = ImGui::GetIO().MouseDelta.x;
-                float barStep = chartBarWidth_ + 1.0f;
+                float barStepD = chartBarWidth_ + 1.0f;
                 if (std::abs(dx) > 0.5f) {
-                    int scrollDelta = (int)(dx / barStep);
+                    int scrollDelta = (int)(dx / barStepD);
                     if (scrollDelta == 0) scrollDelta = (dx > 0) ? 1 : -1;
                     chartScrollOffset_ += scrollDelta;
                 }
@@ -834,14 +894,18 @@ void AppGui::drawMarketDataWindow() {
         }
         double range = pMax - pMin;
         if (range < 1e-9) range = 1.0;
-        double padding = range * 0.05;
+        double padding = range * kPricePadding;
         pMin -= padding;
         pMax += padding;
         range = pMax - pMin;
 
         float halfBar = chartBarWidth_ * 0.5f;
 
-        // ── Background grid lines ──
+        // ── Compute EMA9 & RSI for the full history ──
+        auto ema9 = calcEMAFromCandles(snap.candleHistory, 9);
+        auto rsiVec = calcRSIFromCandles(snap.candleHistory, 14);
+
+        // ── Background grid lines (price section) ──
         for (int i = 0; i <= 6; ++i) {
             float frac = (float)i / 6.0f;
             float yLine = p.y + priceH - frac * priceH;
@@ -849,7 +913,7 @@ void AppGui::drawMarketDataWindow() {
                           IM_COL32(40, 40, 45, 80), 1.0f);
         }
 
-        // ── Price candles (top section) ──
+        // ── Price candles (top 65%) ──
         for (int i = startIdx; i < endIdx; ++i) {
             auto& c = snap.candleHistory[i];
             int vi = i - startIdx;
@@ -875,7 +939,28 @@ void AppGui::drawMarketDataWindow() {
             draw->AddRectFilled(ImVec2(x, bodyTop), ImVec2(x + chartBarWidth_, bodyBot), color);
         }
 
-        // ── Volume bars (bottom section) ──
+        // ── 5.1: EMA9 overlay line (yellow) ──
+        {
+            ImU32 emaColor = IM_COL32(255, 204, 0, 220);
+            float prevX = 0, prevY = 0;
+            bool first = true;
+            for (int i = startIdx; i < endIdx; ++i) {
+                double val = ema9[i];
+                if (val < pMin || val > pMax) { first = true; continue; }
+                int vi = i - startIdx;
+                float x = p.x + 2.0f + (float)vi * barStep + halfBar;
+                float y = p.y + priceH - (float)((val - pMin) / range) * priceH;
+                if (!first) {
+                    draw->AddLine(ImVec2(prevX, prevY), ImVec2(x, y), emaColor, 1.5f);
+                }
+                prevX = x; prevY = y;
+                first = false;
+            }
+            // Label
+            draw->AddText(ImVec2(p.x + 4, p.y + 4), emaColor, "EMA9");
+        }
+
+        // ── Volume bars (middle 20%) ──
         float volTop = p.y + priceH + 2;
         draw->AddLine(ImVec2(p.x, volTop - 1), ImVec2(p.x + chartW, volTop - 1),
                       IM_COL32(60, 60, 65, 180), 1.0f);
@@ -894,6 +979,47 @@ void AppGui::drawMarketDataWindow() {
 
             float volBot = volTop + volH - 4;
             draw->AddRectFilled(ImVec2(x, volBot - barH), ImVec2(x + chartBarWidth_, volBot), vColor);
+        }
+
+        // ── 5.1: RSI subplot (bottom 15%) ──
+        float rsiTop = volTop + volH + 2;
+        draw->AddLine(ImVec2(p.x, rsiTop - 1), ImVec2(p.x + chartW, rsiTop - 1),
+                      IM_COL32(60, 60, 65, 180), 1.0f);
+        // RSI background levels: 30 (green), 50 (gray), 70 (red)
+        {
+            float rsiDrawH = rsiH - 6;
+            float rsiBot = rsiTop + rsiDrawH;
+            auto rsiY = [&](double val) -> float {
+                return rsiBot - (float)(val / 100.0) * rsiDrawH;
+            };
+            // Level lines
+            draw->AddLine(ImVec2(p.x, rsiY(70)), ImVec2(p.x + chartW, rsiY(70)),
+                          IM_COL32(220, 60, 60, 80), 1.0f);
+            draw->AddLine(ImVec2(p.x, rsiY(50)), ImVec2(p.x + chartW, rsiY(50)),
+                          IM_COL32(180, 180, 180, 40), 1.0f);
+            draw->AddLine(ImVec2(p.x, rsiY(30)), ImVec2(p.x + chartW, rsiY(30)),
+                          IM_COL32(60, 200, 60, 80), 1.0f);
+            // Level labels
+            draw->AddText(ImVec2(p.x + chartW + 4, rsiY(70) - 6), IM_COL32(220, 60, 60, 180), "70");
+            draw->AddText(ImVec2(p.x + chartW + 4, rsiY(30) - 6), IM_COL32(60, 200, 60, 180), "30");
+
+            // RSI line
+            ImU32 rsiColor = IM_COL32(128, 128, 255, 220);
+            float prevX = 0, prevRsiY = 0;
+            bool first = true;
+            for (int i = startIdx; i < endIdx; ++i) {
+                double val = std::clamp(rsiVec[i], 0.0, 100.0);
+                int vi = i - startIdx;
+                float x = p.x + 2.0f + (float)vi * barStep + halfBar;
+                float y = rsiY(val);
+                if (!first) {
+                    draw->AddLine(ImVec2(prevX, prevRsiY), ImVec2(x, y), rsiColor, 1.5f);
+                }
+                prevX = x; prevRsiY = y;
+                first = false;
+            }
+            // Label
+            draw->AddText(ImVec2(p.x + 4, rsiTop + 2), rsiColor, "RSI(14)");
         }
 
         // ── Price scale on the right ──
@@ -926,7 +1052,7 @@ void AppGui::drawMarketDataWindow() {
 
         // ── User indicator overlay ──
         if (!snap.userIndicatorPlots.empty()) {
-            float labelY = p.y + 4;
+            float labelY = p.y + 18;
             for (const auto& [indName, plots] : snap.userIndicatorPlots) {
                 for (const auto& [pName, pVal] : plots) {
                     if (pVal > pMin && pVal < pMax) {
@@ -939,6 +1065,32 @@ void AppGui::drawMarketDataWindow() {
                                       IM_COL32(180, 140, 240, 200), overlayLabel);
                         labelY += 14;
                     }
+                }
+            }
+        }
+
+        // ── 5.3: Crosshair with price label ──
+        if (hovered) {
+            ImVec2 mouse = ImGui::GetMousePos();
+            float mx = mouse.x, my = mouse.y;
+            // Only draw crosshair inside the chart drawing area
+            if (mx >= p.x && mx <= p.x + chartW && my >= p.y && my <= p.y + totalH) {
+                // Vertical line
+                draw->AddLine(ImVec2(mx, p.y), ImVec2(mx, p.y + totalH),
+                              IM_COL32(255, 255, 255, 60), 1.0f);
+                // Horizontal line (only in price section)
+                if (my <= p.y + priceH) {
+                    draw->AddLine(ImVec2(p.x, my), ImVec2(p.x + chartW, my),
+                                  IM_COL32(255, 255, 255, 60), 1.0f);
+                    // Price label at crosshair Y
+                    double crossPrice = pMax - ((double)(my - p.y) / priceH) * range;
+                    char crossLabel[32];
+                    snprintf(crossLabel, sizeof(crossLabel), "%.4f", crossPrice);
+                    draw->AddRectFilled(ImVec2(p.x + chartW + 1, my - 8),
+                                        ImVec2(p.x + w, my + 8),
+                                        IM_COL32(80, 80, 90, 200));
+                    draw->AddText(ImVec2(p.x + chartW + 4, my - 6),
+                                  IM_COL32(240, 240, 245, 255), crossLabel);
                 }
             }
         }
