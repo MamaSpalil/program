@@ -752,7 +752,7 @@ TEST(SystemTest, CSVExporterAllTypes) {
     }
 
     // Reject invalid filenames (path traversal)
-    EXPECT_FALSE(CSVExporter::exportBars(candles, "../etc/passwd.csv"));
+    EXPECT_FALSE(CSVExporter::exportBars(candles, "../../test_invalid.csv"));
     EXPECT_FALSE(CSVExporter::exportBars(candles, "/absolute/path.csv"));
     EXPECT_FALSE(CSVExporter::exportBars(candles, ""));
 }
