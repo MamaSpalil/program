@@ -5,6 +5,22 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-03-04
+
+### Fixed
+
+- **`getFuturesBalance` "invalid stod argument" error** — added `safeStod()` helper function across all exchange implementations (Binance, Bybit, OKX, Bitget, KuCoin) and `HistoricalLoader` to safely parse empty or non-numeric JSON string values; returns `0.0` instead of throwing `std::invalid_argument`
+- **"Price error" red text in User Panel** — price fetch now uses candle close price as immediate fallback; errors are logged at debug level instead of displayed in UI
+- **User Panel not opening correctly** — the User Panel right column is now conditionally rendered only when `showUserPanel_` toggle is active; previously it was always visible regardless of the toggle state
+
+### Changed
+
+- **Chart tick update interval** — price polling reduced from 1-second intervals to 100ms for near-real-time price updates; candle close price is used as immediate source before API poll completes
+- **Volume Delta — standalone resizable window** — converted from inline collapsible panel to a separate `ImGui::Begin("Volume Delta")` window with diagonal resize support and size constraints (min 200×80); visualization now uses logarithmic scale (`log1p`) normalization to prevent oversized bars when volume differences are large
+- **Indicators — standalone resizable window** — converted from inline collapsible panel to a separate `ImGui::Begin("Indicators")` window with diagonal resize support and size constraints (min 300×100)
+- **Market Data window position** — default initial position moved below Volume Delta window (y=190) to avoid overlap
+- **Pine Script Editor improvements** — buffer size increased from 65536 to 100000 characters; "Run" button now saves script to file and validates/compiles via `PineConverter::parseSource()` with error feedback; "Load" button reads `custom_script.pine` from user indicator directory; character count display added; editor textarea dynamically fills available window height
+
 ## [1.3.0] - 2026-03-04
 
 ### Added

@@ -19,7 +19,7 @@ namespace {
 inline double safeStod(const std::string& s, double defaultVal = 0.0) {
     if (s.empty()) return defaultVal;
     try {
-        return safeStod(s);
+        return std::stod(s);
     } catch (...) {
         return defaultVal;
     }

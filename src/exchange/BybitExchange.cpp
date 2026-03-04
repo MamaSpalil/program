@@ -17,7 +17,7 @@ namespace crypto {
 namespace {
 inline double safeStod(const std::string& s, double defaultVal = 0.0) {
     if (s.empty()) return defaultVal;
-    try { return safeStod(s); } catch (...) { return defaultVal; }
+    try { return std::stod(s); } catch (...) { return defaultVal; }
 }
 #ifdef USE_CURL
 size_t bybitWriteCb(char* ptr, size_t size, size_t nmemb, std::string* d) {
