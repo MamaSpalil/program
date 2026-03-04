@@ -667,7 +667,7 @@ void AppGui::drawToolbar() {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.30f, 0.30f, 0.32f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.18f, 0.18f, 0.20f, 1.0f));
     }
-    if (ImGui::Button(u8"  Режим Стакан  ")) {
+    if (ImGui::Button("  Order Book  ")) {
         showOrderBook_ = !showOrderBook_;
     }
     ImGui::PopStyleColor(3);
@@ -2173,7 +2173,7 @@ void AppGui::drawOrderBookPanel() {
         snap = state_;
     }
 
-    if (ImGui::CollapsingHeader(u8"Order Book (Стакан)", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Order Book", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::BeginChild("##OrderBook", ImVec2(0, 260), ImGuiChildFlags_Border);
 
         // Find max quantity for bar scaling
