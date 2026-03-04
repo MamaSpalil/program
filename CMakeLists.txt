@@ -298,6 +298,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_system.cpp
         tests/test_regression_part1.cpp
         tests/test_regression_part2.cpp
+        tests/test_regression_part3.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

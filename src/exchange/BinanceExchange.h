@@ -1,6 +1,7 @@
 #pragma once
 #include "IExchange.h"
 #include "WebSocketClient.h"
+#include "EndpointManager.h"
 #include <string>
 #include <memory>
 #include <mutex>
@@ -61,15 +62,27 @@ private:
     mutable std::queue<std::chrono::steady_clock::time_point> requestTimes_;
     static constexpr int MAX_REQUESTS_PER_SECOND = 10;
 
+    // Geo-blocking fallback state
+    mutable int spotEndpointIdx_{0};
+    mutable int futuresEndpointIdx_{0};
+    mutable std::atomic<bool> useAltEndpoint_{false};
+
     std::string sign(const std::string& payload) const;
     std::string httpGet(const std::string& path, bool signed_ = false) const;
     std::string httpGetUrl(const std::string& fullUrl, bool signed_ = false) const;
     std::string effectiveBaseUrl() const;
+    std::string replaceBase(const std::string& url,
+                            const std::string& oldBase,
+                            const std::string& newBase) const;
     std::string httpPost(const std::string& path,
                           const std::string& body) const;
     void rateLimit() const;
     Candle parseKlineJson(const nlohmann::json& k) const;
     void onWsMessage(const std::string& msg);
+
+public:
+    // Whether an alternative endpoint is currently in use (for UI display)
+    bool isUsingAltEndpoint() const { return useAltEndpoint_.load(); }
 };
 
 } // namespace crypto

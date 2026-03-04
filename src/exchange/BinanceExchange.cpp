@@ -88,6 +88,15 @@ std::string BinanceExchange::effectiveBaseUrl() const {
     return (marketType_ == "futures") ? futuresBaseUrl_ : baseUrl_;
 }
 
+std::string BinanceExchange::replaceBase(const std::string& url,
+                                          const std::string& oldBase,
+                                          const std::string& newBase) const {
+    if (url.find(oldBase) == 0) {
+        return newBase + url.substr(oldBase.size());
+    }
+    return url;
+}
+
 void BinanceExchange::setMarketType(const std::string& marketType) {
     marketType_ = marketType;
 }
@@ -154,7 +163,28 @@ std::string BinanceExchange::httpGet(const std::string& path, bool signed_) cons
         curl_slist_free_all(headers);
         curl_easy_cleanup(curl);
 
-        if (res == CURLE_OK && httpCode < 400) return response;
+        if (res == CURLE_OK && httpCode < 400) {
+            useAltEndpoint_ = (url.find(base) != 0);
+            return response;
+        }
+
+        // Geo-blocking fallback: try alternative endpoint on 403/451
+        if (ExchangeEndpointManager::isGeoBlocked(static_cast<int>(httpCode))) {
+            bool isFutures = (marketType_ == "futures");
+            const auto& endpoints = isFutures
+                ? ExchangeEndpointManager::binanceFuturesEndpoints()
+                : ExchangeEndpointManager::binanceEndpoints();
+            int& idx = isFutures ? futuresEndpointIdx_ : spotEndpointIdx_;
+            std::string alt = ExchangeEndpointManager::getNextEndpoint(endpoints, idx);
+            if (!alt.empty()) {
+                url = replaceBase(url, base, alt);
+                base = alt;
+                useAltEndpoint_ = true;
+                Logger::get()->warn("[Binance] Geo-blocked (HTTP {}), trying: {}",
+                                    httpCode, alt);
+            }
+            continue;
+        }
 
         if (httpCode == 429 || httpCode == 418) {
             std::this_thread::sleep_for(std::chrono::seconds(5 * (3 - retries)));

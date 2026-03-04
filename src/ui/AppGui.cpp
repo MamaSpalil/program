@@ -485,6 +485,10 @@ void AppGui::renderFrame() {
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
+
+    // Recalculate layout based on current screen size
+    layoutMgr_.recalculate(vp->WorkSize.x, vp->WorkSize.y);
+
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
                              ImGuiWindowFlags_NoCollapse |
                              ImGuiWindowFlags_NoResize   |
@@ -788,12 +792,12 @@ void AppGui::drawMarketDataWindow() {
         snap = state_;
     }
 
-    // ── Window size / position (applied only on first launch) ──
-    ImGui::SetNextWindowSize(ImVec2(900, 500), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(220, 190), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
+    // ── Window: fixed position/size via LayoutManager ──
+    auto layout = layoutMgr_.get("Market Data");
+    LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
 
     ImGui::Begin("Market Data", nullptr,
+        LayoutManager::lockedFlags() |
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     // ── 5.2: Signal panel — price, indicators, signal, confidence ──
@@ -1379,11 +1383,11 @@ void AppGui::drawIndicatorsPanel() {
         snap = state_;
     }
 
-    ImGui::SetNextWindowSize(ImVec2(600, 250), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(220, 640), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(300, 100), ImVec2(FLT_MAX, FLT_MAX));
+    auto layout = layoutMgr_.get("Indicators");
+    LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
 
-    if (!ImGui::Begin("Indicators", nullptr, ImGuiWindowFlags_None)) {
+    if (!ImGui::Begin("Indicators", nullptr,
+            LayoutManager::lockedScrollFlags())) {
         ImGui::End();
         return;
     }
@@ -2102,11 +2106,11 @@ void AppGui::drawFilterPanel() {
 //  Volume Delta Bars — standalone resizable window
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
-    ImGui::SetNextWindowSize(ImVec2(600, 150), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(220, 30), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(200, 80), ImVec2(FLT_MAX, FLT_MAX));
+    auto layout = layoutMgr_.get("Volume Delta");
+    LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
 
-    if (!ImGui::Begin("Volume Delta", nullptr, ImGuiWindowFlags_None)) {
+    if (!ImGui::Begin("Volume Delta", nullptr,
+            LayoutManager::lockedScrollFlags())) {
         ImGui::End();
         return;
     }
@@ -2544,6 +2548,9 @@ void AppGui::drawUserPanel() {
     }
     ImGui::SameLine();
     ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f), "%s", config_.exchangeName.c_str());
+    if (snap.usingAltEndpoint) {
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "!! Alt endpoint");
+    }
     ImGui::Separator();
 
     // ── 3.1 Account Balance ──
