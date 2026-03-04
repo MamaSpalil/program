@@ -2100,9 +2100,6 @@ void AppGui::drawFilterPanel() {
 //  Volume Delta Bars — standalone resizable window
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
-    std::lock_guard<std::mutex> lk(stateMutex_);
-    if (volumeDeltaHistory_.empty()) return;
-
     ImGui::SetNextWindowSize(ImVec2(600, 150), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(220, 30), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints(ImVec2(200, 80), ImVec2(FLT_MAX, FLT_MAX));
@@ -2112,17 +2109,23 @@ void AppGui::drawVolumeDeltaPanel() {
         return;
     }
 
-    ImVec2 avail = ImGui::GetContentRegionAvail();
-    ImVec2 canvasSize = ImVec2(avail.x, std::max(avail.y, 40.0f));
-    ImGui::BeginChild("##VolDeltaCanvas", canvasSize, ImGuiChildFlags_Border);
+    ImVec2 canvasPos  = ImGui::GetCursorScreenPos();
+    ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+    if (canvasSize.x < 10 || canvasSize.y < 10) {
+        ImGui::End();
+        return;
+    }
 
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    ImVec2 p = ImGui::GetCursorScreenPos();
-    float w = canvasSize.x - 4;
-    float h = canvasSize.y - 4;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    // Background
+    dl->AddRectFilled(canvasPos,
+        ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+        IM_COL32(20, 20, 25, 255));
+
+    std::lock_guard<std::mutex> lk(stateMutex_);
     int count = (int)volumeDeltaHistory_.size();
-    if (count < 1) { ImGui::EndChild(); ImGui::End(); return; }
+    if (count < 1) { ImGui::End(); return; }
 
     // Use log scale to normalize large volume differences
     double maxAbs = 1.0;
@@ -2134,32 +2137,42 @@ void AppGui::drawVolumeDeltaPanel() {
         if (std::abs(normalizedDelta[i]) > maxAbs) maxAbs = std::abs(normalizedDelta[i]);
     }
 
-    float barW = std::max(2.0f, w / (float)count - 1.0f);
-    float midY = p.y + h * 0.5f;
+    float w = canvasSize.x;
+    float h = canvasSize.y;
+    float gap   = 1.0f;
+    float barW  = std::max(2.0f, (w - gap * (float)(count - 1)) / (float)count);
+    float step  = barW + gap;
+    // If bars still overflow, clamp to fit
+    if (step * (float)count > w) {
+        step = w / (float)count;
+        barW = std::max(1.0f, step - gap);
+    }
+    float midY = canvasPos.y + h * 0.5f;
 
-    // Zero line
-    draw->AddLine(ImVec2(p.x, midY), ImVec2(p.x + w, midY),
-                  IM_COL32(80, 80, 85, 150), 1.0f);
+    // Zero baseline
+    dl->AddLine(ImVec2(canvasPos.x, midY),
+                ImVec2(canvasPos.x + w, midY),
+                IM_COL32(80, 80, 85, 150), 1.0f);
 
     for (int i = 0; i < count; ++i) {
-        float x = p.x + 2.0f + (float)i * (barW + 1.0f);
+        float x = canvasPos.x + (float)i * step;
         double val = normalizedDelta[i];
         float barH = (float)(std::abs(val) / maxAbs) * (h * 0.48f);
 
         ImU32 col = (val >= 0)
-            ? IM_COL32(40, 180, 80, 200)
-            : IM_COL32(200, 60, 60, 200);
+            ? IM_COL32(40, 180, 80, 200)   // green — buy pressure
+            : IM_COL32(200, 60, 60, 200);  // red   — sell pressure
 
         if (val >= 0) {
-            draw->AddRectFilled(ImVec2(x, midY - barH), ImVec2(x + barW, midY), col);
+            dl->AddRectFilled(ImVec2(x, midY - barH),
+                              ImVec2(x + barW, midY), col);
         } else {
-            draw->AddRectFilled(ImVec2(x, midY), ImVec2(x + barW, midY + barH), col);
+            dl->AddRectFilled(ImVec2(x, midY),
+                              ImVec2(x + barW, midY + barH), col);
         }
     }
 
     ImGui::Dummy(canvasSize);
-    ImGui::EndChild();
-
     ImGui::End();
 }
 
