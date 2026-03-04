@@ -45,9 +45,18 @@ BinanceExchange::BinanceExchange(const std::string& apiKey,
                                    const std::string& wsHost,
                                    const std::string& wsPort)
     : apiKey_(apiKey), apiSecret_(apiSecret),
-      baseUrl_(baseUrl), wsHost_(wsHost), wsPort_(wsPort),
-      futuresBaseUrl_("https://fapi.binance.com"),
-      futuresWsHost_("fstream.binance.com") {}
+      baseUrl_(baseUrl), wsHost_(wsHost), wsPort_(wsPort)
+{
+    // Detect testnet by checking the base URL and set futures URLs accordingly
+    bool isTestnet = (baseUrl_.find("testnet") != std::string::npos);
+    if (isTestnet) {
+        futuresBaseUrl_ = "https://testnet.binancefuture.com";
+        futuresWsHost_  = "fstream.binancefuture.com";
+    } else {
+        futuresBaseUrl_ = "https://fapi.binance.com";
+        futuresWsHost_  = "fstream.binance.com";
+    }
+}
 
 BinanceExchange::~BinanceExchange() {
     disconnect();
@@ -447,8 +456,14 @@ OrderBook BinanceExchange::getOrderBook(const std::string& symbol, int depth) {
 #ifdef USE_CURL
     try {
         Logger::get()->debug("[Binance] getOrderBook symbol={} depth={}", symbol, depth);
-        std::string path = "/api/v3/depth?symbol=" + symbol +
-                           "&limit=" + std::to_string(depth);
+        std::string path;
+        if (marketType_ == "futures") {
+            path = "/fapi/v1/depth?symbol=" + symbol +
+                   "&limit=" + std::to_string(depth);
+        } else {
+            path = "/api/v3/depth?symbol=" + symbol +
+                   "&limit=" + std::to_string(depth);
+        }
         auto response = httpGet(path);
         auto json = nlohmann::json::parse(response);
 
@@ -481,7 +496,12 @@ std::vector<OpenOrderInfo> BinanceExchange::getOpenOrders(const std::string& sym
     return {};
 #else
     try {
-        std::string path = "/api/v3/openOrders";
+        std::string path;
+        if (marketType_ == "futures") {
+            path = "/fapi/v1/openOrders";
+        } else {
+            path = "/api/v3/openOrders";
+        }
         if (!symbol.empty()) path += "?symbol=" + symbol;
         auto resp = httpGet(path, true);
         auto j = nlohmann::json::parse(resp);
@@ -512,8 +532,14 @@ std::vector<UserTradeInfo> BinanceExchange::getMyTrades(const std::string& symbo
     return {};
 #else
     try {
-        std::string path = "/api/v3/myTrades?symbol=" + symbol +
-                           "&limit=" + std::to_string(limit);
+        std::string path;
+        if (marketType_ == "futures") {
+            path = "/fapi/v1/userTrades?symbol=" + symbol +
+                   "&limit=" + std::to_string(limit);
+        } else {
+            path = "/api/v3/myTrades?symbol=" + symbol +
+                   "&limit=" + std::to_string(limit);
+        }
         auto resp = httpGet(path, true);
         auto j = nlohmann::json::parse(resp);
         std::vector<UserTradeInfo> result;
@@ -546,6 +572,10 @@ std::vector<PositionInfo> BinanceExchange::getPositionRisk(const std::string& sy
         if (!symbol.empty()) url += "?symbol=" + symbol;
         auto resp = httpGetUrl(url, true);
         auto j = nlohmann::json::parse(resp);
+        if (!j.is_array()) {
+            Logger::get()->warn("[Binance] getPositionRisk: unexpected response format");
+            return {};
+        }
         std::vector<PositionInfo> result;
         for (auto& p : j) {
             PositionInfo info;
@@ -573,6 +603,15 @@ FuturesBalanceInfo BinanceExchange::getFuturesBalance() {
         std::string url = futuresBaseUrl_ + "/fapi/v2/account";
         auto resp = httpGetUrl(url, true);
         auto j = nlohmann::json::parse(resp);
+
+        // Guard against error responses that don't contain the expected fields
+        if (!j.is_object() || !j.contains("totalWalletBalance")) {
+            std::string code = j.value("code", "");
+            std::string msg  = j.value("msg", "unexpected response format");
+            Logger::get()->warn("[Binance] getFuturesBalance unexpected response: {} {}", code, msg);
+            return {};
+        }
+
         FuturesBalanceInfo info;
         info.totalWalletBalance    = std::stod(j.value("totalWalletBalance", "0"));
         info.totalUnrealizedProfit = std::stod(j.value("totalUnrealizedProfit", "0"));

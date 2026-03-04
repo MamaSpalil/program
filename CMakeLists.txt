@@ -83,8 +83,39 @@ set(STRATEGY_SOURCES
     src/strategy/MLEnhancedStrategy.cpp
 )
 
+set(TRADING_SOURCES
+    src/trading/OrderManagement.cpp
+    src/trading/PaperTrading.cpp
+    src/trading/TradeMarker.cpp
+    src/trading/TradeHistory.cpp
+)
+
+set(SECURITY_SOURCES
+    src/security/KeyVault.cpp
+)
+
+set(BACKTEST_SOURCES
+    src/backtest/BacktestEngine.cpp
+)
+
+set(ALERT_SOURCES
+    src/alerts/AlertManager.cpp
+)
+
+set(SCANNER_SOURCES
+    src/scanner/MarketScanner.cpp
+)
+
 set(UI_SOURCES
     src/ui/Dashboard.cpp
+)
+
+set(PINEVIZ_SOURCES
+    src/indicators/PineVisuals.cpp
+)
+
+set(CSVEXPORT_SOURCES
+    src/data/CSVExporter.cpp
 )
 
 # ── ImGui sources (vendored in third_party/imgui) ────────────────────────────
@@ -106,6 +137,13 @@ set(ALL_LIB_SOURCES
     ${ML_SOURCES}
     ${STRATEGY_SOURCES}
     ${UI_SOURCES}
+    ${TRADING_SOURCES}
+    ${SECURITY_SOURCES}
+    ${BACKTEST_SOURCES}
+    ${ALERT_SOURCES}
+    ${SCANNER_SOURCES}
+    ${PINEVIZ_SOURCES}
+    ${CSVEXPORT_SOURCES}
 )
 
 # ── Library target ─────────────────────────────────────────────────────────────

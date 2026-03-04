@@ -28,7 +28,7 @@ bool CSVExporter::exportBars(const std::vector<Candle>& bars,
     if (!f.is_open()) return false;
     f << "datetime,open,high,low,close,volume\n";
     for (auto& b : bars) {
-        f << formatTime(b.time) << ","
+        f << formatTime(b.openTime) << ","
           << b.open << "," << b.high << ","
           << b.low << "," << b.close << ","
           << b.volume << "\n";

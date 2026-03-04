@@ -62,7 +62,7 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
             double commission = cost * cfg.commission;
             posQty = (cost - commission) / price;
             entryPrice = price;
-            entryTime = bars[i].time;
+            entryTime = bars[i].openTime;
             positionSide = (signal > 0) ? "BUY" : "SELL";
             inPosition = true;
             balance -= cost;
@@ -91,7 +91,7 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
                 trade.pnl = pnl;
                 trade.pnlPct = (entryPrice > 0) ? (pnl / (entryPrice * posQty)) * 100.0 : 0.0;
                 trade.entryTime = entryTime;
-                trade.exitTime = bars[i].time;
+                trade.exitTime = bars[i].openTime;
                 result.trades.push_back(trade);
 
                 balance += exitValue - commission;
