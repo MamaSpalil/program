@@ -18,6 +18,12 @@ find_package(spdlog REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(Eigen3 QUIET)
 
+# SQLite3 (required for local candle cache)
+find_package(unofficial-sqlite3 CONFIG QUIET)
+if(NOT unofficial-sqlite3_FOUND)
+    find_package(SQLite3 QUIET)
+endif()
+
 # Optional packages
 find_package(Curses QUIET)
 find_package(Torch QUIET)
@@ -58,6 +64,7 @@ set(DATA_SOURCES
     src/data/DataFeed.cpp
     src/data/HistoricalLoader.cpp
     src/data/ExchangeDB.cpp
+    src/data/CandleCache.cpp
 )
 
 set(INDICATOR_SOURCES
@@ -183,6 +190,15 @@ if(Eigen3_FOUND)
     target_compile_definitions(crypto_lib PUBLIC USE_EIGEN)
 endif()
 
+# SQLite3 (required for local candle cache)
+if(unofficial-sqlite3_FOUND)
+    target_link_libraries(crypto_lib PUBLIC unofficial::sqlite3::sqlite3)
+elseif(SQLite3_FOUND)
+    target_link_libraries(crypto_lib PUBLIC SQLite::SQLite3)
+else()
+    message(FATAL_ERROR "SQLite3 not found — required for candle cache")
+endif()
+
 # ncurses (optional)
 if(CURSES_FOUND)
     target_link_libraries(crypto_lib PUBLIC ${CURSES_LIBRARIES})
@@ -244,6 +260,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_exchanges.cpp
         tests/test_logger.cpp
         tests/test_modules.cpp
+        tests/test_candle_cache.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

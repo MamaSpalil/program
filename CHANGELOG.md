@@ -5,6 +5,23 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-04
+
+### Added
+
+- **SQLite3 local candle cache** — `CandleCache` class (`src/data/CandleCache.h/.cpp`) using SQLite3 for persistent local storage of historical bars (candles) keyed by (exchange, symbol, interval, openTime); supports `store()` (batch upsert in a transaction), `load()` (sorted by openTime), `latestOpenTime()`, `count()`, `clear()`, `clearAll()`; WAL journal mode for concurrent read performance; thread-safe via `std::mutex`
+- **Smart candle loading in Engine** — `Engine::run()` and `Engine::reloadCandles()` now load cached candles from the local SQLite DB first, then fetch only missing (newer) bars from the exchange API, merge and deduplicate by `openTime`, and persist the result back to cache; eliminates redundant API calls on restart and enables instant chart startup
+- **SQLite3 dependency** — added `sqlite3` to `vcpkg.json`; `CMakeLists.txt` finds `unofficial-sqlite3` (vcpkg) or system `SQLite3` and links to `crypto_lib`
+
+#### Tests
+
+- **10 new unit tests** — `test_candle_cache.cpp` covering store/load round-trip, sorted output, upsert replace, key isolation (exchange/symbol/interval), latestOpenTime, count, clear (specific key), clearAll, empty store no-op, persistence across DB instances
+
+### Changed
+
+- **CMakeLists.txt** — added `src/data/CandleCache.cpp` to `DATA_SOURCES`; added `tests/test_candle_cache.cpp` to test executable; added SQLite3 `find_package` and `target_link_libraries`
+- **`.gitignore`** — added `*.db` to exclude SQLite database files from version control
+
 ## [1.2.0] - 2026-03-04
 
 ### Added
@@ -158,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CMakeLists.txt** — added MSVC-specific compiler flags, `_WIN32` guards, and `vcpkg` toolchain integration (PR #2, #5)
 - **Pine Script auto-conversion** — auto-loads `.pine` files from `user_indicator/` directory at runtime via `UserIndicatorManager` (PR #8)
 
+[1.3.0]: https://github.com/MamaSpalil/program/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/MamaSpalil/program/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/MamaSpalil/program/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/MamaSpalil/program/releases/tag/v1.0.0
