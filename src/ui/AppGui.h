@@ -5,6 +5,16 @@
 #include "../data/ExchangeDB.h"
 #include "../indicators/IndicatorEngine.h"
 #include "../strategy/RiskManager.h"
+#include "../trading/OrderManagement.h"
+#include "../trading/PaperTrading.h"
+#include "../trading/TradeMarker.h"
+#include "../trading/TradeHistory.h"
+#include "../backtest/BacktestEngine.h"
+#include "../alerts/AlertManager.h"
+#include "../scanner/MarketScanner.h"
+#include "../data/CSVExporter.h"
+#include "../indicators/PineVisuals.h"
+#include "../security/KeyVault.h"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <mutex>
@@ -82,6 +92,29 @@ struct GuiState {
 
     // Account balance details (OKX style)
     std::vector<AccountBalanceDetail> accountBalanceDetails;
+
+    // Trade markers for chart visualization (H3)
+    std::vector<TradeMarker> tradeMarkers;
+
+    // TP/SL lines for chart
+    std::vector<TPSLLine> tpslLines;
+
+    // Paper trading account snapshot (H2)
+    PaperAccount paperAccount;
+
+    // Scanner results (L1)
+    std::vector<ScanResult> scanResults;
+
+    // Alert notifications
+    std::vector<std::string> alertNotifications;
+
+    // Backtest result (M1)
+    BacktestEngine::Result backtestResult;
+    bool backtestDone{false};
+
+    // Equity curve points (M2)
+    std::vector<double> equityCurveData;
+    std::vector<double> equityCurveTimes;
 };
 
 // Configuration that can be edited through the GUI
@@ -219,6 +252,15 @@ private:
     void drawPairSelector();
     void drawPairListPanel();
 
+    // New panels (Part 2)
+    void drawOrderManagementWindow();   // H1
+    void drawPaperTradingWindow();      // H2
+    void drawBacktestWindow();          // M1
+    void drawAlertsWindow();            // M3
+    void drawMarketScannerWindow();     // L1
+    void drawPineEditorWindow();        // L3
+    void drawTradeHistoryWindow();      // Trade History
+
     // Load config from JSON file
     void loadConfig(const std::string& path);
     nlohmann::json configToJson() const;
@@ -293,6 +335,71 @@ private:
     std::chrono::steady_clock::time_point lastPriceRefresh_{};
     std::chrono::steady_clock::time_point lastOrderRefresh_{};
     std::chrono::steady_clock::time_point lastTradeRefresh_{};
+
+    // ── New module state ──────────────────────────────────────────────────
+
+    // Window visibility toggles
+    bool showOrderManagement_{false};
+    bool showPaperTrading_{false};
+    bool showBacktest_{false};
+    bool showAlerts_{false};
+    bool showScanner_{false};
+    bool showPineEditor_{false};
+    bool showTradeHistory_{false};
+
+    // H1 — Order Management state
+    int    omSideIdx_{0};           // 0=BUY, 1=SELL
+    int    omTypeIdx_{0};           // 0=MARKET, 1=LIMIT, 2=STOP_LIMIT
+    double omQuantity_{0.001};
+    double omPrice_{0.0};
+    double omStopPrice_{0.0};
+    bool   omReduceOnly_{false};
+    bool   omShowConfirm_{false};
+    std::string omValidationError_;
+
+    // H1 — Managed positions for TP/SL popup
+    bool   omShowTPSL_{false};
+    int    omTPSLIdx_{-1};
+    double omNewTP_{0.0};
+    double omNewSL_{0.0};
+
+    // H2 — Paper Trading
+    PaperTrading paperTrader_{10000.0};
+    bool paperResetConfirm_{false};
+
+    // M1 — Backtest state
+    char   btSymbol_[64]{"BTCUSDT"};
+    int    btIntervalIdx_{0};
+    double btBalance_{10000.0};
+    double btCommission_{0.1};
+    char   btStartDate_[16]{"2024-01-01"};
+    char   btEndDate_[16]{"2024-12-31"};
+    bool   btRunning_{false};
+    BacktestEngine::Result btResult_;
+
+    // M3 — Alerts state
+    AlertManager alertManager_;
+    char   alertSymbol_[64]{};
+    int    alertCondIdx_{0};
+    double alertThreshold_{0.0};
+    int    alertNotifyIdx_{0};
+
+    // L1 — Scanner state
+    MarketScanner scanner_;
+
+    // L3 — Pine Editor state
+    char pineCode_[65536]{};
+    std::string pineEditorError_;
+
+    // Trade History
+    TradeHistory tradeHistory_;
+
+    // Trade markers manager (H3)
+    TradeMarkerManager tradeMarkerMgr_;
+
+    // Equity curve history (M2)
+    std::deque<double> equityCurveValues_;
+    std::deque<double> equityCurveTsMs_;
 };
 
 } // namespace crypto
