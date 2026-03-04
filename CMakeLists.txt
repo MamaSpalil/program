@@ -261,6 +261,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_logger.cpp
         tests/test_modules.cpp
         tests/test_candle_cache.cpp
+        tests/test_system.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
