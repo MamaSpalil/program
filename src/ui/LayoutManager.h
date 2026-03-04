@@ -48,11 +48,21 @@ public:
         Vec2        size;
     };
 
-    // Apply position and size every frame BEFORE ImGui::Begin()
+    // Apply position and size every frame BEFORE ImGui::Begin() — locks window
     static void lockWindow(const char* name, Vec2 pos, Vec2 size) {
 #ifdef IMGUI_VERSION
         ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(size.x, size.y), ImGuiCond_Always);
+#else
+        (void)name; (void)pos; (void)size;
+#endif
+    }
+
+    // Apply position and size only on first use — allows imgui.ini persistence
+    static void lockWindowOnce(const char* name, Vec2 pos, Vec2 size) {
+#ifdef IMGUI_VERSION
+        ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(size.x, size.y), ImGuiCond_FirstUseEver);
 #else
         (void)name; (void)pos; (void)size;
 #endif
@@ -90,35 +100,64 @@ public:
     void recalculate(float screenW, float screenH) {
         layouts_.clear();
 
-        float pairListW = 200.0f;
+        float topY   = 30.0f;     // below menu bar
+        float gap    = 4.0f;
+        float margin = 4.0f;
+        float winW   = screenW - 2.0f * margin;
+        float availH = screenH - topY - margin;
 
-        // Volume Delta — top area, right of pair list
+        // Height proportions: Logs 10%, Volume Delta 13%, Market Data 52%, Indicators 25%
+        float logH  = availH * logPct_;
+        float vdH   = availH * vdPct_;
+        float indH  = availH * indPct_;
+        float mdH   = availH - logH - vdH - indH - 3.0f * gap;
+        if (logH < 60.0f)  logH  = 60.0f;
+        if (vdH  < 80.0f)  vdH   = 80.0f;
+        if (mdH  < 200.0f) mdH   = 200.0f;
+        if (indH < 80.0f)  indH  = 80.0f;
+
+        float y = topY;
+
+        // Logs — top
+        layouts_["Logs"] = {
+            "Logs",
+            Vec2(margin, y),
+            Vec2(winW, logH)
+        };
+        y += logH + gap;
+
+        // Volume Delta — below Logs
         layouts_["Volume Delta"] = {
             "Volume Delta",
-            Vec2(pairListW + 4.0f, 30.0f),
-            Vec2(screenW - pairListW - 8.0f, 150.0f)
+            Vec2(margin, y),
+            Vec2(winW, vdH)
         };
+        y += vdH + gap;
 
-        // Market Data — below Volume Delta
-        float mdY = 30.0f + 150.0f + 4.0f;
-        float mdH = screenH - mdY - 260.0f - 30.0f;
-        if (mdH < 300.0f) mdH = 300.0f;
+        // Market Data — below Volume Delta (tallest)
         layouts_["Market Data"] = {
             "Market Data",
-            Vec2(pairListW + 4.0f, mdY),
-            Vec2(screenW - pairListW - 8.0f, mdH)
+            Vec2(margin, y),
+            Vec2(winW, mdH)
         };
+        y += mdH + gap;
 
         // Indicators — below Market Data
-        float indY = mdY + mdH + 4.0f;
-        float indH = screenH - indY - 30.0f;
-        if (indH < 100.0f) indH = 100.0f;
         layouts_["Indicators"] = {
             "Indicators",
-            Vec2(pairListW + 4.0f, indY),
-            Vec2(screenW - pairListW - 8.0f, indH)
+            Vec2(margin, y),
+            Vec2(winW, indH)
         };
     }
+
+    // Layout height proportions (must sum to < 1.0; Market Data gets the remainder)
+    float logPct() const  { return logPct_; }
+    float vdPct()  const  { return vdPct_;  }
+    float indPct() const  { return indPct_; }
+
+    void setLogPct(float v)  { logPct_ = v; }
+    void setVdPct(float v)   { vdPct_  = v; }
+    void setIndPct(float v)  { indPct_ = v; }
 
     // Get the layout for a specific window by name
     WindowLayout get(const std::string& name) const {
@@ -133,6 +172,9 @@ public:
 
 private:
     std::map<std::string, WindowLayout> layouts_;
+    float logPct_ = 0.10f;
+    float vdPct_  = 0.13f;
+    float indPct_ = 0.25f;
 };
 
 } // namespace crypto

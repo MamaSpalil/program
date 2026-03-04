@@ -190,6 +190,16 @@ bool AppGui::init(const std::string& configPath) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
+    // Set imgui.ini path in config directory for persistent window layout
+    {
+        namespace fs = std::filesystem;
+        static std::string iniPath;
+        fs::path cfgDir = fs::path(configPath_).parent_path();
+        if (cfgDir.empty()) cfgDir = ".";
+        iniPath = (cfgDir / "imgui.ini").string();
+        io.IniFilename = iniPath.c_str();
+    }
+
     // Apply dark-metal theme
     setupTheme();
 
@@ -376,6 +386,14 @@ void AppGui::loadConfig(const std::string& path) {
 
     config_.userIndicatorDir = j.value("user_indicator_dir", "user_indicator");
 
+    if (j.contains("layout")) {
+        auto& ly = j["layout"];
+        config_.layoutLogPct = ly.value("log_pct",  0.10f);
+        config_.layoutVdPct  = ly.value("vd_pct",   0.13f);
+        config_.layoutIndPct = ly.value("ind_pct",  0.25f);
+        config_.layoutLocked = ly.value("locked",   false);
+    }
+
     state_.equity = config_.initialCapital;
     state_.initialCapital = config_.initialCapital;
 }
@@ -431,6 +449,12 @@ nlohmann::json AppGui::configToJson() const {
         {"rr_ratio",            config_.rrRatio}
     };
     j["user_indicator_dir"] = config_.userIndicatorDir;
+    j["layout"] = {
+        {"log_pct",  config_.layoutLogPct},
+        {"vd_pct",   config_.layoutVdPct},
+        {"ind_pct",  config_.layoutIndPct},
+        {"locked",   config_.layoutLocked}
+    };
     return j;
 }
 
@@ -486,6 +510,11 @@ void AppGui::renderFrame() {
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
 
+    // Sync layout proportions from config
+    layoutMgr_.setLogPct(config_.layoutLogPct);
+    layoutMgr_.setVdPct(config_.layoutVdPct);
+    layoutMgr_.setIndPct(config_.layoutIndPct);
+
     // Recalculate layout based on current screen size
     layoutMgr_.recalculate(vp->WorkSize.x, vp->WorkSize.y);
 
@@ -498,53 +527,31 @@ void AppGui::renderFrame() {
     ImGui::Begin("##MainWin", nullptr, flags);
 
     drawMenuBar();
-    drawToolbar();
-    drawFilterPanel();
-
-    // Layout: three columns — PairList | Chart | UserPanel
-    float totalW = ImGui::GetContentRegionAvail().x;
-    float h = ImGui::GetContentRegionAvail().y - 26; // room for status
-    float pairListW = 200.0f;
-    float userPanelW = showUserPanel_ ? 280.0f : 0.0f;
-    float centerW = totalW - pairListW - userPanelW - 8.0f; // spacing
-
-    // Left column: PairList
-    ImGui::BeginChild("##PairList", ImVec2(pairListW, h), ImGuiChildFlags_Border);
-    drawPairListPanel();
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-
-    // Center column: log panel
-    ImGui::BeginChild("##CenterCol", ImVec2(centerW, h), ImGuiChildFlags_None);
-    if (showOrderBook_) drawOrderBookPanel();
-    drawLogPanel();
-    ImGui::EndChild();
-
-    if (showUserPanel_) {
-        ImGui::SameLine();
-
-        // Right column: User Panel (visible when toggled)
-        ImGui::BeginChild("##UserCol", ImVec2(userPanelW, h), ImGuiChildFlags_Border);
-        drawUserPanel();
-        ImGui::EndChild();
-    }
-
-    drawStatusBar();
 
     ImGui::End();
 
-    // Volume Delta window (separate, resizable)
+    // ── Fixed windows: Logs → Volume Delta → Market Data → Indicators ──
+
+    // Logs window (top, full width, with scroll)
+    drawLogWindow();
+
+    // Volume Delta window (below Logs)
     drawVolumeDeltaPanel();
 
-    // Market Data window (separate, with chart — positioned below Volume Delta)
+    // Market Data window (below Volume Delta — tallest)
     drawMarketDataWindow();
 
-    // Indicators window (separate, resizable)
+    // Indicators window (below Market Data)
     drawIndicatorsPanel();
+
+    // Reset flag consumed after one frame
+    if (layoutNeedsReset_) layoutNeedsReset_ = false;
 
     // Settings window (modal-like)
     if (showSettings_) drawSettingsPanel();
+
+    // Order book as optional floating window
+    if (showOrderBook_) drawOrderBookPanel();
 
     // New windows
     if (showOrderManagement_) drawOrderManagementWindow();
@@ -794,11 +801,15 @@ void AppGui::drawMarketDataWindow() {
 
     // ── Window: fixed position/size via LayoutManager ──
     auto layout = layoutMgr_.get("Market Data");
-    LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Market Data", layout.pos, layout.size);
 
-    ImGui::Begin("Market Data", nullptr,
-        LayoutManager::lockedFlags() |
-        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    int mdFlags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+    mdFlags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+    ImGui::Begin("Market Data", nullptr, mdFlags);
 
     // ── 5.2: Signal panel — price, indicators, signal, confidence ──
     {
@@ -1384,13 +1395,47 @@ void AppGui::drawIndicatorsPanel() {
     }
 
     auto layout = layoutMgr_.get("Indicators");
-    LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Indicators", layout.pos, layout.size);
 
-    if (!ImGui::Begin("Indicators", nullptr,
-            LayoutManager::lockedScrollFlags())) {
+    int wflags = config_.layoutLocked
+        ? LayoutManager::lockedScrollFlags()
+        : ImGuiWindowFlags_HorizontalScrollbar;
+
+    if (!ImGui::Begin("Indicators", nullptr, wflags)) {
         ImGui::End();
         return;
     }
+
+    // Zoom / Pan interaction for indicator content
+    if (ImGui::IsWindowHovered()) {
+        ImGuiIO& io = ImGui::GetIO();
+        float wheel = io.MouseWheel;
+        if (wheel != 0.0f) {
+            if (io.KeyShift) {
+                indZoomY_ *= (wheel > 0) ? 1.1f : 0.9f;
+                indZoomY_ = std::clamp(indZoomY_, 0.3f, 5.0f);
+            } else {
+                indZoomX_ *= (wheel > 0) ? 1.1f : 0.9f;
+                indZoomX_ = std::clamp(indZoomX_, 0.3f, 5.0f);
+            }
+        }
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            ImVec2 delta = io.MouseDelta;
+            indPanX_ += delta.x;
+            indPanY_ += delta.y;
+        }
+    }
+
+    // Scrollable child area with zoom-scaled virtual size
+    float childW = ImGui::GetContentRegionAvail().x * indZoomX_;
+    float childH = ImGui::GetContentRegionAvail().y * indZoomY_;
+    if (childH < 80.0f) childH = 80.0f;
+
+    ImGui::BeginChild("##IndContent", ImVec2(childW, childH), ImGuiChildFlags_None,
+                       ImGuiWindowFlags_HorizontalScrollbar);
 
     // EMA
     if (config_.indEmaEnabled) {
@@ -1485,6 +1530,16 @@ void AppGui::drawIndicatorsPanel() {
             }
             ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", plotStr.c_str());
         }
+    }
+
+    ImGui::EndChild();  // ##IndContent
+
+    // Zoom info bar
+    {
+        char info[64];
+        snprintf(info, sizeof(info), "Zoom X:%.0f%% Y:%.0f%%",
+                 indZoomX_ * 100.0f, indZoomY_ * 100.0f);
+        ImGui::TextColored(ImVec4(0.40f, 0.40f, 0.42f, 1.0f), "%s", info);
     }
 
     ImGui::End();
@@ -2014,6 +2069,78 @@ void AppGui::drawSettingsPanel() {
             ImGui::EndTabItem();
         }
 
+        // ── Layout ──────────────────────────────────────
+        if (ImGui::BeginTabItem("Layout")) {
+            ImGui::Text("Window Layout Configuration");
+            ImGui::Separator();
+
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
+                "Adjust height proportions for each window.");
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
+                "Market Data gets the remaining space (tallest).");
+            ImGui::Spacing();
+
+            // Height proportions
+            float logPct = config_.layoutLogPct * 100.0f;
+            if (ImGui::SliderFloat("Logs Height (%%)", &logPct, 5.0f, 30.0f, "%.0f%%"))
+                config_.layoutLogPct = logPct / 100.0f;
+
+            float vdPct = config_.layoutVdPct * 100.0f;
+            if (ImGui::SliderFloat("Volume Delta Height (%%)", &vdPct, 5.0f, 30.0f, "%.0f%%"))
+                config_.layoutVdPct = vdPct / 100.0f;
+
+            float indPct = config_.layoutIndPct * 100.0f;
+            if (ImGui::SliderFloat("Indicators Height (%%)", &indPct, 10.0f, 40.0f, "%.0f%%"))
+                config_.layoutIndPct = indPct / 100.0f;
+
+            float mdPct = 1.0f - config_.layoutLogPct - config_.layoutVdPct - config_.layoutIndPct;
+            ImGui::TextColored(ImVec4(0.50f, 0.80f, 0.50f, 1.0f),
+                "Market Data Height: %.0f%%", mdPct * 100.0f);
+
+            if (mdPct < 0.20f) {
+                ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f),
+                    "Warning: Market Data window too small! Reduce other proportions.");
+            }
+
+            ImGui::Separator();
+            ImGui::Checkbox("Lock Windows (prevent move/resize)", &config_.layoutLocked);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Apply Layout")) {
+                layoutNeedsReset_ = true;
+                // Save imgui.ini with updated window positions
+                ImGuiIO& io = ImGui::GetIO();
+                if (io.IniFilename)
+                    ImGui::SaveIniSettingsToDisk(io.IniFilename);
+                // Save config
+                saveConfigToFile(configPath_);
+                addLog("[Config] Layout applied and saved");
+                if (onSaveConfig_) onSaveConfig_(config_);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset Layout to Defaults")) {
+                config_.layoutLogPct = 0.10f;
+                config_.layoutVdPct  = 0.13f;
+                config_.layoutIndPct = 0.25f;
+                config_.layoutLocked = false;
+                layoutNeedsReset_ = true;
+                ImGuiIO& io = ImGui::GetIO();
+                if (io.IniFilename)
+                    ImGui::SaveIniSettingsToDisk(io.IniFilename);
+                saveConfigToFile(configPath_);
+                addLog("[Config] Layout reset to defaults and saved");
+                if (onSaveConfig_) onSaveConfig_(config_);
+            }
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
+                "Tip: Window positions are saved in imgui.ini.");
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
+                "Unlock windows to drag and resize freely.");
+
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
     }
 
@@ -2066,6 +2193,56 @@ void AppGui::drawLogPanel() {
 }
 
 // ---------------------------------------------------------------------------
+//  Logs Window — standalone fixed window with scroll
+// ---------------------------------------------------------------------------
+void AppGui::drawLogWindow() {
+    auto layout = layoutMgr_.get("Logs");
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Logs", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Logs", layout.pos, layout.size);
+
+    int wflags = config_.layoutLocked ? LayoutManager::lockedScrollFlags()
+                                      : ImGuiWindowFlags_HorizontalScrollbar;
+
+    if (!ImGui::Begin("Logs", nullptr, wflags)) {
+        ImGui::End();
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        for (auto& line : state_.logLines) {
+            // Color coding based on prefix
+            if (line.find("[Error]") != std::string::npos ||
+                line.find("[SELL]")  != std::string::npos) {
+                ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f),
+                                   "%s", line.c_str());
+            } else if (line.find("[BUY]") != std::string::npos ||
+                       line.find("[OK]")  != std::string::npos) {
+                ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f),
+                                   "%s", line.c_str());
+            } else if (line.find("[Config]") != std::string::npos ||
+                       line.find("[Info]")   != std::string::npos) {
+                ImGui::TextColored(ImVec4(0.50f, 0.70f, 0.90f, 1.0f),
+                                   "%s", line.c_str());
+            } else if (line.find("[Warn]") != std::string::npos) {
+                ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.25f, 1.0f),
+                                   "%s", line.c_str());
+            } else {
+                ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.67f, 1.0f),
+                                   "%s", line.c_str());
+            }
+        }
+    }
+    // Auto-scroll to bottom
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20)
+        ImGui::SetScrollHereY(1.0f);
+
+    ImGui::End();
+}
+
+// ---------------------------------------------------------------------------
 //  Filter Panel (volume, price, percent change filters)
 // ---------------------------------------------------------------------------
 void AppGui::drawFilterPanel() {
@@ -2107,10 +2284,15 @@ void AppGui::drawFilterPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
     auto layout = layoutMgr_.get("Volume Delta");
-    LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Volume Delta", layout.pos, layout.size);
 
-    if (!ImGui::Begin("Volume Delta", nullptr,
-            LayoutManager::lockedScrollFlags())) {
+    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+    wflags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+    if (!ImGui::Begin("Volume Delta", nullptr, wflags)) {
         ImGui::End();
         return;
     }
@@ -2129,6 +2311,28 @@ void AppGui::drawVolumeDeltaPanel() {
         ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
         IM_COL32(20, 20, 25, 255));
 
+    // Zoom / Pan interaction
+    if (ImGui::IsWindowHovered()) {
+        ImGuiIO& io = ImGui::GetIO();
+        float wheel = io.MouseWheel;
+        if (wheel != 0.0f) {
+            if (io.KeyShift) {
+                // Shift+Wheel: zoom Y
+                vdZoomY_ *= (wheel > 0) ? 1.1f : 0.9f;
+                vdZoomY_ = std::clamp(vdZoomY_, 0.2f, 5.0f);
+            } else {
+                // Wheel: zoom X
+                vdZoomX_ *= (wheel > 0) ? 1.1f : 0.9f;
+                vdZoomX_ = std::clamp(vdZoomX_, 0.2f, 5.0f);
+            }
+        }
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            ImVec2 delta = io.MouseDelta;
+            vdPanX_ += delta.x;
+            vdPanY_ += delta.y;
+        }
+    }
+
     std::lock_guard<std::mutex> lk(stateMutex_);
     int count = (int)volumeDeltaHistory_.size();
     if (count < 1) { ImGui::End(); return; }
@@ -2146,24 +2350,28 @@ void AppGui::drawVolumeDeltaPanel() {
     float w = canvasSize.x;
     float h = canvasSize.y;
     float gap   = 1.0f;
-    float barW  = std::max(2.0f, (w - gap * (float)(count - 1)) / (float)count);
+    float barW  = std::max(2.0f, (w / vdZoomX_ - gap * (float)(count - 1)) / (float)count) * vdZoomX_;
     float step  = barW + gap;
     // If bars still overflow, clamp to fit
-    if (step * (float)count > w) {
-        step = w / (float)count;
+    if (step * (float)count > w * vdZoomX_) {
+        step = (w * vdZoomX_) / (float)count;
         barW = std::max(1.0f, step - gap);
     }
-    float midY = canvasPos.y + h * 0.5f;
+    float midY = canvasPos.y + h * 0.5f + vdPanY_;
 
     // Zero baseline
-    dl->AddLine(ImVec2(canvasPos.x, midY),
-                ImVec2(canvasPos.x + w, midY),
+    dl->AddLine(ImVec2(canvasPos.x, canvasPos.y + h * 0.5f),
+                ImVec2(canvasPos.x + w, canvasPos.y + h * 0.5f),
                 IM_COL32(80, 80, 85, 150), 1.0f);
 
+    // Clip rendering to canvas
+    dl->PushClipRect(canvasPos,
+        ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), true);
+
     for (int i = 0; i < count; ++i) {
-        float x = canvasPos.x + (float)i * step;
+        float x = canvasPos.x + (float)i * step + vdPanX_;
         double val = normalizedDelta[i];
-        float barH = (float)(std::abs(val) / maxAbs) * (h * 0.48f);
+        float barH = (float)(std::abs(val) / maxAbs) * (h * 0.48f) * vdZoomY_;
 
         ImU32 col = (val >= 0)
             ? IM_COL32(40, 180, 80, 200)   // green — buy pressure
@@ -2178,6 +2386,17 @@ void AppGui::drawVolumeDeltaPanel() {
         }
     }
 
+    dl->PopClipRect();
+
+    // Zoom info
+    {
+        char info[64];
+        snprintf(info, sizeof(info), "Zoom X:%.0f%% Y:%.0f%%",
+                 vdZoomX_ * 100.0f, vdZoomY_ * 100.0f);
+        dl->AddText(ImVec2(canvasPos.x + 4, canvasPos.y + h - 14),
+                    IM_COL32(100, 100, 105, 180), info);
+    }
+
     ImGui::Dummy(canvasSize);
     ImGui::End();
 }
@@ -2186,14 +2405,20 @@ void AppGui::drawVolumeDeltaPanel() {
 //  Order Book Panel (Стакан / Биржевой стакан)
 // ---------------------------------------------------------------------------
 void AppGui::drawOrderBookPanel() {
+    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Order Book", &showOrderBook_)) {
+        ImGui::End();
+        return;
+    }
+
     GuiState snap;
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
         snap = state_;
     }
 
-    if (ImGui::CollapsingHeader("Order Book", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::BeginChild("##OrderBook", ImVec2(0, 260), ImGuiChildFlags_Border);
+    {
+        ImGui::BeginChild("##OrderBook", ImVec2(0, 0), ImGuiChildFlags_Border);
 
         // Find max quantity for bar scaling
         double maxQty = 1.0;
@@ -2272,6 +2497,8 @@ void AppGui::drawOrderBookPanel() {
 
         ImGui::EndChild();
     }
+
+    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------

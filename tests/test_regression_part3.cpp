@@ -91,6 +91,7 @@ TEST(LayoutManager, RecalculateCreatesLayouts) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
 
+    EXPECT_TRUE(mgr.hasLayout("Logs"));
     EXPECT_TRUE(mgr.hasLayout("Volume Delta"));
     EXPECT_TRUE(mgr.hasLayout("Market Data"));
     EXPECT_TRUE(mgr.hasLayout("Indicators"));
@@ -111,10 +112,13 @@ TEST(LayoutManager, WindowsDoNotOverlap) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
 
+    auto log = mgr.get("Logs");
     auto vd = mgr.get("Volume Delta");
     auto md = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
 
+    // Logs should be above Volume Delta
+    EXPECT_LT(log.pos.y + log.size.y, vd.pos.y + 10);
     // Volume Delta should be above Market Data
     EXPECT_LT(vd.pos.y + vd.size.y, md.pos.y + 10);
     // Market Data should be above Indicators
@@ -135,6 +139,66 @@ TEST(LayoutManager, DifferentScreenSizesProduceDifferentLayouts) {
 
 TEST(LayoutManager, HasLayoutFalseBeforeRecalculate) {
     LayoutManager mgr;
+    EXPECT_FALSE(mgr.hasLayout("Logs"));
     EXPECT_FALSE(mgr.hasLayout("Volume Delta"));
     EXPECT_FALSE(mgr.hasLayout("Market Data"));
+}
+
+TEST(LayoutManager, MarketDataIsTallest) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+
+    auto log = mgr.get("Logs");
+    auto vd  = mgr.get("Volume Delta");
+    auto md  = mgr.get("Market Data");
+    auto ind = mgr.get("Indicators");
+
+    EXPECT_GT(md.size.y, log.size.y);
+    EXPECT_GT(md.size.y, vd.size.y);
+    EXPECT_GT(md.size.y, ind.size.y);
+}
+
+TEST(LayoutManager, WindowsAreFullWidth) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+
+    auto log = mgr.get("Logs");
+    auto vd  = mgr.get("Volume Delta");
+    auto md  = mgr.get("Market Data");
+    auto ind = mgr.get("Indicators");
+
+    // All windows should have the same width (full width minus margins)
+    EXPECT_FLOAT_EQ(log.size.x, vd.size.x);
+    EXPECT_FLOAT_EQ(vd.size.x, md.size.x);
+    EXPECT_FLOAT_EQ(md.size.x, ind.size.x);
+
+    // Width should be close to screen width
+    EXPECT_GT(log.size.x, 1900.0f);
+}
+
+TEST(LayoutManager, CustomProportions) {
+    LayoutManager mgr;
+    mgr.setLogPct(0.15f);
+    mgr.setVdPct(0.10f);
+    mgr.setIndPct(0.20f);
+    mgr.recalculate(1920, 1080);
+
+    EXPECT_FLOAT_EQ(mgr.logPct(), 0.15f);
+    EXPECT_FLOAT_EQ(mgr.vdPct(),  0.10f);
+    EXPECT_FLOAT_EQ(mgr.indPct(), 0.20f);
+
+    auto log = mgr.get("Logs");
+    auto md  = mgr.get("Market Data");
+    // Market Data should still be tallest (gets remaining space)
+    EXPECT_GT(md.size.y, log.size.y);
+}
+
+TEST(LayoutManager, LogsWindowExists) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+
+    auto log = mgr.get("Logs");
+    EXPECT_EQ(log.name, "Logs");
+    EXPECT_GT(log.size.x, 0);
+    EXPECT_GT(log.size.y, 0);
 }
