@@ -40,9 +40,7 @@ void CandleCache::initSchema() {
         "  volume    REAL NOT NULL,"
         "  trades    INTEGER NOT NULL DEFAULT 0,"
         "  PRIMARY KEY (exchange, symbol, interval, openTime)"
-        ");"
-        "CREATE INDEX IF NOT EXISTS idx_candles_lookup "
-        "ON candles(exchange, symbol, interval, openTime);";
+        ");";
 
     char* errMsg = nullptr;
     int rc = sqlite3_exec(db_, sql, nullptr, nullptr, &errMsg);
@@ -88,7 +86,10 @@ void CandleCache::store(const std::string& exchange,
         sqlite3_bind_double(stmt, 10, c.volume);
         sqlite3_bind_int64(stmt, 11, c.trades);
 
-        sqlite3_step(stmt);
+        int stepRc = sqlite3_step(stmt);
+        if (stepRc != SQLITE_DONE && stepRc != SQLITE_ROW) {
+            Logger::get()->warn("CandleCache::store step failed: {}", sqlite3_errmsg(db_));
+        }
         sqlite3_reset(stmt);
     }
 

@@ -2,6 +2,7 @@
 #include "../src/data/CandleCache.h"
 #include <cstdio>
 #include <string>
+#include <random>
 
 using namespace crypto;
 
@@ -10,7 +11,10 @@ namespace {
 // Helper: create a temporary DB path and clean up after test
 struct TempDB {
     std::string path;
-    TempDB() : path("/tmp/test_candle_cache_" + std::to_string(std::rand()) + ".db") {}
+    TempDB() {
+        std::random_device rd;
+        path = "/tmp/test_candle_cache_" + std::to_string(rd()) + ".db";
+    }
     ~TempDB() { std::remove(path.c_str()); }
 };
 
