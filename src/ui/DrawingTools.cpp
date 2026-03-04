@@ -1,7 +1,11 @@
 #include "DrawingTools.h"
 #include <algorithm>
 #include <fstream>
+#ifdef _WIN32
+#include <direct.h>
+#else
 #include <sys/stat.h>
+#endif
 
 namespace crypto {
 
