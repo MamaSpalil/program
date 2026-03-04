@@ -855,6 +855,21 @@ void AppGui::drawMarketDataWindow() {
             addLog("[Export] Saved " + fname);
     }
 
+    // ── Connection/WS status indicator (right side of toolbar) ──
+    {
+        ImGui::SameLine();
+        float statusPosX = ImGui::GetWindowWidth() - 110.0f;
+        if (ImGui::GetCursorPosX() < statusPosX)
+            ImGui::SetCursorPosX(statusPosX);
+        if (snap.connected && snap.trading) {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s LIVE", u8"\u25CF");
+        } else if (snap.connected) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%s IDLE", u8"\u25CF");
+        } else {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s OFFLINE", u8"\u25CF");
+        }
+    }
+
     // ── Candlestick chart ──
 
     // КРИТИЧНО: получить реальный доступный размер ПОСЛЕ отрисовки тулбара
@@ -887,13 +902,17 @@ void AppGui::drawMarketDataWindow() {
         float rsiH   = totalH * 0.15f;
         ImVec2 canvasSize = ImVec2(availSize.x, totalH);
 
-        // Диагностика
-        Logger::get()->debug("[MarketData] bars_.size()       = {}", snap.candleHistory.size());
-        Logger::get()->debug("[MarketData] plotSize           = {}x{}", canvasSize.x, canvasSize.y);
-        Logger::get()->debug("[MarketData] first bar time     = {}", snap.candleHistory.front().openTime);
-        Logger::get()->debug("[MarketData] last bar time      = {}", snap.candleHistory.back().openTime);
-        Logger::get()->debug("[MarketData] first bar open     = {}", snap.candleHistory.front().open);
-        Logger::get()->debug("[MarketData] first bar close    = {}", snap.candleHistory.front().close);
+        // Throttled diagnostics — log once every ~5 seconds (300 frames at 60fps)
+        {
+            static int diagCounter = 0;
+            if (++diagCounter >= 300) {
+                diagCounter = 0;
+                Logger::get()->debug("[MarketData] bars={} plotSize={}x{} first.time={} last.time={} first.open={} first.close={}",
+                    snap.candleHistory.size(), canvasSize.x, canvasSize.y,
+                    snap.candleHistory.front().openTime, snap.candleHistory.back().openTime,
+                    snap.candleHistory.front().open, snap.candleHistory.front().close);
+            }
+        }
 
         int totalCount = (int)snap.candleHistory.size();
 
@@ -960,10 +979,6 @@ void AppGui::drawMarketDataWindow() {
         pMin -= padding;
         pMax += padding;
         range = pMax - pMin;
-
-        // Диагностика осей
-        Logger::get()->debug("[MarketData] axisYmin           = {}", pMin);
-        Logger::get()->debug("[MarketData] axisYmax           = {}", pMax);
 
         // Проверить что значения корректны
         if (pMin >= pMax || !std::isfinite(pMin) || !std::isfinite(pMax)) {
@@ -1144,7 +1159,7 @@ void AppGui::drawMarketDataWindow() {
             }
         }
 
-        // ── 5.3: Crosshair with price label ──
+        // ── 5.3: Crosshair with price label, time label, and OHLCV tooltip ──
         if (hovered) {
             ImVec2 mouse = ImGui::GetMousePos();
             float mx = mouse.x, my = mouse.y;
@@ -1166,6 +1181,63 @@ void AppGui::drawMarketDataWindow() {
                                         IM_COL32(80, 80, 90, 200));
                     draw->AddText(ImVec2(p.x + chartW + 4, my - 6),
                                   IM_COL32(240, 240, 245, 255), crossLabel);
+                }
+
+                // Find nearest visible bar to cursor X
+                int nearestIdx = -1;
+                float nearestDist = FLT_MAX;
+                for (int i = startIdx; i < endIdx; ++i) {
+                    int vi = i - startIdx;
+                    float bx = p.x + 2.0f + (float)vi * barStep + halfBar;
+                    float dist = std::abs(mx - bx);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearestIdx = i;
+                    }
+                }
+
+                // Time label at bottom of chart (under crosshair X position)
+                if (nearestIdx >= 0 && nearestIdx < (int)snap.candleHistory.size()) {
+                    auto& nearBar = snap.candleHistory[nearestIdx];
+                    // Time label at crosshair X position
+                    time_t barTimeSec = (time_t)(nearBar.openTime / 1000);
+                    struct tm tmBuf{};
+#ifdef _WIN32
+                    bool tmOk = (localtime_s(&tmBuf, &barTimeSec) == 0);
+#else
+                    bool tmOk = (localtime_r(&barTimeSec, &tmBuf) != nullptr);
+#endif
+                    char timeBuf[32];
+                    if (tmOk) {
+                        strftime(timeBuf, sizeof(timeBuf), " %H:%M ", &tmBuf);
+                    } else {
+                        snprintf(timeBuf, sizeof(timeBuf), " --:-- ");
+                    }
+                    float timeLabelW = 50.0f;
+                    float tlx = mx - timeLabelW * 0.5f;
+                    float tly = p.y + totalH - 16.0f;
+                    draw->AddRectFilled(ImVec2(tlx, tly),
+                                        ImVec2(tlx + timeLabelW, tly + 16.0f),
+                                        IM_COL32(40, 40, 50, 220));
+                    draw->AddText(ImVec2(tlx + 3.0f, tly + 2.0f),
+                                  IM_COL32(240, 240, 245, 255), timeBuf);
+
+                    // OHLCV tooltip
+                    ImGui::BeginTooltip();
+                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
+                        "O: %.4f  H: %.4f", nearBar.open, nearBar.high);
+                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
+                        "L: %.4f  C: %.4f", nearBar.low, nearBar.close);
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f),
+                        "Vol: %.2f", nearBar.volume);
+                    char dateBuf[64];
+                    if (tmOk) {
+                        strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d %H:%M", &tmBuf);
+                    } else {
+                        snprintf(dateBuf, sizeof(dateBuf), "--");
+                    }
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "%s", dateBuf);
+                    ImGui::EndTooltip();
                 }
             }
         }
