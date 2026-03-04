@@ -127,18 +127,24 @@ void Engine::initComponents() {
     db.setActiveProfile(name);
     db.save();
 
+    // Determine mode for data isolation (LIVE vs Paper)
+    // Validate mode against known values for path safety
+    std::string mode = config_["trading"].value("mode", "paper");
+    if (mode != "paper" && mode != "live") mode = "paper";
+
     impl_->feed     = std::make_unique<DataFeed>(500);
     impl_->strategy = std::make_unique<MLEnhancedStrategy>(
         config_, config_["trading"].value("initial_capital", 1000.0));
     impl_->dashboard = std::make_unique<Dashboard>();
 
-    // Trade statistics database (per-exchange)
-    impl_->tradeDB = std::make_unique<ExchangeDB>("config/trades_" + name + ".json");
+    // Trade statistics database (per-exchange, per-mode)
+    impl_->tradeDB = std::make_unique<ExchangeDB>("config/trades_" + name + "_" + mode + ".json");
     impl_->tradeDB->load();
 
-    // Local candle cache (SQLite3)
+    // Local candle cache (SQLite3) — use mode-qualified exchange name
+    // so LIVE and Paper data are stored independently
     impl_->candleCache = std::make_unique<CandleCache>("config/candles.db");
-    impl_->exchangeName = name;
+    impl_->exchangeName = name + "_" + mode;
 
     // Load user Pine Script indicators
     std::string indicatorDir = config_.value("user_indicator_dir", "user_indicator");
@@ -244,8 +250,11 @@ void Engine::run() {
             impl_->strategy->onCandle(c);
             if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
         }
-        // Update dashboard with last historical candle state
+        // Populate candle history with all historical candles so the chart can display them.
+        // Assign all except the last because updateDashboard() (line ~284) calls
+        // push_back(c), which will add the final candle to complete the history.
         if (!hist.empty()) {
+            impl_->candleHistory.assign(hist.begin(), std::prev(hist.end()));
             updateDashboard(hist.back());
         }
     } catch (const std::exception& e) {
@@ -450,7 +459,11 @@ void Engine::reloadCandles(const std::string& symbol, const std::string& interva
             for (auto& c : hist) impl_->userIndicators->updateAll(c);
         }
 
+        // Populate candle history with all historical candles so the chart can display them.
+        // Assign all except the last because updateDashboard() calls push_back(c),
+        // which will add the final candle to complete the history.
         if (!hist.empty()) {
+            impl_->candleHistory.assign(hist.begin(), std::prev(hist.end()));
             updateDashboard(hist.back());
         }
     } catch (const std::exception& e) {
