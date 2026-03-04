@@ -128,7 +128,9 @@ void Engine::initComponents() {
     db.save();
 
     // Determine mode for data isolation (LIVE vs Paper)
+    // Validate mode against known values for path safety
     std::string mode = config_["trading"].value("mode", "paper");
+    if (mode != "paper" && mode != "live") mode = "paper";
 
     impl_->feed     = std::make_unique<DataFeed>(500);
     impl_->strategy = std::make_unique<MLEnhancedStrategy>(
