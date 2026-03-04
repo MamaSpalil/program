@@ -5,6 +5,31 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-03-04
+
+### Added
+
+#### Configurable Fixed Window Layout with imgui.ini Persistence
+
+- **Standalone Logs window** — new `drawLogWindow()` renders logs as a full-width top-level ImGui window with vertical scroll; replaces inline log panel from center column; color-coded log lines (Error/SELL red, BUY/OK green, Config/Info blue, Warn yellow); auto-scroll to bottom on new entries
+- **Full-width stacked layout** — four main windows arranged vertically: Logs (top) → Volume Delta → Market Data (tallest) → Indicators (bottom); all windows span full viewport width; no overlapping; gap spacing between windows
+- **Layout tab in Settings** — new "Layout" tab in Settings panel with height proportion sliders for Logs, Volume Delta, and Indicators; Market Data automatically gets remaining space; lock/unlock toggle; "Apply Layout" and "Reset Layout to Defaults" buttons; saves configuration on apply
+- **imgui.ini persistence** — window positions and sizes saved to `config/imgui.ini` via ImGui's built-in persistence; `lockWindowOnce()` uses `ImGuiCond_FirstUseEver` to respect saved positions; `lockWindow()` uses `ImGuiCond_Always` for forced reset; `SaveIniSettingsToDisk()` called on layout apply
+- **Layout config in settings.json** — layout proportions (`log_pct`, `vd_pct`, `ind_pct`) and lock state persisted in settings.json under `"layout"` key; loaded on startup, saved on apply
+- **Volume Delta zoom/pan** — mouse wheel to zoom X axis (Shift+wheel for Y axis); left-click drag to pan; clip rect prevents rendering outside canvas bounds; zoom info overlay shows current X/Y zoom percentages
+- **Indicators zoom/pan** — mouse wheel to zoom X axis (Shift+wheel for Y axis); left-click drag to pan; scrollable child area with zoom-scaled virtual dimensions; zoom info bar at bottom
+- **Standalone Order Book window** — Order Book panel converted from inline collapsible header to standalone ImGui::Begin() window; toggled via toolbar button; closeable via window title bar
+
+#### Tests
+
+- **test_regression_part3.cpp** — 5 new LayoutManager tests: `MarketDataIsTallest` verifies Market Data has the largest height; `WindowsAreFullWidth` checks all windows have equal full width; `CustomProportions` validates setter/getter for layout proportions; `LogsWindowExists` confirms Logs window is created; `HasLayoutFalseBeforeRecalculate` extended with Logs check; existing `RecalculateCreatesLayouts` and `WindowsDoNotOverlap` updated to include Logs window
+
+### Changed
+
+- **LayoutManager.h** — added `lockWindowOnce()` with `ImGuiCond_FirstUseEver` for imgui.ini compatibility; `recalculate()` now computes 4 windows (Logs, Volume Delta, Market Data, Indicators) at full viewport width; height proportions configurable via `setLogPct()`/`setVdPct()`/`setIndPct()` with getters; Market Data gets remaining space after other windows
+- **AppGui.h** — added `drawLogWindow()` declaration; added layout config fields to `GuiConfig` (`layoutLogPct`, `layoutVdPct`, `layoutIndPct`, `layoutLocked`); added `layoutNeedsReset_` flag; added zoom/pan state for Volume Delta (`vdZoomX_`, `vdZoomY_`, `vdPanX_`, `vdPanY_`) and Indicators (`indZoomX_`, `indZoomY_`, `indPanX_`, `indPanY_`)
+- **AppGui.cpp** — `init()` sets explicit `imgui.ini` path in config directory; `renderFrame()` simplified to menu bar + 4 stacked windows; removed three-column layout (PairList/Center/UserPanel); all windows use `lockWindowOnce()` by default, `lockWindow()` when locked or resetting; `configToJson()`/`loadConfig()` serialize/deserialize layout settings; `drawSettingsPanel()` includes Layout tab; `drawOrderBookPanel()` converted to standalone window
+
 ## [1.4.1] - 2026-03-04
 
 ### Added

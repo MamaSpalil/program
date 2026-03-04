@@ -180,6 +180,12 @@ struct GuiConfig {
 
     // User indicator dir
     std::string userIndicatorDir{"user_indicator"};
+
+    // Layout proportions (height fraction of available space)
+    float layoutLogPct{0.10f};
+    float layoutVdPct{0.13f};
+    float layoutIndPct{0.25f};
+    bool  layoutLocked{false};  // when true, windows cannot be moved/resized
 };
 
 class AppGui {
@@ -249,6 +255,7 @@ private:
     void drawPortfolioPanel();
     void drawSettingsPanel();
     void drawLogPanel();
+    void drawLogWindow();  // standalone log window (fixed layout)
     void drawStatusBar();
     void drawFilterPanel();
     void drawUserIndicatorDashboard();
@@ -407,6 +414,21 @@ private:
 
     // Layout manager for fixed windows
     LayoutManager layoutMgr_;
+
+    // Layout reset flag: when true, force window positions to defaults on next frame
+    bool layoutNeedsReset_{true};
+
+    // Volume Delta zoom/pan state
+    float vdZoomX_{1.0f};
+    float vdZoomY_{1.0f};
+    float vdPanX_{0.0f};
+    float vdPanY_{0.0f};
+
+    // Indicators zoom/pan state
+    float indZoomX_{1.0f};
+    float indZoomY_{1.0f};
+    float indPanX_{0.0f};
+    float indPanY_{0.0f};
 };
 
 } // namespace crypto
