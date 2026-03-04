@@ -7,6 +7,7 @@
 #include "../exchange/KuCoinExchange.h"
 #include "../data/DataFeed.h"
 #include "../data/ExchangeDB.h"
+#include "../data/CandleCache.h"
 #include "../strategy/MLEnhancedStrategy.h"
 #include "../indicators/UserIndicatorManager.h"
 #include "../ui/Dashboard.h"
@@ -14,6 +15,8 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <set>
+#include <algorithm>
 
 namespace crypto {
 
@@ -24,6 +27,8 @@ struct Engine::Impl {
     std::unique_ptr<Dashboard>              dashboard;
     std::unique_ptr<UserIndicatorManager>   userIndicators;
     std::unique_ptr<ExchangeDB>             tradeDB;
+    std::unique_ptr<CandleCache>            candleCache;
+    std::string                             exchangeName;
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
     int                                     maxCandleHistory{5000}; // minimum 5000 bars for full chart visualization
@@ -131,6 +136,10 @@ void Engine::initComponents() {
     impl_->tradeDB = std::make_unique<ExchangeDB>("config/trades_" + name + ".json");
     impl_->tradeDB->load();
 
+    // Local candle cache (SQLite3)
+    impl_->candleCache = std::make_unique<CandleCache>("config/candles.db");
+    impl_->exchangeName = name;
+
     // Load user Pine Script indicators
     std::string indicatorDir = config_.value("user_indicator_dir", "user_indicator");
     impl_->userIndicators = std::make_unique<UserIndicatorManager>(indicatorDir);
@@ -177,11 +186,59 @@ void Engine::run() {
         symbol, interval, trading.value("mode", "paper"),
         impl_->maxCandleHistory);
 
-    // Load historical candles — request maximum available for deep analysis
+    // Load historical candles — use local cache, then fetch only missing bars from API
     try {
         int requestLimit = impl_->maxCandleHistory;
-        auto hist = impl_->exchange->getKlines(symbol, interval, requestLimit);
-        Logger::get()->info("Loaded {} historical candles", hist.size());
+        std::vector<Candle> hist;
+
+        // 1. Load cached candles from local SQLite DB
+        if (impl_->candleCache) {
+            hist = impl_->candleCache->load(impl_->exchangeName, symbol, interval);
+            if (!hist.empty()) {
+                Logger::get()->info("Loaded {} cached candles from local DB", hist.size());
+            }
+        }
+
+        // 2. Fetch only missing (newer) bars from the exchange API
+        std::vector<Candle> fresh;
+        if (static_cast<int>(hist.size()) < requestLimit) {
+            fresh = impl_->exchange->getKlines(symbol, interval, requestLimit);
+            Logger::get()->info("Fetched {} candles from API", fresh.size());
+        }
+
+        // 3. Merge: combine cached + fresh, deduplicate by openTime
+        if (!fresh.empty()) {
+            // Build set of existing openTimes for fast lookup
+            std::set<int64_t> existing;
+            for (const auto& c : hist) existing.insert(c.openTime);
+
+            int newCount = 0;
+            for (const auto& c : fresh) {
+                if (existing.find(c.openTime) == existing.end()) {
+                    hist.push_back(c);
+                    existing.insert(c.openTime);
+                    ++newCount;
+                }
+            }
+            // Sort by openTime after merge
+            std::sort(hist.begin(), hist.end(),
+                      [](const Candle& a, const Candle& b) { return a.openTime < b.openTime; });
+
+            // 4. Persist all candles (fresh + merged) to local cache
+            if (impl_->candleCache) {
+                impl_->candleCache->store(impl_->exchangeName, symbol, interval, hist);
+            }
+            if (newCount > 0) {
+                Logger::get()->info("Added {} new candles to local cache", newCount);
+            }
+        }
+
+        // Trim to maxCandleHistory if we accumulated more than needed
+        if (static_cast<int>(hist.size()) > requestLimit) {
+            hist.erase(hist.begin(), hist.begin() + (static_cast<int>(hist.size()) - requestLimit));
+        }
+
+        Logger::get()->info("Using {} historical candles total", hist.size());
         for (auto& c : hist) {
             impl_->feed->onCandle(c);
             impl_->strategy->onCandle(c);
@@ -341,8 +398,47 @@ void Engine::reloadCandles(const std::string& symbol, const std::string& interva
 
     try {
         int requestLimit = impl_->maxCandleHistory;
-        auto hist = impl_->exchange->getKlines(symbol, interval, requestLimit);
-        Logger::get()->info("[Engine] Loaded {} historical candles for {}", hist.size(), symbol);
+        std::vector<Candle> hist;
+
+        // 1. Load cached candles from local SQLite DB
+        if (impl_->candleCache) {
+            hist = impl_->candleCache->load(impl_->exchangeName, symbol, interval);
+            if (!hist.empty()) {
+                Logger::get()->info("[Engine] Loaded {} cached candles for {}", hist.size(), symbol);
+            }
+        }
+
+        // 2. Fetch from API
+        std::vector<Candle> fresh;
+        if (static_cast<int>(hist.size()) < requestLimit) {
+            fresh = impl_->exchange->getKlines(symbol, interval, requestLimit);
+            Logger::get()->info("[Engine] Fetched {} candles from API for {}", fresh.size(), symbol);
+        }
+
+        // 3. Merge cached + fresh, deduplicate by openTime
+        if (!fresh.empty()) {
+            std::set<int64_t> existing;
+            for (const auto& c : hist) existing.insert(c.openTime);
+            for (const auto& c : fresh) {
+                if (existing.find(c.openTime) == existing.end()) {
+                    hist.push_back(c);
+                    existing.insert(c.openTime);
+                }
+            }
+            std::sort(hist.begin(), hist.end(),
+                      [](const Candle& a, const Candle& b) { return a.openTime < b.openTime; });
+
+            if (impl_->candleCache) {
+                impl_->candleCache->store(impl_->exchangeName, symbol, interval, hist);
+            }
+        }
+
+        // Trim to maxCandleHistory
+        if (static_cast<int>(hist.size()) > requestLimit) {
+            hist.erase(hist.begin(), hist.begin() + (static_cast<int>(hist.size()) - requestLimit));
+        }
+
+        Logger::get()->info("[Engine] Using {} candles total for {}", hist.size(), symbol);
 
         if (impl_->feed) {
             for (auto& c : hist) impl_->feed->onCandle(c);

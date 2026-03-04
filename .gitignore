@@ -18,3 +18,4 @@ logs/
 *.ilk
 *.exp
 *.generated.h
+*.db

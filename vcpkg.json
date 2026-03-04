@@ -13,6 +13,7 @@
     "eigen3",
     "gtest",
     "glfw3",
-    "opengl"
+    "opengl",
+    "sqlite3"
   ]
 }
