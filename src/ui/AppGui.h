@@ -15,6 +15,7 @@
 #include "../data/CSVExporter.h"
 #include "../indicators/PineVisuals.h"
 #include "../security/KeyVault.h"
+#include "LayoutManager.h"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <mutex>
@@ -115,6 +116,9 @@ struct GuiState {
     // Equity curve points (M2)
     std::vector<double> equityCurveData;
     std::vector<double> equityCurveTimes;
+
+    // Geo-blocking: alternative endpoint in use
+    bool usingAltEndpoint{false};
 };
 
 // Configuration that can be edited through the GUI
@@ -400,6 +404,9 @@ private:
     // Equity curve history (M2)
     std::deque<double> equityCurveValues_;
     std::deque<double> equityCurveTsMs_;
+
+    // Layout manager for fixed windows
+    LayoutManager layoutMgr_;
 };
 
 } // namespace crypto

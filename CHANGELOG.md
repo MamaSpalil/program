@@ -5,6 +5,32 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-03-04
+
+### Added
+
+#### Group 1 — Critical Fix: Geo-blocking Fallback (Balance $0.00)
+
+- **BinanceExchange geo-blocking fallback** — `httpGet()` now detects HTTP 403/451 (geo-blocked) responses and automatically retries with alternative endpoints from `ExchangeEndpointManager`; round-robin through `binanceEndpoints()` (spot) or `binanceFuturesEndpoints()` (futures); logs warning with alternative endpoint URL; adds `replaceBase()` helper for URL domain substitution
+- **Alt endpoint indicator in User Panel** — yellow "⚠ Alt endpoint" text displayed in User Panel connection status when an alternative endpoint is being used; `GuiState::usingAltEndpoint` flag propagated from `BinanceExchange::isUsingAltEndpoint()`
+- **BinanceExchange public accessor** — `isUsingAltEndpoint()` method exposed for UI display
+
+#### Group 2 — Fixed Windows with Scrollable Content (LayoutManager)
+
+- **LayoutManager** (`src/ui/LayoutManager.h`) — header-only layout manager for fixed ImGui windows; `lockWindow()` applies `ImGuiCond_Always` position/size each frame; `lockedFlags()` returns NoMove|NoResize|NoCollapse|NoBringToFrontOnFocus; `lockedScrollFlags()` adds HorizontalScrollbar; `recalculate(screenW, screenH)` computes dynamic positions for Volume Delta, Market Data, and Indicators windows; `get(name)` returns layout by window name; `hasLayout(name)` checks existence; falls back to stub types in non-GUI test builds
+- **Fixed window layout** — Volume Delta, Market Data, and Indicators windows are now locked (no move, no resize, no collapse) with content scrolling enabled; positions dynamically recalculated each frame based on screen dimensions
+
+#### Tests
+
+- **test_regression_part3.cpp** — 16 tests covering: EndpointManager isGeoBlocked (403, 451, 200, 429), round-robin spot endpoints, round-robin wrapping, futures endpoints existence, BinanceExchange alt endpoint default, LayoutManager locked flags, scroll flags, scroll-includes-locked, recalculate creates layouts, get defaults for unknown, windows do not overlap, different screen sizes, hasLayout before recalculate
+
+### Changed
+
+- **CMakeLists.txt** — added `tests/test_regression_part3.cpp` to test executable
+- **BinanceExchange.h** — added `EndpointManager.h` include, geo-blocking state members (`spotEndpointIdx_`, `futuresEndpointIdx_`, `useAltEndpoint_`), `replaceBase()` helper, and `isUsingAltEndpoint()` public accessor
+- **AppGui.h** — added `LayoutManager.h` include, `LayoutManager layoutMgr_` member, `GuiState::usingAltEndpoint` field
+- **AppGui.cpp** — Volume Delta, Market Data, and Indicators windows now use `LayoutManager::lockWindow()` and locked flags instead of `ImGuiCond_FirstUseEver` positioning; layout recalculated each frame in `renderFrame()`
+
 ## [1.4.0] - 2026-03-04
 
 ### Added
