@@ -388,7 +388,7 @@ private:
     MarketScanner scanner_;
 
     // L3 — Pine Editor state
-    char pineCode_[65536]{};
+    char pineCode_[100001]{};
     std::string pineEditorError_;
 
     // Trade History

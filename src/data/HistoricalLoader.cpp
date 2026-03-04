@@ -9,6 +9,13 @@
 
 namespace crypto {
 
+namespace {
+inline double safeStod(const std::string& s, double defaultVal = 0.0) {
+    if (s.empty()) return defaultVal;
+    try { return std::stod(s); } catch (...) { return defaultVal; }
+}
+} // namespace
+
 #ifdef USE_CURL
 namespace {
 size_t writeCallback(char* ptr, size_t size, size_t nmemb, std::string* data) {
@@ -59,11 +66,11 @@ std::vector<Candle> HistoricalLoader::parseKlines(const std::string& json) const
     for (auto& k : arr) {
         Candle c;
         c.openTime  = k[0].get<int64_t>();
-        c.open      = std::stod(k[1].get<std::string>());
-        c.high      = std::stod(k[2].get<std::string>());
-        c.low       = std::stod(k[3].get<std::string>());
-        c.close     = std::stod(k[4].get<std::string>());
-        c.volume    = std::stod(k[5].get<std::string>());
+        c.open      = safeStod(k[1].get<std::string>());
+        c.high      = safeStod(k[2].get<std::string>());
+        c.low       = safeStod(k[3].get<std::string>());
+        c.close     = safeStod(k[4].get<std::string>());
+        c.volume    = safeStod(k[5].get<std::string>());
         c.closeTime = k[6].get<int64_t>();
         c.trades    = k[8].get<int64_t>();
         c.closed    = true;

@@ -14,6 +14,18 @@
 
 namespace crypto {
 
+namespace {
+// Safe string-to-double: returns defaultVal for empty or non-numeric strings
+inline double safeStod(const std::string& s, double defaultVal = 0.0) {
+    if (s.empty()) return defaultVal;
+    try {
+        return std::stod(s);
+    } catch (...) {
+        return defaultVal;
+    }
+}
+} // namespace
+
 #ifdef USE_CURL
 namespace {
 size_t writeCallback(char* ptr, size_t size, size_t nmemb, std::string* data) {
@@ -262,11 +274,11 @@ std::string BinanceExchange::httpPost(const std::string& path,
 Candle BinanceExchange::parseKlineJson(const nlohmann::json& k) const {
     Candle c;
     c.openTime  = k[0].get<int64_t>();
-    c.open      = std::stod(k[1].get<std::string>());
-    c.high      = std::stod(k[2].get<std::string>());
-    c.low       = std::stod(k[3].get<std::string>());
-    c.close     = std::stod(k[4].get<std::string>());
-    c.volume    = std::stod(k[5].get<std::string>());
+    c.open      = safeStod(k[1].get<std::string>());
+    c.high      = safeStod(k[2].get<std::string>());
+    c.low       = safeStod(k[3].get<std::string>());
+    c.close     = safeStod(k[4].get<std::string>());
+    c.volume    = safeStod(k[5].get<std::string>());
     c.closeTime = k[6].get<int64_t>();
     c.trades    = k[8].get<int64_t>();
     c.closed    = true;
@@ -297,7 +309,7 @@ std::vector<Candle> BinanceExchange::getKlines(const std::string& symbol,
 double BinanceExchange::getPrice(const std::string& symbol) {
     Logger::get()->debug("[Binance] getPrice symbol={}", symbol);
     auto json = nlohmann::json::parse(httpGet("/api/v3/ticker/price?symbol=" + symbol));
-    double price = std::stod(json["price"].get<std::string>());
+    double price = safeStod(json["price"].get<std::string>());
     Logger::get()->debug("[Binance] getPrice result={}", price);
     return price;
 }
@@ -320,8 +332,8 @@ OrderResponse BinanceExchange::placeOrder(const OrderRequest& req) {
     OrderResponse resp;
     resp.orderId      = json.contains("orderId") ? std::to_string(json["orderId"].get<long>()) : "";
     resp.status       = json.value("status", "UNKNOWN");
-    resp.executedQty  = std::stod(json.value("executedQty", "0"));
-    resp.executedPrice= std::stod(json.value("price", "0"));
+    resp.executedQty  = safeStod(json.value("executedQty", "0"));
+    resp.executedPrice= safeStod(json.value("price", "0"));
     return resp;
 }
 
@@ -330,7 +342,7 @@ AccountBalance BinanceExchange::getBalance() {
     AccountBalance bal;
     for (auto& asset : json["balances"]) {
         std::string a = asset["asset"].get<std::string>();
-        double free = std::stod(asset["free"].get<std::string>());
+        double free = safeStod(asset["free"].get<std::string>());
         if (a == "USDT") bal.availableUSDT = bal.totalUSDT = free;
         if (a == "BTC")  bal.btcBalance = free;
     }
@@ -345,11 +357,11 @@ void BinanceExchange::onWsMessage(const std::string& msg) {
         Candle c;
         c.openTime  = k["t"].get<int64_t>();
         c.closeTime = k["T"].get<int64_t>();
-        c.open      = std::stod(k["o"].get<std::string>());
-        c.high      = std::stod(k["h"].get<std::string>());
-        c.low       = std::stod(k["l"].get<std::string>());
-        c.close     = std::stod(k["c"].get<std::string>());
-        c.volume    = std::stod(k["v"].get<std::string>());
+        c.open      = safeStod(k["o"].get<std::string>());
+        c.high      = safeStod(k["h"].get<std::string>());
+        c.low       = safeStod(k["l"].get<std::string>());
+        c.close     = safeStod(k["c"].get<std::string>());
+        c.volume    = safeStod(k["v"].get<std::string>());
         c.trades    = k["n"].get<int64_t>();
         c.closed    = k["x"].get<bool>();
         if (klineCb_) klineCb_(c);
@@ -470,14 +482,14 @@ OrderBook BinanceExchange::getOrderBook(const std::string& symbol, int depth) {
         ob.lastUpdateId = json.value("lastUpdateId", (int64_t)0);
         for (auto& b : json["bids"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(b[0].get<std::string>());
-            lvl.qty   = std::stod(b[1].get<std::string>());
+            lvl.price = safeStod(b[0].get<std::string>());
+            lvl.qty   = safeStod(b[1].get<std::string>());
             ob.bids.push_back(lvl);
         }
         for (auto& a : json["asks"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(a[0].get<std::string>());
-            lvl.qty   = std::stod(a[1].get<std::string>());
+            lvl.price = safeStod(a[0].get<std::string>());
+            lvl.qty   = safeStod(a[1].get<std::string>());
             ob.asks.push_back(lvl);
         }
         Logger::get()->debug("[Binance] getOrderBook bids={} asks={}", ob.bids.size(), ob.asks.size());
@@ -512,9 +524,9 @@ std::vector<OpenOrderInfo> BinanceExchange::getOpenOrders(const std::string& sym
             info.symbol     = o.value("symbol", "");
             info.side       = o.value("side", "");
             info.type       = o.value("type", "");
-            info.price      = std::stod(o.value("price", "0"));
-            info.qty        = std::stod(o.value("origQty", "0"));
-            info.executedQty = std::stod(o.value("executedQty", "0"));
+            info.price      = safeStod(o.value("price", "0"));
+            info.qty        = safeStod(o.value("origQty", "0"));
+            info.executedQty = safeStod(o.value("executedQty", "0"));
             info.time       = o.value("time", (int64_t)0);
             result.push_back(std::move(info));
         }
@@ -548,9 +560,9 @@ std::vector<UserTradeInfo> BinanceExchange::getMyTrades(const std::string& symbo
             info.time           = t.value("time", (int64_t)0);
             info.symbol         = t.value("symbol", "");
             info.side           = t.value("isBuyer", false) ? "BUY" : "SELL";
-            info.price          = std::stod(t.value("price", "0"));
-            info.qty            = std::stod(t.value("qty", "0"));
-            info.commission     = std::stod(t.value("commission", "0"));
+            info.price          = safeStod(t.value("price", "0"));
+            info.qty            = safeStod(t.value("qty", "0"));
+            info.commission     = safeStod(t.value("commission", "0"));
             info.commissionAsset = t.value("commissionAsset", "");
             result.push_back(std::move(info));
         }
@@ -580,11 +592,11 @@ std::vector<PositionInfo> BinanceExchange::getPositionRisk(const std::string& sy
         for (auto& p : j) {
             PositionInfo info;
             info.symbol           = p.value("symbol", "");
-            info.positionAmt      = std::stod(p.value("positionAmt", "0"));
-            info.entryPrice       = std::stod(p.value("entryPrice", "0"));
-            info.unrealizedProfit = std::stod(p.value("unRealizedProfit", "0")); // Binance API uses camelCase "unRealizedProfit"
+            info.positionAmt      = safeStod(p.value("positionAmt", "0"));
+            info.entryPrice       = safeStod(p.value("entryPrice", "0"));
+            info.unrealizedProfit = safeStod(p.value("unRealizedProfit", "0")); // Binance API uses camelCase "unRealizedProfit"
             info.marginType       = p.value("marginType", "");
-            info.leverage         = std::stod(p.value("leverage", "1"));
+            info.leverage         = safeStod(p.value("leverage", "1"));
             result.push_back(std::move(info));
         }
         return result;
@@ -613,16 +625,16 @@ FuturesBalanceInfo BinanceExchange::getFuturesBalance() {
         }
 
         FuturesBalanceInfo info;
-        info.totalWalletBalance    = std::stod(j.value("totalWalletBalance", "0"));
-        info.totalUnrealizedProfit = std::stod(j.value("totalUnrealizedProfit", "0"));
-        info.totalMarginBalance    = std::stod(j.value("totalMarginBalance", "0"));
+        info.totalWalletBalance    = safeStod(j.value("totalWalletBalance", "0"));
+        info.totalUnrealizedProfit = safeStod(j.value("totalUnrealizedProfit", "0"));
+        info.totalMarginBalance    = safeStod(j.value("totalMarginBalance", "0"));
         if (j.contains("positions") && j["positions"].is_array()) {
             for (auto& p : j["positions"]) {
                 PositionInfo pos;
                 pos.symbol           = p.value("symbol", "");
-                pos.positionAmt      = std::stod(p.value("positionAmt", "0"));
-                pos.entryPrice       = std::stod(p.value("entryPrice", "0"));
-                pos.unrealizedProfit = std::stod(p.value("unrealizedProfit", "0")); // /fapi/v2/account uses lowercase
+                pos.positionAmt      = safeStod(p.value("positionAmt", "0"));
+                pos.entryPrice       = safeStod(p.value("entryPrice", "0"));
+                pos.unrealizedProfit = safeStod(p.value("unrealizedProfit", "0")); // /fapi/v2/account uses lowercase
                 info.positions.push_back(std::move(pos));
             }
         }

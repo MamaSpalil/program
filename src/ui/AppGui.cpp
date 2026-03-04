@@ -1,5 +1,6 @@
 #include "AppGui.h"
 #include "../core/Logger.h"
+#include "../indicators/PineConverter.h"
 
 #include "../../third_party/imgui/imgui.h"
 #include "../../third_party/imgui/imgui_impl_glfw.h"
@@ -498,7 +499,7 @@ void AppGui::renderFrame() {
     float totalW = ImGui::GetContentRegionAvail().x;
     float h = ImGui::GetContentRegionAvail().y - 26; // room for status
     float pairListW = 200.0f;
-    float userPanelW = 280.0f;
+    float userPanelW = showUserPanel_ ? 280.0f : 0.0f;
     float centerW = totalW - pairListW - userPanelW - 8.0f; // spacing
 
     // Left column: PairList
@@ -508,27 +509,33 @@ void AppGui::renderFrame() {
 
     ImGui::SameLine();
 
-    // Center column: indicators + other panels
+    // Center column: log panel
     ImGui::BeginChild("##CenterCol", ImVec2(centerW, h), ImGuiChildFlags_None);
-    drawVolumeDeltaPanel();
     if (showOrderBook_) drawOrderBookPanel();
-    drawIndicatorsPanel();
     drawLogPanel();
     ImGui::EndChild();
 
-    ImGui::SameLine();
+    if (showUserPanel_) {
+        ImGui::SameLine();
 
-    // Right column: User Panel (always visible, integrated)
-    ImGui::BeginChild("##UserCol", ImVec2(userPanelW, h), ImGuiChildFlags_Border);
-    drawUserPanel();
-    ImGui::EndChild();
+        // Right column: User Panel (visible when toggled)
+        ImGui::BeginChild("##UserCol", ImVec2(userPanelW, h), ImGuiChildFlags_Border);
+        drawUserPanel();
+        ImGui::EndChild();
+    }
 
     drawStatusBar();
 
     ImGui::End();
 
-    // Market Data window (separate, with chart)
+    // Volume Delta window (separate, resizable)
+    drawVolumeDeltaPanel();
+
+    // Market Data window (separate, with chart — positioned below Volume Delta)
     drawMarketDataWindow();
+
+    // Indicators window (separate, resizable)
+    drawIndicatorsPanel();
 
     // Settings window (modal-like)
     if (showSettings_) drawSettingsPanel();
@@ -780,8 +787,8 @@ void AppGui::drawMarketDataWindow() {
     }
 
     // ── Window size / position (applied only on first launch) ──
-    ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(220, 30), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(900, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(220, 190), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
 
     ImGui::Begin("Market Data", nullptr,
@@ -1361,7 +1368,7 @@ void AppGui::drawMarketDataWindow() {
 }
 
 // ---------------------------------------------------------------------------
-//  Indicators Panel
+//  Indicators Panel — standalone resizable window
 // ---------------------------------------------------------------------------
 void AppGui::drawIndicatorsPanel() {
     GuiState snap;
@@ -1370,106 +1377,111 @@ void AppGui::drawIndicatorsPanel() {
         snap = state_;
     }
 
-    if (ImGui::CollapsingHeader("Indicators", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::BeginChild("##IndChild", ImVec2(0, 200), ImGuiChildFlags_Border);
+    ImGui::SetNextWindowSize(ImVec2(600, 250), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(220, 640), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(300, 100), ImVec2(FLT_MAX, FLT_MAX));
 
-        // EMA
-        if (config_.indEmaEnabled) {
-            ImGui::Columns(3, "##indcols", false);
-            ImGui::TextColored(ImVec4(0.50f, 0.75f, 0.50f, 1.0f), "EMA Fast (%d)", config_.emaFast);
-            ImGui::Text("%.4f", snap.emaFast);
-            ImGui::NextColumn();
-            ImGui::TextColored(ImVec4(0.75f, 0.50f, 0.50f, 1.0f), "EMA Slow (%d)", config_.emaSlow);
-            ImGui::Text("%.4f", snap.emaSlow);
-            ImGui::NextColumn();
-            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.75f, 1.0f), "EMA Trend (%d)", config_.emaTrend);
-            ImGui::Text("%.4f", snap.emaTrend);
-            ImGui::Columns(1);
-            ImGui::Separator();
-        }
-
-        // RSI & ATR & MACD
-        {
-            int cols = 0;
-            if (config_.indRsiEnabled) ++cols;
-            if (config_.indAtrEnabled) ++cols;
-            if (config_.indMacdEnabled) ++cols;
-            if (cols > 0) {
-                ImGui::Columns(std::max(cols, 1), "##indcols2", false);
-
-                if (config_.indRsiEnabled) {
-                    ImGui::Text("RSI (%d)", config_.rsiPeriod);
-                    float rsiVal = (float)snap.rsi;
-                    ImVec4 rsiColor = (rsiVal > 70) ? ImVec4(0.90f, 0.30f, 0.30f, 1.0f) :
-                                      (rsiVal < 30) ? ImVec4(0.30f, 0.90f, 0.30f, 1.0f) :
-                                                      ImVec4(0.80f, 0.80f, 0.30f, 1.0f);
-                    ImGui::TextColored(rsiColor, "%.2f", snap.rsi);
-                    ImGui::NextColumn();
-                }
-                if (config_.indAtrEnabled) {
-                    ImGui::Text("ATR (%d)", config_.atrPeriod);
-                    ImGui::Text("%.4f", snap.atr);
-                    ImGui::NextColumn();
-                }
-                if (config_.indMacdEnabled) {
-                    ImGui::Text("MACD");
-                    ImGui::TextColored(
-                        snap.macd.histogram >= 0
-                            ? ImVec4(0.30f, 0.80f, 0.30f, 1.0f)
-                            : ImVec4(0.80f, 0.30f, 0.30f, 1.0f),
-                        "%.4f (S: %.4f H: %.4f)",
-                        snap.macd.macd, snap.macd.signal, snap.macd.histogram);
-                    ImGui::NextColumn();
-                }
-                ImGui::Columns(1);
-            }
-        }
-
-        // Bollinger Bands
-        if (config_.indBbEnabled) {
-            ImGui::Separator();
-            ImGui::Text("Bollinger Bands (%d, %.1f)", config_.bbPeriod, config_.bbStddev);
-            ImGui::SameLine(220);
-            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.80f, 1.0f),
-                "Upper: %.4f  Mid: %.4f  Lower: %.4f",
-                snap.bb.upper, snap.bb.middle, snap.bb.lower);
-        }
-
-        // RSI mini chart
-        if (config_.indRsiEnabled) {
-            std::lock_guard<std::mutex> lk(stateMutex_);
-            if (!rsiHistory_.empty()) {
-                std::vector<float> v;
-                v.reserve(rsiHistory_.size());
-                for (double d : rsiHistory_) v.push_back(static_cast<float>(d));
-                ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.85f, 0.70f, 0.30f, 1.0f));
-                ImGui::PlotLines("RSI##chart", v.data(), (int)v.size(), 0,
-                                 nullptr, 0.0f, 100.0f, ImVec2(-1, 40));
-                ImGui::PopStyleColor();
-            }
-        }
-
-        // User Pine Script indicators
-        if (!snap.userIndicatorPlots.empty()) {
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f), "User Indicators (Pine Script)");
-            for (const auto& [indName, plots] : snap.userIndicatorPlots) {
-                if (plots.empty()) continue;
-                ImGui::Text("  %s:", indName.c_str());
-                ImGui::SameLine(180);
-                std::string plotStr;
-                for (const auto& [pName, pVal] : plots) {
-                    if (!plotStr.empty()) plotStr += "  ";
-                    char buf[64];
-                    std::snprintf(buf, sizeof(buf), "%s: %.4f", pName.c_str(), pVal);
-                    plotStr += buf;
-                }
-                ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", plotStr.c_str());
-            }
-        }
-
-        ImGui::EndChild();
+    if (!ImGui::Begin("Indicators", nullptr, ImGuiWindowFlags_None)) {
+        ImGui::End();
+        return;
     }
+
+    // EMA
+    if (config_.indEmaEnabled) {
+        ImGui::Columns(3, "##indcols", false);
+        ImGui::TextColored(ImVec4(0.50f, 0.75f, 0.50f, 1.0f), "EMA Fast (%d)", config_.emaFast);
+        ImGui::Text("%.4f", snap.emaFast);
+        ImGui::NextColumn();
+        ImGui::TextColored(ImVec4(0.75f, 0.50f, 0.50f, 1.0f), "EMA Slow (%d)", config_.emaSlow);
+        ImGui::Text("%.4f", snap.emaSlow);
+        ImGui::NextColumn();
+        ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.75f, 1.0f), "EMA Trend (%d)", config_.emaTrend);
+        ImGui::Text("%.4f", snap.emaTrend);
+        ImGui::Columns(1);
+        ImGui::Separator();
+    }
+
+    // RSI & ATR & MACD
+    {
+        int cols = 0;
+        if (config_.indRsiEnabled) ++cols;
+        if (config_.indAtrEnabled) ++cols;
+        if (config_.indMacdEnabled) ++cols;
+        if (cols > 0) {
+            ImGui::Columns(std::max(cols, 1), "##indcols2", false);
+
+            if (config_.indRsiEnabled) {
+                ImGui::Text("RSI (%d)", config_.rsiPeriod);
+                float rsiVal = (float)snap.rsi;
+                ImVec4 rsiColor = (rsiVal > 70) ? ImVec4(0.90f, 0.30f, 0.30f, 1.0f) :
+                                  (rsiVal < 30) ? ImVec4(0.30f, 0.90f, 0.30f, 1.0f) :
+                                                  ImVec4(0.80f, 0.80f, 0.30f, 1.0f);
+                ImGui::TextColored(rsiColor, "%.2f", snap.rsi);
+                ImGui::NextColumn();
+            }
+            if (config_.indAtrEnabled) {
+                ImGui::Text("ATR (%d)", config_.atrPeriod);
+                ImGui::Text("%.4f", snap.atr);
+                ImGui::NextColumn();
+            }
+            if (config_.indMacdEnabled) {
+                ImGui::Text("MACD");
+                ImGui::TextColored(
+                    snap.macd.histogram >= 0
+                        ? ImVec4(0.30f, 0.80f, 0.30f, 1.0f)
+                        : ImVec4(0.80f, 0.30f, 0.30f, 1.0f),
+                    "%.4f (S: %.4f H: %.4f)",
+                    snap.macd.macd, snap.macd.signal, snap.macd.histogram);
+                ImGui::NextColumn();
+            }
+            ImGui::Columns(1);
+        }
+    }
+
+    // Bollinger Bands
+    if (config_.indBbEnabled) {
+        ImGui::Separator();
+        ImGui::Text("Bollinger Bands (%d, %.1f)", config_.bbPeriod, config_.bbStddev);
+        ImGui::SameLine(220);
+        ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.80f, 1.0f),
+            "Upper: %.4f  Mid: %.4f  Lower: %.4f",
+            snap.bb.upper, snap.bb.middle, snap.bb.lower);
+    }
+
+    // RSI mini chart
+    if (config_.indRsiEnabled) {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        if (!rsiHistory_.empty()) {
+            std::vector<float> v;
+            v.reserve(rsiHistory_.size());
+            for (double d : rsiHistory_) v.push_back(static_cast<float>(d));
+            ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.85f, 0.70f, 0.30f, 1.0f));
+            ImGui::PlotLines("RSI##chart", v.data(), (int)v.size(), 0,
+                             nullptr, 0.0f, 100.0f, ImVec2(-1, 40));
+            ImGui::PopStyleColor();
+        }
+    }
+
+    // User Pine Script indicators
+    if (!snap.userIndicatorPlots.empty()) {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f), "User Indicators (Pine Script)");
+        for (const auto& [indName, plots] : snap.userIndicatorPlots) {
+            if (plots.empty()) continue;
+            ImGui::Text("  %s:", indName.c_str());
+            ImGui::SameLine(180);
+            std::string plotStr;
+            for (const auto& [pName, pVal] : plots) {
+                if (!plotStr.empty()) plotStr += "  ";
+                char buf[64];
+                std::snprintf(buf, sizeof(buf), "%s: %.4f", pName.c_str(), pVal);
+                plotStr += buf;
+            }
+            ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", plotStr.c_str());
+        }
+    }
+
+    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
@@ -2085,55 +2097,70 @@ void AppGui::drawFilterPanel() {
 }
 
 // ---------------------------------------------------------------------------
-//  Volume Delta Bars
+//  Volume Delta Bars — standalone resizable window
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
     std::lock_guard<std::mutex> lk(stateMutex_);
     if (volumeDeltaHistory_.empty()) return;
 
-    if (ImGui::CollapsingHeader("Volume Delta", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, 80);
-        ImGui::BeginChild("##VolDelta", canvasSize, ImGuiChildFlags_Border);
+    ImGui::SetNextWindowSize(ImVec2(600, 150), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(220, 30), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(200, 80), ImVec2(FLT_MAX, FLT_MAX));
 
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        float w = canvasSize.x - 4;
-        float h = canvasSize.y - 4;
-
-        int count = (int)volumeDeltaHistory_.size();
-        if (count < 1) { ImGui::EndChild(); return; }
-
-        double maxAbs = 1.0;
-        for (auto& v : volumeDeltaHistory_) {
-            if (std::abs(v) > maxAbs) maxAbs = std::abs(v);
-        }
-
-        float barW = std::max(2.0f, w / (float)count - 1.0f);
-        float midY = p.y + h * 0.5f;
-
-        // Zero line
-        draw->AddLine(ImVec2(p.x, midY), ImVec2(p.x + w, midY),
-                      IM_COL32(80, 80, 85, 150), 1.0f);
-
-        for (int i = 0; i < count; ++i) {
-            float x = p.x + 2.0f + (float)i * (barW + 1.0f);
-            double val = volumeDeltaHistory_[i];
-            float barH = (float)(std::abs(val) / maxAbs) * (h * 0.48f);
-
-            ImU32 col = (val >= 0)
-                ? IM_COL32(40, 180, 80, 200)
-                : IM_COL32(200, 60, 60, 200);
-
-            if (val >= 0) {
-                draw->AddRectFilled(ImVec2(x, midY - barH), ImVec2(x + barW, midY), col);
-            } else {
-                draw->AddRectFilled(ImVec2(x, midY), ImVec2(x + barW, midY + barH), col);
-            }
-        }
-
-        ImGui::Dummy(canvasSize);
-        ImGui::EndChild();
+    if (!ImGui::Begin("Volume Delta", nullptr, ImGuiWindowFlags_None)) {
+        ImGui::End();
+        return;
     }
+
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    ImVec2 canvasSize = ImVec2(avail.x, std::max(avail.y, 40.0f));
+    ImGui::BeginChild("##VolDeltaCanvas", canvasSize, ImGuiChildFlags_Border);
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    float w = canvasSize.x - 4;
+    float h = canvasSize.y - 4;
+
+    int count = (int)volumeDeltaHistory_.size();
+    if (count < 1) { ImGui::EndChild(); ImGui::End(); return; }
+
+    // Use log scale to normalize large volume differences
+    double maxAbs = 1.0;
+    std::vector<double> normalizedDelta(count);
+    for (int i = 0; i < count; ++i) {
+        double v = volumeDeltaHistory_[i];
+        double sign = (v >= 0) ? 1.0 : -1.0;
+        normalizedDelta[i] = sign * std::log1p(std::abs(v));
+        if (std::abs(normalizedDelta[i]) > maxAbs) maxAbs = std::abs(normalizedDelta[i]);
+    }
+
+    float barW = std::max(2.0f, w / (float)count - 1.0f);
+    float midY = p.y + h * 0.5f;
+
+    // Zero line
+    draw->AddLine(ImVec2(p.x, midY), ImVec2(p.x + w, midY),
+                  IM_COL32(80, 80, 85, 150), 1.0f);
+
+    for (int i = 0; i < count; ++i) {
+        float x = p.x + 2.0f + (float)i * (barW + 1.0f);
+        double val = normalizedDelta[i];
+        float barH = (float)(std::abs(val) / maxAbs) * (h * 0.48f);
+
+        ImU32 col = (val >= 0)
+            ? IM_COL32(40, 180, 80, 200)
+            : IM_COL32(200, 60, 60, 200);
+
+        if (val >= 0) {
+            draw->AddRectFilled(ImVec2(x, midY - barH), ImVec2(x + barW, midY), col);
+        } else {
+            draw->AddRectFilled(ImVec2(x, midY), ImVec2(x + barW, midY + barH), col);
+        }
+    }
+
+    ImGui::Dummy(canvasSize);
+    ImGui::EndChild();
+
+    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
@@ -3152,24 +3179,81 @@ void AppGui::drawPineEditorWindow() {
         return;
     }
 
+    ImGui::Text("Max %d characters", (int)(sizeof(pineCode_) - 1));
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(%d used)", (int)std::strlen(pineCode_));
+
+    float btnAreaH = 60.0f;
+    float availH = ImGui::GetContentRegionAvail().y - btnAreaH;
     ImGui::InputTextMultiline("##pine", pineCode_, sizeof(pineCode_),
-        ImVec2(-1, 300), ImGuiInputTextFlags_AllowTabInput);
+        ImVec2(-1, std::max(availH, 100.0f)),
+        ImGuiInputTextFlags_AllowTabInput);
 
     if (ImGui::Button("Run")) {
-        addLog("[Pine] Script execution requested");
+        pineEditorError_.clear();
+        // Save the script to file first
+        namespace fs = std::filesystem;
+        std::string dir = config_.userIndicatorDir;
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        std::string fname = dir + "/custom_script.pine";
+        {
+            std::ofstream f(fname);
+            if (f.is_open()) {
+                f << pineCode_;
+                f.close();
+                addLog("[Pine] Script saved to " + fname);
+            } else {
+                pineEditorError_ = "Failed to save script file";
+                ImGui::End();
+                return;
+            }
+        }
+        // Validate and parse the script
+        try {
+            std::string src(pineCode_);
+            auto script = PineConverter::parseSource(src);
+            addLog("[Pine] Script compiled: " + script.name + " (" +
+                   std::to_string(script.statements.size()) + " statements)");
+            addLog("[Pine] Script applied to chart. Restart or reconnect to see results.");
+        } catch (const std::exception& e) {
+            pineEditorError_ = e.what();
+            addLog("[Pine] Compilation error: " + pineEditorError_);
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Save As...")) {
-        std::string fname = config_.userIndicatorDir + "/custom_script.pine";
+        namespace fs = std::filesystem;
+        std::string dir = config_.userIndicatorDir;
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        std::string fname = dir + "/custom_script.pine";
         std::ofstream f(fname);
         if (f.is_open()) {
             f << pineCode_;
             addLog("[Pine] Saved to " + fname);
+        } else {
+            pineEditorError_ = "Failed to save file: " + fname;
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Load")) {
-        addLog("[Pine] Load file dialog not yet implemented");
+        std::string fname = config_.userIndicatorDir + "/custom_script.pine";
+        std::ifstream f(fname);
+        if (f.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(f)),
+                                 std::istreambuf_iterator<char>());
+            if (content.size() >= sizeof(pineCode_)) {
+                content.resize(sizeof(pineCode_) - 1);
+                addLog("[Pine] Script truncated to max length");
+            }
+            std::strncpy(pineCode_, content.c_str(), sizeof(pineCode_) - 1);
+            pineCode_[sizeof(pineCode_) - 1] = '\0';
+            addLog("[Pine] Loaded from " + fname);
+            pineEditorError_.clear();
+        } else {
+            pineEditorError_ = "File not found: " + fname;
+        }
     }
 
     if (!pineEditorError_.empty()) {

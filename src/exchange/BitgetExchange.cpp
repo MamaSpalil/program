@@ -18,6 +18,13 @@
 
 namespace crypto {
 
+namespace {
+inline double safeStod(const std::string& s, double defaultVal = 0.0) {
+    if (s.empty()) return defaultVal;
+    try { return std::stod(s); } catch (...) { return defaultVal; }
+}
+} // namespace
+
 #ifdef USE_CURL
 namespace {
 size_t bitgetWriteCb(char* ptr, size_t size, size_t nmemb, std::string* data) {
@@ -160,11 +167,11 @@ std::vector<Candle> BitgetExchange::getKlines(const std::string& symbol,
     for (auto& k : json["data"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
-        c.open     = std::stod(k[1].get<std::string>());
-        c.high     = std::stod(k[2].get<std::string>());
-        c.low      = std::stod(k[3].get<std::string>());
-        c.close    = std::stod(k[4].get<std::string>());
-        c.volume   = std::stod(k[5].get<std::string>());
+        c.open     = safeStod(k[1].get<std::string>());
+        c.high     = safeStod(k[2].get<std::string>());
+        c.low      = safeStod(k[3].get<std::string>());
+        c.close    = safeStod(k[4].get<std::string>());
+        c.volume   = safeStod(k[5].get<std::string>());
         c.closed   = true;
         candles.push_back(c);
     }
@@ -180,7 +187,7 @@ double BitgetExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[Bitget] getPrice API error: code={}", json["code"].get<std::string>());
         return 0.0;
     }
-    double price = std::stod(json["data"][0]["lastPr"].get<std::string>());
+    double price = safeStod(json["data"][0]["lastPr"].get<std::string>());
     Logger::get()->debug("[Bitget] getPrice result={}", price);
     return price;
 }
@@ -203,11 +210,11 @@ void BitgetExchange::onWsMessage(const std::string& msg) {
             for (auto& k : j["data"]) {
                 Candle c;
                 c.openTime = std::stoll(k[0].get<std::string>());
-                c.open     = std::stod(k[1].get<std::string>());
-                c.high     = std::stod(k[2].get<std::string>());
-                c.low      = std::stod(k[3].get<std::string>());
-                c.close    = std::stod(k[4].get<std::string>());
-                c.volume   = std::stod(k[5].get<std::string>());
+                c.open     = safeStod(k[1].get<std::string>());
+                c.high     = safeStod(k[2].get<std::string>());
+                c.low      = safeStod(k[3].get<std::string>());
+                c.close    = safeStod(k[4].get<std::string>());
+                c.volume   = safeStod(k[5].get<std::string>());
                 c.closed   = true;
                 klineCb_(c);
             }
@@ -317,14 +324,14 @@ OrderBook BitgetExchange::getOrderBook(const std::string& symbol, int depth) {
         auto& data = json["data"];
         for (auto& b : data["bids"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(b[0].get<std::string>());
-            lvl.qty   = std::stod(b[1].get<std::string>());
+            lvl.price = safeStod(b[0].get<std::string>());
+            lvl.qty   = safeStod(b[1].get<std::string>());
             ob.bids.push_back(lvl);
         }
         for (auto& a : data["asks"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(a[0].get<std::string>());
-            lvl.qty   = std::stod(a[1].get<std::string>());
+            lvl.price = safeStod(a[0].get<std::string>());
+            lvl.qty   = safeStod(a[1].get<std::string>());
             ob.asks.push_back(lvl);
         }
         Logger::get()->debug("[Bitget] getOrderBook bids={} asks={}", ob.bids.size(), ob.asks.size());

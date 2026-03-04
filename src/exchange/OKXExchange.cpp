@@ -18,6 +18,13 @@
 
 namespace crypto {
 
+namespace {
+inline double safeStod(const std::string& s, double defaultVal = 0.0) {
+    if (s.empty()) return defaultVal;
+    try { return std::stod(s); } catch (...) { return defaultVal; }
+}
+} // namespace
+
 #ifdef USE_CURL
 namespace {
 size_t okxWriteCb(char* ptr, size_t size, size_t nmemb, std::string* data) {
@@ -169,11 +176,11 @@ std::vector<Candle> OKXExchange::getKlines(const std::string& symbol,
     for (auto& k : json["data"]) {
         Candle c;
         c.openTime = std::stoll(k[0].get<std::string>());
-        c.open     = std::stod(k[1].get<std::string>());
-        c.high     = std::stod(k[2].get<std::string>());
-        c.low      = std::stod(k[3].get<std::string>());
-        c.close    = std::stod(k[4].get<std::string>());
-        c.volume   = std::stod(k[5].get<std::string>());
+        c.open     = safeStod(k[1].get<std::string>());
+        c.high     = safeStod(k[2].get<std::string>());
+        c.low      = safeStod(k[3].get<std::string>());
+        c.close    = safeStod(k[4].get<std::string>());
+        c.volume   = safeStod(k[5].get<std::string>());
         c.closed   = true;
         candles.push_back(c);
     }
@@ -191,7 +198,7 @@ double OKXExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[OKX] getPrice API error: code={}", json["code"].get<std::string>());
         return 0.0;
     }
-    double price = std::stod(json["data"][0]["last"].get<std::string>());
+    double price = safeStod(json["data"][0]["last"].get<std::string>());
     Logger::get()->debug("[OKX] getPrice result={}", price);
     return price;
 }
@@ -214,11 +221,11 @@ void OKXExchange::onWsMessage(const std::string& msg) {
             for (auto& k : j["data"]) {
                 Candle c;
                 c.openTime = std::stoll(k[0].get<std::string>());
-                c.open     = std::stod(k[1].get<std::string>());
-                c.high     = std::stod(k[2].get<std::string>());
-                c.low      = std::stod(k[3].get<std::string>());
-                c.close    = std::stod(k[4].get<std::string>());
-                c.volume   = std::stod(k[5].get<std::string>());
+                c.open     = safeStod(k[1].get<std::string>());
+                c.high     = safeStod(k[2].get<std::string>());
+                c.low      = safeStod(k[3].get<std::string>());
+                c.close    = safeStod(k[4].get<std::string>());
+                c.volume   = safeStod(k[5].get<std::string>());
                 c.closed   = (k[8].get<std::string>() == "1");
                 klineCb_(c);
             }
@@ -334,14 +341,14 @@ OrderBook OKXExchange::getOrderBook(const std::string& symbol, int depth) {
         auto& data = json["data"][0];
         for (auto& b : data["bids"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(b[0].get<std::string>());
-            lvl.qty   = std::stod(b[1].get<std::string>());
+            lvl.price = safeStod(b[0].get<std::string>());
+            lvl.qty   = safeStod(b[1].get<std::string>());
             ob.bids.push_back(lvl);
         }
         for (auto& a : data["asks"]) {
             OrderBook::Level lvl;
-            lvl.price = std::stod(a[0].get<std::string>());
-            lvl.qty   = std::stod(a[1].get<std::string>());
+            lvl.price = safeStod(a[0].get<std::string>());
+            lvl.qty   = safeStod(a[1].get<std::string>());
             ob.asks.push_back(lvl);
         }
         Logger::get()->debug("[OKX] getOrderBook bids={} asks={}", ob.bids.size(), ob.asks.size());
@@ -374,9 +381,9 @@ std::vector<OpenOrderInfo> OKXExchange::getOpenOrders(const std::string& symbol)
                 // Uppercase side for consistency
                 for (auto& ch : info.side) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
                 info.type    = o.value("ordType", "");
-                info.price   = std::stod(o.value("px", "0"));
-                info.qty     = std::stod(o.value("sz", "0"));
-                info.executedQty = std::stod(o.value("fillSz", "0"));
+                info.price   = safeStod(o.value("px", "0"));
+                info.qty     = safeStod(o.value("sz", "0"));
+                info.executedQty = safeStod(o.value("fillSz", "0"));
                 info.time    = std::stoll(o.value("cTime", "0"));
                 result.push_back(std::move(info));
             }
@@ -407,9 +414,9 @@ std::vector<UserTradeInfo> OKXExchange::getMyTrades(const std::string& symbol, i
                 info.symbol  = t.value("instId", "");
                 info.side    = t.value("side", "");
                 for (auto& ch : info.side) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-                info.price   = std::stod(t.value("fillPx", "0"));
-                info.qty     = std::stod(t.value("fillSz", "0"));
-                info.commission     = std::stod(t.value("fee", "0"));
+                info.price   = safeStod(t.value("fillPx", "0"));
+                info.qty     = safeStod(t.value("fillSz", "0"));
+                info.commission     = safeStod(t.value("fee", "0"));
                 info.commissionAsset = t.value("feeCcy", "");
                 result.push_back(std::move(info));
             }
@@ -437,12 +444,12 @@ std::vector<PositionInfo> OKXExchange::getPositionRisk(const std::string& symbol
             for (auto& p : j["data"]) {
                 PositionInfo info;
                 info.symbol           = p.value("instId", "");
-                info.positionAmt      = std::stod(p.value("pos", "0"));
-                info.entryPrice       = std::stod(p.value("avgPx", "0"));
-                info.unrealizedProfit = std::stod(p.value("upl", "0"));
-                info.realizedProfit   = std::stod(p.value("realizedPnl", "0"));
+                info.positionAmt      = safeStod(p.value("pos", "0"));
+                info.entryPrice       = safeStod(p.value("avgPx", "0"));
+                info.unrealizedProfit = safeStod(p.value("upl", "0"));
+                info.realizedProfit   = safeStod(p.value("realizedPnl", "0"));
                 info.marginType       = p.value("mgnMode", "");
-                info.leverage         = std::stod(p.value("lever", "1"));
+                info.leverage         = safeStod(p.value("lever", "1"));
                 result.push_back(std::move(info));
             }
         }
@@ -468,9 +475,9 @@ std::vector<AccountBalanceDetail> OKXExchange::getAccountBalanceDetails() {
                 for (auto& d : details) {
                     AccountBalanceDetail info;
                     info.currency  = d.value("ccy", "");
-                    info.availBal  = std::stod(d.value("availBal", "0"));
-                    info.frozenBal = std::stod(d.value("frozenBal", "0"));
-                    info.usdValue  = std::stod(d.value("eqUsd", "0"));
+                    info.availBal  = safeStod(d.value("availBal", "0"));
+                    info.frozenBal = safeStod(d.value("frozenBal", "0"));
+                    info.usdValue  = safeStod(d.value("eqUsd", "0"));
                     result.push_back(std::move(info));
                 }
             }

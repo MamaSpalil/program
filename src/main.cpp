@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
                 // (the panel visibility flag is set from within the GUI)
 
                 // Wire engine updates to the GUI so chart and indicators are displayed
-                static constexpr int kPricePollIntervalSec = 1;
+                static constexpr int kPricePollIntervalMs = 100;
                 static constexpr int kUserDataPollIntervalSec = 5;
 
                 engine->setOnUpdateCallback([&gui, &cfg, &engine](const crypto::EngineUpdate& upd) {
@@ -176,18 +176,27 @@ int main(int argc, char* argv[]) {
                     st.userIndicatorPlots = upd.userIndicatorPlots;
                     st.orderBook = upd.orderBook;
 
+                    // Use last candle close as current price immediately (tick update)
+                    if (upd.candle.close > 0) {
+                        st.currentPrice = upd.candle.close;
+                    }
+
                     // Fetch trading pairs once (kept across updates)
                     if (engine) {
                         st.trades   = engine->listTrades();
                         st.totalPnl = engine->totalPnl();
                         st.winRate  = engine->winRate();
 
-                        // Fetch current price periodically
-                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastPriceTime).count() >= kPricePollIntervalSec) {
+                        // Fetch precise price periodically (fast tick update)
+                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastPriceTime).count() >= kPricePollIntervalMs) {
                             try {
-                                st.currentPrice = engine->getPrice(cfg.symbol);
+                                double p = engine->getPrice(cfg.symbol);
+                                if (p > 0) st.currentPrice = p;
+                            } catch (const std::exception& e) {
+                                // Use candle close as fallback, no error display
+                                crypto::Logger::get()->debug("Price fetch: {}", e.what());
                             } catch (...) {
-                                st.currentPriceError = "Price error";
+                                // Use candle close as fallback
                             }
                             lastPriceTime = now;
                         }
