@@ -118,6 +118,27 @@ TEST(CandleCache, IsolationByKey) {
     EXPECT_EQ(cache.load("okx",     "BTCUSDT", "1m").size(), 0u);
 }
 
+// ── Isolation between LIVE and Paper modes ──────────────────────────────────
+
+TEST(CandleCache, IsolationByMode) {
+    TempDB tmp;
+    CandleCache cache(tmp.path);
+
+    // Simulate mode-qualified exchange names as used by Engine
+    cache.store("binance_paper", "BTCUSDT", "1m", { makeCandle(1000, 100.0) });
+    cache.store("binance_live",  "BTCUSDT", "1m", { makeCandle(2000, 200.0) });
+
+    auto paper = cache.load("binance_paper", "BTCUSDT", "1m");
+    auto live  = cache.load("binance_live",  "BTCUSDT", "1m");
+
+    ASSERT_EQ(paper.size(), 1u);
+    ASSERT_EQ(live.size(), 1u);
+    EXPECT_EQ(paper[0].openTime, 1000);
+    EXPECT_DOUBLE_EQ(paper[0].open, 100.0);
+    EXPECT_EQ(live[0].openTime, 2000);
+    EXPECT_DOUBLE_EQ(live[0].open, 200.0);
+}
+
 // ── latestOpenTime ──────────────────────────────────────────────────────────
 
 TEST(CandleCache, LatestOpenTime) {

@@ -435,6 +435,37 @@ void AppGui::saveConfigToFile(const std::string& path) {
     std::ofstream f(path);
     if (!f.is_open()) return;
     f << configToJson().dump(2);
+
+    // Also update profiles.json so the active exchange config persists across restarts
+    namespace fs = std::filesystem;
+    fs::path profilesPath = fs::path(path).parent_path() / "profiles.json";
+    try {
+        nlohmann::json pj;
+        {
+            std::ifstream pf(profilesPath);
+            if (pf.is_open()) {
+                pf >> pj;
+            }
+        }
+        pj["active"] = config_.exchangeName;
+        if (!pj.contains("exchanges")) pj["exchanges"] = nlohmann::json::object();
+        pj["exchanges"][config_.exchangeName] = {
+            {"name",       config_.exchangeName},
+            {"api_key",    config_.apiKey},
+            {"api_secret", config_.apiSecret},
+            {"passphrase", config_.passphrase},
+            {"testnet",    config_.testnet},
+            {"base_url",   config_.baseUrl},
+            {"ws_host",    config_.wsHost},
+            {"ws_port",    config_.wsPort}
+        };
+        std::ofstream pout(profilesPath);
+        if (pout.is_open()) {
+            pout << pj.dump(2);
+        }
+    } catch (...) {
+        // Ignore profiles.json save errors
+    }
 }
 
 // ---------------------------------------------------------------------------
