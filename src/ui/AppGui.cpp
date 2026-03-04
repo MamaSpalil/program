@@ -463,8 +463,10 @@ void AppGui::saveConfigToFile(const std::string& path) {
         if (pout.is_open()) {
             pout << pj.dump(2);
         }
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Config] Failed to save profiles.json: {}", e.what());
     } catch (...) {
-        // Ignore profiles.json save errors
+        Logger::get()->warn("[Config] Failed to save profiles.json");
     }
 }
 

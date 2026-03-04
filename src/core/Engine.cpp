@@ -248,11 +248,11 @@ void Engine::run() {
             impl_->strategy->onCandle(c);
             if (impl_->userIndicators) impl_->userIndicators->updateAll(c);
         }
-        // Populate candle history with all historical candles so the chart can display them
+        // Populate candle history with all historical candles so the chart can display them.
+        // Assign all except the last because updateDashboard() (line ~284) calls
+        // push_back(c), which will add the final candle to complete the history.
         if (!hist.empty()) {
-            // Assign all except the last; updateDashboard will push_back the last one
             impl_->candleHistory.assign(hist.begin(), std::prev(hist.end()));
-            // Send the full history to the GUI via the last candle update
             updateDashboard(hist.back());
         }
     } catch (const std::exception& e) {
@@ -457,9 +457,10 @@ void Engine::reloadCandles(const std::string& symbol, const std::string& interva
             for (auto& c : hist) impl_->userIndicators->updateAll(c);
         }
 
-        // Populate candle history with all historical candles so the chart can display them
+        // Populate candle history with all historical candles so the chart can display them.
+        // Assign all except the last because updateDashboard() calls push_back(c),
+        // which will add the final candle to complete the history.
         if (!hist.empty()) {
-            // Assign all except the last; updateDashboard will push_back the last one
             impl_->candleHistory.assign(hist.begin(), std::prev(hist.end()));
             updateDashboard(hist.back());
         }
