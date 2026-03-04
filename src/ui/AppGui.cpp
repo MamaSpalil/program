@@ -261,8 +261,10 @@ void AppGui::updateState(const GuiState& s) {
         double delta = (s.lastCandle.close >= s.lastCandle.open)
             ?  s.lastCandle.volume
             : -s.lastCandle.volume;
-        volumeDeltaHistory_.push_back(delta);
-        if ((int)volumeDeltaHistory_.size() > kMaxHistory) volumeDeltaHistory_.pop_front();
+        if (volumeDeltaHistory_.empty() || volumeDeltaHistory_.back() != delta) {
+            volumeDeltaHistory_.push_back(delta);
+            if ((int)volumeDeltaHistory_.size() > kMaxHistory) volumeDeltaHistory_.pop_front();
+        }
     }
     if (s.lastSignal.type != Signal::Type::HOLD) {
         signalHistory_.push_back(s.lastSignal);
