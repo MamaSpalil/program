@@ -645,8 +645,9 @@ TEST(DataStructures, BarTimeIsMilliseconds) {
     // openTime is in milliseconds
     EXPECT_EQ(bars[0].openTime, 1700000000000LL);
     // Converting to seconds should give a reasonable Unix epoch (~2023)
+    constexpr double kSecondsPerYear = 365.25 * 24 * 3600; // ~31557600
     double timeSec = bars[0].openTime / 1000.0;
-    int approxYear = 1970 + (int)(timeSec / 31536000.0);
+    int approxYear = 1970 + (int)(timeSec / kSecondsPerYear);
     EXPECT_GE(approxYear, 2023);
     EXPECT_LE(approxYear, 2030);
 }
