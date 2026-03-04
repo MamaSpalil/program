@@ -2,8 +2,22 @@
 #include <fstream>
 #include <ctime>
 #include <cstring>
+#include <filesystem>
 
 namespace crypto {
+
+// Validate filename to prevent path traversal
+static bool isValidFilename(const std::string& filename) {
+    // Reject empty filenames
+    if (filename.empty()) return false;
+    // Reject path traversal
+    if (filename.find("..") != std::string::npos) return false;
+    // Only allow relative filenames in the current directory
+    namespace fs = std::filesystem;
+    fs::path p(filename);
+    if (p.is_absolute()) return false;
+    return true;
+}
 
 static std::string formatTime(int64_t epochMs) {
     time_t t = static_cast<time_t>(epochMs / 1000);
@@ -24,6 +38,7 @@ static std::string formatTime(int64_t epochMs) {
 bool CSVExporter::exportBars(const std::vector<Candle>& bars,
                               const std::string& filename)
 {
+    if (!isValidFilename(filename)) return false;
     std::ofstream f(filename);
     if (!f.is_open()) return false;
     f << "datetime,open,high,low,close,volume\n";
@@ -39,6 +54,7 @@ bool CSVExporter::exportBars(const std::vector<Candle>& bars,
 bool CSVExporter::exportTrades(const std::vector<HistoricalTrade>& trades,
                                 const std::string& filename)
 {
+    if (!isValidFilename(filename)) return false;
     std::ofstream f(filename);
     if (!f.is_open()) return false;
     f << "id,datetime_entry,datetime_exit,symbol,side,type,qty,entry_price,exit_price,pnl,commission,is_paper\n";
@@ -57,6 +73,7 @@ bool CSVExporter::exportTrades(const std::vector<HistoricalTrade>& trades,
 bool CSVExporter::exportBacktestTrades(const std::vector<BacktestTrade>& trades,
                                         const std::string& filename)
 {
+    if (!isValidFilename(filename)) return false;
     std::ofstream f(filename);
     if (!f.is_open()) return false;
     f << "side,entry_time,exit_time,entry_price,exit_price,qty,pnl,pnl_pct\n";
@@ -73,6 +90,7 @@ bool CSVExporter::exportBacktestTrades(const std::vector<BacktestTrade>& trades,
 bool CSVExporter::exportEquityCurve(const std::vector<double>& equity,
                                      const std::string& filename)
 {
+    if (!isValidFilename(filename)) return false;
     std::ofstream f(filename);
     if (!f.is_open()) return false;
     f << "index,equity\n";
