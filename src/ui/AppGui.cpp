@@ -2359,14 +2359,14 @@ void AppGui::drawVolumeDeltaPanel() {
     }
     float midY = canvasPos.y + h * 0.5f + vdPanY_;
 
-    // Zero baseline
-    dl->AddLine(ImVec2(canvasPos.x, canvasPos.y + h * 0.5f),
-                ImVec2(canvasPos.x + w, canvasPos.y + h * 0.5f),
-                IM_COL32(80, 80, 85, 150), 1.0f);
-
     // Clip rendering to canvas
     dl->PushClipRect(canvasPos,
         ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), true);
+
+    // Zero baseline (follows vertical pan)
+    dl->AddLine(ImVec2(canvasPos.x, midY),
+                ImVec2(canvasPos.x + w, midY),
+                IM_COL32(80, 80, 85, 150), 1.0f);
 
     for (int i = 0; i < count; ++i) {
         float x = canvasPos.x + (float)i * step + vdPanX_;
