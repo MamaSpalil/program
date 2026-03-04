@@ -5,6 +5,55 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-04
+
+### Added
+
+#### Block 8 — Automation: Scheduler & Grid Bot
+
+- **Scheduler** (`src/automation/Scheduler.h/.cpp`) — cron-based strategy scheduler with simple cron expression parser (minute/hour/day-of-month/month/day-of-week), supports wildcards (`*`), ranges (`1-5`), and comma-separated values; `addJob()`, `removeJob()`, `getJobs()`; persistent save/load to `config/scheduler.json`; background thread loop with 30-second check interval; thread-safe via `std::mutex`
+- **GridBot** (`src/automation/GridBot.h/.cpp`) — grid trading bot with arithmetic and geometric level spacing; `configure()`, `start()`, `stop()`, `onOrderFilled()`; `levelCount()`, `levelAt()`, `levels()` accessors; tracks `realizedProfit()` and `filledOrders()`; thread-safe via `std::mutex`
+
+#### Block 9 — External Data: News Feed & Fear/Greed
+
+- **NewsFeed** (`src/external/NewsFeed.h/.cpp`) — news aggregator with `NewsItem` struct (title, source, url, pubTime, sentiment); background polling thread with 5-minute interval; `addItem()`, `getItems()`, `itemCount()`, `clear()`; max 200 items retained; thread-safe via `std::mutex`
+- **FearGreed** (`src/external/FearGreed.h/.cpp`) — Fear & Greed index data source with `FearGreedData` struct (value 0-100, classification, timestamp); background polling thread with 1-hour interval; `getData()`, `setData()` accessors; thread-safe via `std::mutex`
+
+#### Block 10 — Webhook Server (TradingView Integration)
+
+- **WebhookServer** (`src/integration/WebhookServer.h/.cpp`) — incoming webhook handler with secret-based authentication; per-IP rate limiting (10 requests/minute per IP); `simulateRequest()` for testing; parses JSON body with action/symbol/qty/price; stores recent signals; `setSecret()`, `getSecret()`, `start()`, `stop()`, `getRecentSignals()`; thread-safe via `std::mutex`
+
+#### Block 11 — Telegram Bot (Bidirectional)
+
+- **TelegramBot** (`src/integration/TelegramBot.h/.cpp`) — bidirectional Telegram bot with long polling; authorized chat ID security; commands: `/help`, `/balance`, `/status`, `/positions`, `/pnl`, `/buy`, `/sell`, `/stop`, `/start`; `processCommand()` public for testing; `startPolling()`, `stopPolling()`, `sendMessage()`; thread-safe via `std::mutex`
+
+#### Block 12 — Tax Report (FIFO/LIFO)
+
+- **TaxReporter** (`src/tax/TaxReporter.h/.cpp`) — tax calculation engine supporting FIFO and LIFO lot matching methods; groups trades by symbol; filters by tax year; calculates proceeds, cost basis, gain/loss per lot; determines long-term vs short-term (365-day threshold); CSV export with `exportCSV()`
+
+#### Part 1 — Bug Fixes & Core Modules
+
+- **DrawingTools** (`src/ui/DrawingTools.h/.cpp`) — drawing object manager with add/remove/count/getAll/save/load; supports TREND_LINE, HORIZONTAL_LINE, FIBONACCI, RECTANGLE, TEXT_LABEL types; persists to JSON per symbol; thread-safe via `std::mutex`
+- **MultiTimeframeWindow** (`src/ui/MultiTimeframe.h/.cpp`) — 4-pane multi-timeframe chart window (1m, 5m, 1h, 1d); `loadAll()`, `setPaneBars()`, `paneReady()`, `paneBarCount()`, `paneBars()` accessors; thread-safe via `std::mutex`
+- **VWAPIndicator** (`src/indicators/VWAPIndicator.h`) — header-only VWAP (Volume-Weighted Average Price), TWAP (Time-Weighted Average Price), and Pearson correlation coefficient calculations
+- **PositionCalc** (`src/strategy/PositionCalc.h`) — header-only position size calculator based on balance, risk percentage, entry price, and stop loss; includes `riskAmt()`, `priceDiff()`, `posSize()`
+- **DailyLossGuard** (`src/strategy/PositionCalc.h`) — daily loss limit guard; `init()` with starting balance and limit percentage; `update()` with current balance; `isTriggered()` returns true when daily loss exceeds limit; `reset()` to clear trigger
+- **DepthStreamManager** (`src/exchange/DepthStream.h/.cpp`) — depth (order book) WebSocket stream manager; `subscribe()`, `unsubscribe()`, `isConnected()`, `getBook()`, `setBook()` for testing; thread-safe via `std::mutex`
+- **ExchangeEndpointManager** (`src/exchange/EndpointManager.h`) — header-only fallback endpoint manager for geo-blocking (403/451); provides Binance spot and futures alternative endpoints; round-robin `getNextEndpoint()` and `isGeoBlocked()` utilities
+
+#### Tests
+
+- **test_regression_part1.cpp** — 15 tests covering: topbar button text (no question marks), DepthStream connectivity, DrawingTools add/remove/save/load, MultiTimeframe pane loading, VWAP correctness, Pearson correlation (positive/negative/uncorrelated), PositionCalc sizing (including zero stop), DailyLossGuard trigger and reset
+- **test_regression_part2.cpp** — 21 tests covering: Scheduler cron parsing (every minute, specific hour, specific minute+hour, add/remove jobs, save/load), GridBot levels (arithmetic, geometric, start/stop), Webhook security (wrong secret, correct secret, rate limiting, IP isolation), TelegramBot commands (help, unauthorized, status, available commands), TaxReporter FIFO/LIFO gain calculation and CSV export, NewsFeed add/get/max items, FearGreed set/get
+
+### Fixed
+
+- **Topbar "Order Book" button** — replaced Cyrillic `u8"Режим Стакан"` with ASCII `"Order Book"` to prevent question mark display (`?????`) when ImGui font lacks Cyrillic glyph ranges; also fixed Order Book collapsing header text
+
+### Changed
+
+- **CMakeLists.txt** — added new source groups (AUTOMATION_SOURCES, EXTERNAL_SOURCES, INTEGRATION_SOURCES, TAX_SOURCES, DRAWING_SOURCES, DEPTH_SOURCES) and test files (test_regression_part1.cpp, test_regression_part2.cpp) to the build
+
 ## [1.3.1] - 2026-03-04
 
 ### Fixed
