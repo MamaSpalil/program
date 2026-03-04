@@ -96,7 +96,7 @@ void PaperTrading::reset(double initialBalance) {
 void PaperTrading::recalcEquity() {
     double posValue = 0.0;
     for (auto& p : account_.openPositions)
-        posValue += p.pnl;
+        posValue += p.quantity * p.entryPrice + p.pnl;
     account_.equity = account_.balance + posValue;
     if (account_.equity > account_.peakEquity)
         account_.peakEquity = account_.equity;
@@ -140,7 +140,8 @@ bool PaperTrading::saveToFile(const std::string& path) const {
         if (!f.is_open()) return false;
         f << j.dump(2);
         return true;
-    } catch (...) {
+    } catch (const std::exception& e) {
+        Logger::get()->error("PaperTrading::saveToFile failed: {}", e.what());
         return false;
     }
 }
@@ -187,7 +188,8 @@ bool PaperTrading::loadFromFile(const std::string& path) {
             }
         }
         return true;
-    } catch (...) {
+    } catch (const std::exception& e) {
+        Logger::get()->error("PaperTrading::loadFromFile failed: {}", e.what());
         return false;
     }
 }
