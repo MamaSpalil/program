@@ -856,7 +856,23 @@ void AppGui::drawMarketDataWindow() {
     }
 
     // ── Candlestick chart ──
+
+    // КРИТИЧНО: получить реальный доступный размер ПОСЛЕ отрисовки тулбара
+    ImVec2 availSize = ImGui::GetContentRegionAvail();
+
+    // Защита от нулевого/отрицательного размера
+    if (availSize.x < 100.0f || availSize.y < 100.0f) {
+        ImGui::TextColored(ImVec4(1, 0.5f, 0, 1),
+            "Window too small to render chart (%.0fx%.0f)",
+            availSize.x, availSize.y);
+        ImGui::End();
+        return;
+    }
+
+    // Защита от пустого вектора баров
     if (snap.candleHistory.empty() || (int)snap.candleHistory.size() < 2) {
+        ImGui::TextColored(ImVec4(1, 1, 0, 1),
+            "No bar data loaded. Waiting...");
         ImGui::End();
         return;
     }
@@ -864,13 +880,20 @@ void AppGui::drawMarketDataWindow() {
     {
         static constexpr double kPricePadding = 0.05; // 5% Y-axis padding
         float priceScaleW = 70.0f;
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        float totalH = std::max(200.0f, avail.y - 4.0f);
+        float totalH = std::max(200.0f, availSize.y - 4.0f);
         // Layout: candles 65%, volume 20%, RSI 15%
         float priceH = totalH * 0.65f;
         float volH   = totalH * 0.20f;
         float rsiH   = totalH * 0.15f;
-        ImVec2 canvasSize = ImVec2(avail.x, totalH);
+        ImVec2 canvasSize = ImVec2(availSize.x, totalH);
+
+        // Диагностика
+        Logger::get()->debug("[MarketData] bars_.size()       = {}", snap.candleHistory.size());
+        Logger::get()->debug("[MarketData] plotSize           = {}x{}", canvasSize.x, canvasSize.y);
+        Logger::get()->debug("[MarketData] first bar time     = {}", snap.candleHistory.front().openTime);
+        Logger::get()->debug("[MarketData] last bar time      = {}", snap.candleHistory.back().openTime);
+        Logger::get()->debug("[MarketData] first bar open     = {}", snap.candleHistory.front().open);
+        Logger::get()->debug("[MarketData] first bar close    = {}", snap.candleHistory.front().close);
 
         int totalCount = (int)snap.candleHistory.size();
 
@@ -937,6 +960,19 @@ void AppGui::drawMarketDataWindow() {
         pMin -= padding;
         pMax += padding;
         range = pMax - pMin;
+
+        // Диагностика осей
+        Logger::get()->debug("[MarketData] axisYmin           = {}", pMin);
+        Logger::get()->debug("[MarketData] axisYmax           = {}", pMax);
+
+        // Проверить что значения корректны
+        if (pMin >= pMax || !std::isfinite(pMin) || !std::isfinite(pMax)) {
+            Logger::get()->warn("[MarketData] Invalid axis range: y=[{},{}]", pMin, pMax);
+            ImGui::Dummy(canvasSize);
+            ImGui::EndChild();
+            ImGui::End();
+            return;
+        }
 
         float halfBar = chartBarWidth_ * 0.5f;
 
