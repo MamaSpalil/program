@@ -1201,12 +1201,17 @@ void AppGui::drawMarketDataWindow() {
                     auto& nearBar = snap.candleHistory[nearestIdx];
                     // Time label at crosshair X position
                     time_t barTimeSec = (time_t)(nearBar.openTime / 1000);
+                    struct tm tmBuf{};
+#ifdef _WIN32
+                    bool tmOk = (localtime_s(&tmBuf, &barTimeSec) == 0);
+#else
+                    bool tmOk = (localtime_r(&barTimeSec, &tmBuf) != nullptr);
+#endif
                     char timeBuf[32];
-                    struct tm* lt = localtime(&barTimeSec);
-                    if (lt) {
-                        strftime(timeBuf, sizeof(timeBuf), " %H:%M ", lt);
+                    if (tmOk) {
+                        strftime(timeBuf, sizeof(timeBuf), " %H:%M ", &tmBuf);
                     } else {
-                        snprintf(timeBuf, sizeof(timeBuf), " -- ");
+                        snprintf(timeBuf, sizeof(timeBuf), " --:-- ");
                     }
                     float timeLabelW = 50.0f;
                     float tlx = mx - timeLabelW * 0.5f;
@@ -1226,8 +1231,8 @@ void AppGui::drawMarketDataWindow() {
                     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f),
                         "Vol: %.2f", nearBar.volume);
                     char dateBuf[64];
-                    if (lt) {
-                        strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d %H:%M", lt);
+                    if (tmOk) {
+                        strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d %H:%M", &tmBuf);
                     } else {
                         snprintf(dateBuf, sizeof(dateBuf), "--");
                     }

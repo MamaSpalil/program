@@ -631,3 +631,53 @@ TEST(DataStructures, ParseBarsShortArray) {
     ASSERT_EQ(bars.size(), 1u);
     EXPECT_EQ(bars[0].openTime, 1700000060000LL);
 }
+
+// ── Chart-related time conversion tests ──
+
+TEST(DataStructures, BarTimeIsMilliseconds) {
+    // Binance returns openTime in milliseconds.
+    // Verify that dividing by 1000 gives a valid Unix timestamp (~2023).
+    std::string json = R"([
+        [1700000000000, "42000.00", "42500.00", "41800.00", "42300.00", "100.0"]
+    ])";
+    auto bars = parseBars(json);
+    ASSERT_EQ(bars.size(), 1u);
+    // openTime is in milliseconds
+    EXPECT_EQ(bars[0].openTime, 1700000000000LL);
+    // Converting to seconds should give a reasonable Unix epoch (~2023)
+    double timeSec = bars[0].openTime / 1000.0;
+    int approxYear = 1970 + (int)(timeSec / 31536000.0);
+    EXPECT_GE(approxYear, 2023);
+    EXPECT_LE(approxYear, 2030);
+}
+
+TEST(DataStructures, ParseBarsMultipleBarsInOrder) {
+    // Verify bars maintain chronological order
+    std::string json = R"([
+        [1700000000000, "100.00", "110.00", "90.00", "105.00", "50.0"],
+        [1700000060000, "105.00", "115.00", "100.00", "110.00", "60.0"],
+        [1700000120000, "110.00", "120.00", "105.00", "118.00", "70.0"]
+    ])";
+    auto bars = parseBars(json);
+    ASSERT_EQ(bars.size(), 3u);
+    for (size_t i = 1; i < bars.size(); ++i) {
+        EXPECT_GT(bars[i].openTime, bars[i-1].openTime);
+    }
+}
+
+TEST(DataStructures, BarPriceRangeValid) {
+    // Verify low <= open,close <= high for each bar
+    std::string json = R"([
+        [1700000000000, "42000.00", "42500.00", "41800.00", "42300.00", "100.0"],
+        [1700000060000, "42300.00", "42300.00", "42300.00", "42300.00", "10.0"]
+    ])";
+    auto bars = parseBars(json);
+    ASSERT_EQ(bars.size(), 2u);
+    for (auto& b : bars) {
+        EXPECT_LE(b.low, b.open);
+        EXPECT_LE(b.low, b.close);
+        EXPECT_GE(b.high, b.open);
+        EXPECT_GE(b.high, b.close);
+        EXPECT_GE(b.volume, 0.0);
+    }
+}

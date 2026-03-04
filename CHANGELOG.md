@@ -41,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **47 new unit tests** — `test_modules.cpp` covering OrderManagement (7 tests: validation, cost estimation, close order, exchange conversion), PaperTrading (6 tests: balance, positions, close, reset, price updates), TradeMarker (3 tests: CRUD, TP/SL), KeyVault (5 tests: encrypt/decrypt round-trip, wrong password, hex, salt), TradeHistory (5 tests: stats, filters, profit factor), BacktestEngine (3 tests: empty, trending, custom signal), AlertManager (5 tests: CRUD, trigger, reset), MarketScanner (2 tests: update, volume filter), PineVisuals (2 tests: shapes, clear)
 
+#### Chart Interactivity & Rendering (Part 2)
+
+- **OHLCV tooltip on hover** — hovering over the candlestick chart now shows a tooltip with the nearest bar's Open, High, Low, Close, Volume, and formatted date/time (`%Y-%m-%d %H:%M`)
+- **Time label under crosshair** — a formatted `HH:MM` time label appears at the bottom of the chart, following the cursor X position and snapping to the nearest visible bar
+- **Connection/WS status indicator** — colored status badge in the Market Data toolbar: green `● LIVE` (connected + trading), yellow `● IDLE` (connected, not trading), grey `● OFFLINE` (disconnected)
+- **Nearest-bar crosshair** — crosshair now finds the nearest visible bar to the cursor position for accurate data display in tooltip and time label
+
+#### Tests
+
+- **3 new unit tests** — `BarTimeIsMilliseconds` (validates ms→s conversion gives a reasonable year), `ParseBarsMultipleBarsInOrder` (verifies chronological order), `BarPriceRangeValid` (asserts low ≤ open,close ≤ high and non-negative volume)
+
 ### Fixed
 
 - **Candlestick chart not rendering** — candle bars in "Market Data" window were invisible despite loaded data (Price/RSI/EMA9 showed correct values):
@@ -48,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added empty-bars guard with "Waiting…" message
   - Added Y-axis range validation (`pMin >= pMax` / non-finite) to prevent draw calls with degenerate coordinates
   - Added spdlog diagnostic logs (`bars_.size()`, `plotSize`, first/last bar data, `axisYmin`/`axisYmax`) for runtime debugging
+- **Diagnostic log spam** — per-frame debug logging (8 `Logger::debug()` calls × 60 fps = 480 calls/sec) replaced with a single consolidated log call every ~5 seconds (300 frames), preventing FPS degradation and log file flooding
+- **Thread-unsafe `localtime()` in crosshair** — replaced `localtime()` with thread-safe `localtime_r()` (POSIX) / `localtime_s()` (Windows) for bar time formatting in crosshair tooltip
 - **Binance futures testnet URL** — `BinanceExchange` constructor now auto-detects testnet mode from `baseUrl_` and sets `futuresBaseUrl_` to `https://testnet.binancefuture.com` (was hardcoded to production `https://fapi.binance.com`, causing HTTP 403 CloudFront blocks on testnet connections)
 - **Binance futures API paths** — `getOrderBook()` now uses `/fapi/v1/depth` when `marketType_ == "futures"` (was `/api/v3/depth`); `getOpenOrders()` uses `/fapi/v1/openOrders` (was `/api/v3/openOrders`); `getMyTrades()` uses `/fapi/v1/userTrades` (was `/api/v3/myTrades`)
 - **Binance `getFuturesBalance` crash** — added response format validation (`j.is_object()` + `j.contains("totalWalletBalance")`) before `std::stod()` calls to prevent `invalid stod argument` exception when API returns error JSON or HTML
