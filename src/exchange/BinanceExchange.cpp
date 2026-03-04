@@ -267,6 +267,9 @@ Candle BinanceExchange::parseKlineJson(const nlohmann::json& k) const {
 std::vector<Candle> BinanceExchange::getKlines(const std::string& symbol,
                                                  const std::string& interval,
                                                  int limit) {
+    // Binance API enforces max limit: 1000 for spot, 1500 for futures
+    const int maxLimit = (marketType_ == "futures") ? 1500 : 1000;
+    if (limit > maxLimit) limit = maxLimit;
     Logger::get()->debug("[Binance] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = (marketType_ == "futures" ? "/fapi/v1/klines?" : "/api/v3/klines?");
     path += "symbol=" + symbol +

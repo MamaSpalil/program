@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **ImGui Begin/End balance** — early return for empty candle history now exits before `BeginChild` to avoid assertion failures from unbalanced calls (PR #15)
 - **Scroll offset on timeframe change** — `chartScrollOffset_` is now reset to 0 together with `needsChartReset_` when switching timeframes, preventing stale scroll positions (PR #15)
+- **Binance klines limit parameter** — `BinanceExchange::getKlines()` now clamps `limit` to the API maximum (1000 for spot, 1500 for futures) to prevent HTTP 400 errors that caused the "Market Data" window to fail loading historical bars (PR #16)
 
 ## [1.0.0] - 2026-03-03
 
