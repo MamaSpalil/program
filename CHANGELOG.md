@@ -43,7 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Candlestick chart not rendering** — candle bars in "Market Data" window were invisible despite loaded data (Price/RSI/EMA9 showed correct values); added minimum window size guard (100×100 px) with user-visible warning when area is too small; added empty-bars guard with "Waiting…" message; added Y-axis range validation (`pMin >= pMax` / non-finite) to prevent draw calls with degenerate coordinates; added spdlog diagnostic logs (`[MarketData] bars_.size()`, `plotSize`, first/last bar time/open/close, `axisYmin`/`axisYmax`) for runtime debugging (`src/ui/AppGui.cpp`)
+- **Candlestick chart not rendering** — candle bars in "Market Data" window were invisible despite loaded data (Price/RSI/EMA9 showed correct values):
+  - Added minimum window size guard (100×100 px) with user-visible warning when area is too small
+  - Added empty-bars guard with "Waiting…" message
+  - Added Y-axis range validation (`pMin >= pMax` / non-finite) to prevent draw calls with degenerate coordinates
+  - Added spdlog diagnostic logs (`bars_.size()`, `plotSize`, first/last bar data, `axisYmin`/`axisYmax`) for runtime debugging
 - **Binance futures testnet URL** — `BinanceExchange` constructor now auto-detects testnet mode from `baseUrl_` and sets `futuresBaseUrl_` to `https://testnet.binancefuture.com` (was hardcoded to production `https://fapi.binance.com`, causing HTTP 403 CloudFront blocks on testnet connections)
 - **Binance futures API paths** — `getOrderBook()` now uses `/fapi/v1/depth` when `marketType_ == "futures"` (was `/api/v3/depth`); `getOpenOrders()` uses `/fapi/v1/openOrders` (was `/api/v3/openOrders`); `getMyTrades()` uses `/fapi/v1/userTrades` (was `/api/v3/myTrades`)
 - **Binance `getFuturesBalance` crash** — added response format validation (`j.is_object()` + `j.contains("totalWalletBalance")`) before `std::stod()` calls to prevent `invalid stod argument` exception when API returns error JSON or HTML
