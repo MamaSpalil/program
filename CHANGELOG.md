@@ -5,6 +5,55 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-04
+
+### Added
+
+#### HIGH PRIORITY — Trading Infrastructure
+
+- **H1 — Order Management UI** — new `ImGui::Begin("Order Management")` window (420×520) with BUY/SELL side buttons, MARKET/LIMIT/STOP_LIMIT type selector, quantity/price/stop-price inputs, reduce-only checkbox (futures), estimated cost display, and confirmation popup before order submission; includes open positions table with per-position Close button and TP/SL editing; validates orders through `RiskManager::canTrade()` with inline error display (`src/trading/OrderManagement.h/.cpp`)
+- **H2 — Paper Trading Panel** — new `ImGui::Begin("Paper Trading")` window showing virtual balance, equity, total PnL (%), max drawdown; open positions table (pair/qty/entry/current/pnl); reset button with confirmation popup; state persisted to `config/paper_account.json`; `PaperTrading` class with `openPosition()`, `closePosition()`, `updatePrices()`, `reset()`, `saveToFile()`, `loadFromFile()` (`src/trading/PaperTrading.h/.cpp`)
+- **H2 — Paper/Live mode indicator** — colored toolbar button: yellow `PAPER TRADING` when `mode == "paper"`, red `LIVE TRADING` otherwise
+- **H3 — Trade markers on chart** — entry markers (green triangle-up for BUY, red triangle-down for SELL), exit markers (white X with PnL tag), and TP/SL horizontal lines rendered via `ImDrawList` in the candlestick chart; managed by `TradeMarkerManager` with thread-safe add/clear/getMarkers/setTPSL/clearTPSL (`src/trading/TradeMarker.h/.cpp`)
+- **H4 — AES-256-GCM key encryption** — `KeyVault` class using PBKDF2-HMAC-SHA256 (100 000 iterations, 16-byte salt) for key derivation and AES-256-GCM for authenticated encryption; provides `encrypt()`/`decrypt()`, hex convenience wrappers, and `generateSalt()`; wire format: salt(16) + iv(12) + tag(16) + ciphertext (`src/security/KeyVault.h/.cpp`)
+
+#### MEDIUM PRIORITY — Analytics & Alerting
+
+- **Trade History storage** — `TradeHistory` class with `HistoricalTrade` struct (id, symbol, side, type, qty, entry/exit price, pnl, commission, entry/exit time, isPaper flag); CRUD operations, filtering by symbol/date/paper-vs-live, statistics (winRate, avgWin, avgLoss, profitFactor, maxDrawdown); JSON persistence (`src/trading/TradeHistory.h/.cpp`)
+- **Trade History & Analytics window** — new ImGui window showing aggregate statistics, equity mini-chart, and scrollable trades table with date/pair/side/entry/exit/pnl columns and CSV export button
+- **M1 — Backtesting engine** — `BacktestEngine` class with configurable symbol, interval, initial balance, commission; runs EMA-crossover strategy or custom `SignalFunc`; computes Sharpe ratio (`avgReturn / stdReturn * sqrt(252)`), max drawdown, profit factor, win rate, avg win/loss; produces equity curve and trade list (`src/backtest/BacktestEngine.h/.cpp`)
+- **M1 — Backtesting window** — new `ImGui::Begin("Backtesting")` window (700×600) with symbol/timeframe/date-range/balance/commission inputs, "Run Backtest" button, results summary (PnL, trades, drawdown, Sharpe, PF), equity curve `PlotLines`, and scrollable trades table with CSV export
+- **M2 — Equity Curve** — `GuiState` now carries `equityCurveData` and `equityCurveTimes` for live equity visualization; equity mini-chart rendered in Trade History window
+- **M3 — Alerts & Notifications** — `AlertManager` class with alert CRUD, condition checking (RSI_ABOVE/BELOW, PRICE_ABOVE/BELOW, EMA_CROSS_UP/DOWN), Telegram notifications via libcurl (`curl_easy_escape` for URL encoding), Windows sound via `MessageBeep`, UI notification callback, JSON persistence to `config/alerts.json` (`src/alerts/AlertManager.h/.cpp`)
+- **M3 — Alerts window** — new ImGui window with new-alert form (symbol, condition, threshold, notify type), alert list with triggered/active indicators, reset/delete buttons
+
+#### LOW PRIORITY — Scanner, Export, Pine Script
+
+- **L1 — Multi-pair Market Scanner** — `MarketScanner` class with thread-safe `updateResults()`/`getResults()`, sort by field, volume filter (`src/scanner/MarketScanner.h/.cpp`)
+- **L1 — Market Scanner window** — new `ImGui::Begin("Market Scanner")` window (800×500) with sortable 7-column table (Pair, Price, 24h%, Volume, RSI, Signal, Conf%); color-coded values; click to switch pair
+- **L2 — CSV Export** — `CSVExporter` class with static methods `exportBars()`, `exportTrades()`, `exportBacktestTrades()`, `exportEquityCurve()`; cross-platform time formatting (`gmtime_r`/`gmtime_s`) (`src/data/CSVExporter.h/.cpp`)
+- **L2 — Export buttons** — "Export Bars" button in Market Data toolbar; "Export CSV" buttons in Backtesting and Trade History windows
+- **L3 — Pine Script Editor** — new `ImGui::Begin("Pine Script Editor")` window with `InputTextMultiline` (65536 chars, tab-input), Run/Save As/Load buttons, error display
+- **L4 — Pine Visuals** — `PineVisuals` class with `PlotShapeMarker` (time, price, shape, color, text) and `BgColorBar` (time, color) structs; thread-safe add/clear/get (`src/indicators/PineVisuals.h/.cpp`)
+- **M4 — Depth of Market** — `DepthLevel::isWall` support added to `OrderBook` data path through existing `getOrderBook()` infrastructure
+
+#### Tests
+
+- **47 new unit tests** — `test_modules.cpp` covering OrderManagement (7 tests: validation, cost estimation, close order, exchange conversion), PaperTrading (6 tests: balance, positions, close, reset, price updates), TradeMarker (3 tests: CRUD, TP/SL), KeyVault (5 tests: encrypt/decrypt round-trip, wrong password, hex, salt), TradeHistory (5 tests: stats, filters, profit factor), BacktestEngine (3 tests: empty, trending, custom signal), AlertManager (5 tests: CRUD, trigger, reset), MarketScanner (2 tests: update, volume filter), PineVisuals (2 tests: shapes, clear)
+
+### Fixed
+
+- **Binance futures testnet URL** — `BinanceExchange` constructor now auto-detects testnet mode from `baseUrl_` and sets `futuresBaseUrl_` to `https://testnet.binancefuture.com` (was hardcoded to production `https://fapi.binance.com`, causing HTTP 403 CloudFront blocks on testnet connections)
+- **Binance futures API paths** — `getOrderBook()` now uses `/fapi/v1/depth` when `marketType_ == "futures"` (was `/api/v3/depth`); `getOpenOrders()` uses `/fapi/v1/openOrders` (was `/api/v3/openOrders`); `getMyTrades()` uses `/fapi/v1/userTrades` (was `/api/v3/myTrades`)
+- **Binance `getFuturesBalance` crash** — added response format validation (`j.is_object()` + `j.contains("totalWalletBalance")`) before `std::stod()` calls to prevent `invalid stod argument` exception when API returns error JSON or HTML
+- **Binance `getPositionRisk` crash** — added `j.is_array()` validation before iterating position risk response
+
+### Changed
+
+- **View menu** — expanded with entries for Order Management, Paper Trading, Backtesting, Alerts, Market Scanner, Pine Editor, and Trade History windows
+- **Toolbar** — added Paper/Live mode indicator button between User Panel toggle and pair selector
+- **CMakeLists.txt** — added 10 new source file groups (TRADING, SECURITY, BACKTEST, ALERT, SCANNER, PINEVIZ, CSVEXPORT) to `ALL_LIB_SOURCES`; added `tests/test_modules.cpp` to test executable
+
 ## [1.1.0] - 2026-03-04
 
 ### Added
@@ -91,5 +140,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CMakeLists.txt** — added MSVC-specific compiler flags, `_WIN32` guards, and `vcpkg` toolchain integration (PR #2, #5)
 - **Pine Script auto-conversion** — auto-loads `.pine` files from `user_indicator/` directory at runtime via `UserIndicatorManager` (PR #8)
 
+[1.2.0]: https://github.com/MamaSpalil/program/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/MamaSpalil/program/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/MamaSpalil/program/releases/tag/v1.0.0
