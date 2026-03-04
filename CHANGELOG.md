@@ -5,6 +5,31 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-04
+
+### Added
+
+- **Standalone "Market Data" window** — candlestick chart moved from center-column `CollapsingHeader` into its own `ImGui::Begin("Market Data")` window with `NoScrollbar` / `NoScrollWithMouse` flags (PR #15)
+- **Window size & position** — initial size 900×600, position (220, 30), min constraints 400×300; all set via `ImGuiCond_FirstUseEver` so the user can freely resize and ImGui remembers the layout in `imgui.ini` (PR #15)
+- **Auto-fit to 50 bars** — `needsChartReset_` flag dynamically computes bar width to show the last 50 candles on first load, pair change, or timeframe change (PR #15)
+- **Mouse zoom & pan** — mouse wheel zooms the X axis (bar width 2–30 px); left-mouse drag pans horizontally; removed old Ctrl+wheel / plain wheel split (PR #15)
+- **"Reset View" / "Fit All" buttons** — toolbar buttons above the chart: "Reset View" fits last 50 bars, "Fit All" scales to the entire candle history (PR #15)
+- **EMA9 overlay** — yellow polyline drawn over the price candles, computed locally via `calcEMAFromCandles()` (PR #15)
+- **RSI(14) subplot** — dedicated subplot below volume (layout: candles 65 %, volume 20 %, RSI 15 %) with 30/50/70 horizontal level lines and right-side labels; computed via `calcRSIFromCandles()` (PR #15)
+- **Signal panel** — single-row info bar above the chart showing Price, RSI, EMA9, Signal (BUY/SELL/HOLD color-coded), and Confidence % (PR #15)
+- **Crosshair with price label** — vertical line across full canvas height; horizontal line limited to the price zone; price tag rendered in the scale area at cursor Y position (PR #15)
+
+### Changed
+
+- **Chart layout proportions** — price section reduced from 75 % → 65 %, volume from 25 % → 20 %, to make room for the new RSI subplot (15 %) (PR #15)
+- **Y-axis padding** — increased from 2 % to 5 % and extracted into named constant `kPricePadding` for readability (PR #15)
+- **`drawMarketPanel()` / `drawCandlestickChart()` removed** — both old methods replaced by a single `drawMarketDataWindow()` method combining market info, toolbar, chart, and indicators (PR #15)
+
+### Fixed
+
+- **ImGui Begin/End balance** — early return for empty candle history now exits before `BeginChild` to avoid assertion failures from unbalanced calls (PR #15)
+- **Scroll offset on timeframe change** — `chartScrollOffset_` is now reset to 0 together with `needsChartReset_` when switching timeframes, preventing stale scroll positions (PR #15)
+
 ## [1.0.0] - 2026-03-03
 
 ### Added
@@ -65,4 +90,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CMakeLists.txt** — added MSVC-specific compiler flags, `_WIN32` guards, and `vcpkg` toolchain integration (PR #2, #5)
 - **Pine Script auto-conversion** — auto-loads `.pine` files from `user_indicator/` directory at runtime via `UserIndicatorManager` (PR #8)
 
+[1.1.0]: https://github.com/MamaSpalil/program/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/MamaSpalil/program/releases/tag/v1.0.0
