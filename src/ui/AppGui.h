@@ -203,8 +203,7 @@ private:
     // UI Panels
     void drawMenuBar();
     void drawToolbar();
-    void drawMarketPanel();
-    void drawCandlestickChart();
+    void drawMarketDataWindow();  // combined Market Data window with chart
     void drawVolumeDeltaPanel();
     void drawOrderBookPanel();
     void drawIndicatorsPanel();
@@ -263,6 +262,7 @@ private:
     int   chartScrollOffset_{0};   // horizontal scroll offset (bars from end)
     float chartMinBarWidth_{2.0f};
     float chartMaxBarWidth_{30.0f};
+    bool  needsChartReset_{true};  // reset view on first load / pair change / TF change
 
     ConnectCallback    onConnect_;
     DisconnectCallback onDisconnect_;
