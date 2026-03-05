@@ -5,6 +5,21 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-XX
+
+### Added
+#### AI & Machine Learning Engine (LibTorch)
+- **RLTradingAgent** (`src/ai/RLTradingAgent.h/.cpp`) — интеграция PyTorch C++ API (LibTorch) для запуска нейронных сетей в рантайме. Имплементация Continuous Reinforcement Learning (PPO) с вычислением GAE (Generalized Advantage Estimation) через тензорные операции.
+- **Dual-Mode Logic** — внедрены два режима ИИ: `Fast Mode` (сверхбыстрый анализ L2 Orderbook напрямую из `DepthStreamManager`) и `Swing Mode` (анализ трендов и MTF матриц на базе `CandleCache`).
+- **FeatureExtractor** (`src/ai/FeatureExtractor.h/.cpp`) — высокопроизводительный модуль формирования вектора состояний без динамических аллокаций. Встроена жесткая математическая логика детектирования Smart Money Concepts: Swing Failure Patterns (SFP) и Fair Value Gaps (FVG).
+- **OnlineLearningLoop** (`src/ai/OnlineLearningLoop.h/.cpp`) — выделенный фоновый поток (`std::jthread`), реализующий lock-free буфер реплея (Replay Buffer). Автоматически забирает результаты сделок (PnL) из `TradeRepository` для формирования функции Reward и обновления весов градиентным спуском (AdamW) без блокировки основного торгового потока.
+
+### Changed
+- **CMakeLists.txt** — добавлена интеграция `find_package(Torch REQUIRED)` и линковка тензорных библиотек к `crypto_lib`. Обновлены таргеты для поддержки аппаратного ускорения (CUDA/TensorRT) при наличии.
+
+### Fixed
+- **AppGui.cpp** — добавлены отсутствующие `#include <windows.h>` и `#include <GLFW/glfw3native.h>` в блоке `#ifdef _WIN32` для корректной компиляции Win32 API вызовов (`HICON`, `HWND`, `LoadImageA`, `SendMessageA`, `glfwGetWin32Window`). Устраняет ~30 ошибок компиляции C2065/C2146/C3861 на MSVC.
+
 ## [1.5.3] - 2026-03-XX
 
 ### Added

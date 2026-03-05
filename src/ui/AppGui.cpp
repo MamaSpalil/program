@@ -7,6 +7,11 @@
 #include "../../third_party/imgui/imgui_impl_opengl3.h"
 
 #include <GLFW/glfw3.h>
+#ifdef _WIN32
+#  include <windows.h>
+#  define GLFW_EXPOSE_NATIVE_WIN32
+#  include <GLFW/glfw3native.h>
+#endif
 #include <fstream>
 #include <filesystem>
 #include <sstream>

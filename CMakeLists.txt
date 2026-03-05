@@ -152,6 +152,12 @@ set(DEPTH_SOURCES
     src/exchange/DepthStream.cpp
 )
 
+set(AI_SOURCES
+    src/ai/RLTradingAgent.cpp
+    src/ai/FeatureExtractor.cpp
+    src/ai/OnlineLearningLoop.cpp
+)
+
 set(UI_SOURCES
     src/ui/Dashboard.cpp
     src/ui/LayoutManager.cpp
@@ -197,6 +203,7 @@ set(ALL_LIB_SOURCES
     ${TAX_SOURCES}
     ${DRAWING_SOURCES}
     ${DEPTH_SOURCES}
+    ${AI_SOURCES}
 )
 
 # ── Library target ─────────────────────────────────────────────────────────────
@@ -318,6 +325,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_regression_part3.cpp
         tests/test_trading_db.cpp
         tests/test_full_system.cpp
+        tests/test_ai_engine.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
