@@ -259,10 +259,21 @@ if(CURSES_FOUND)
     target_compile_definitions(crypto_lib PUBLIC USE_NCURSES)
 endif()
 
-# LibTorch (optional)
+# LibTorch (optional — provides PyTorch C++ API for AI modules)
+# Integrate via: cmake -DTorch_DIR=<libtorch>/share/cmake/Torch
+# Or: cmake -DCMAKE_PREFIX_PATH=<libtorch>
+# Download from: https://pytorch.org/get-started/locally/
 if(Torch_FOUND)
+    message(STATUS "LibTorch found — AI engine enabled (libs: ${TORCH_LIBRARIES})")
+    target_include_directories(crypto_lib PUBLIC ${TORCH_INCLUDE_DIRS})
     target_link_libraries(crypto_lib PUBLIC ${TORCH_LIBRARIES})
     target_compile_definitions(crypto_lib PUBLIC USE_LIBTORCH)
+    # Apply required CXX flags from Torch (e.g. -D_GLIBCXX_USE_CXX11_ABI)
+    if(TORCH_CXX_FLAGS)
+        target_compile_options(crypto_lib PUBLIC ${TORCH_CXX_FLAGS})
+    endif()
+else()
+    message(STATUS "LibTorch not found — AI engine will use stub (no ML inference)")
 endif()
 
 # XGBoost (optional)

@@ -195,9 +195,12 @@ RLTradingAgent::train_step(const ExperienceBatch& batch) {
     auto advantages = computeGAE(rewards, oldValues, dones);
     auto returns    = advantages + oldValues; // V_target = Â_t + V(s_t)
 
-    // Normalise advantages (zero-mean, unit-variance) for training stability
-    advantages = (advantages - advantages.mean()) /
-                 (advantages.std() + 1e-8f);
+    // Normalise advantages (zero-mean, unit-variance) for training stability.
+    // Guard against single-element batches where std() is undefined.
+    if (N > 1) {
+        advantages = (advantages - advantages.mean()) /
+                     (advantages.std() + 1e-8f);
+    }
 
     // ── 3. PPO optimisation loop ────────────────────────────────────────────
     float totalPolicyLoss = 0.0f, totalValueLoss = 0.0f, totalEntropy = 0.0f;
