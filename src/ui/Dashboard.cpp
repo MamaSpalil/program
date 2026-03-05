@@ -78,13 +78,13 @@ void Dashboard::draw() {
     mvprintw(row++, 0, "╚══════════════════════════════════════════╝");
     attroff(A_BOLD | COLOR_PAIR(4));
 
-    mvprintw(row++, 0, "Price:   %.4f  Vol: %.2f", lastCandle_.close, lastCandle_.volume);
-    mvprintw(row++, 0, "EMA9:    %.4f  EMA21: %.4f", ema_fast_, ema_slow_);
-    mvprintw(row++, 0, "RSI:     %.2f   ATR: %.4f", rsi_, atr_);
+    mvprintw(row++, 0, "Price:   %.8f  Vol: %.2f", lastCandle_.close, lastCandle_.volume);
+    mvprintw(row++, 0, "EMA9:    %.8f  EMA21: %.8f", ema_fast_, ema_slow_);
+    mvprintw(row++, 0, "RSI:     %.2f   ATR: %.8f", rsi_, atr_);
 
     // Equity
     attron(COLOR_PAIR(3));
-    mvprintw(row++, 0, "Equity:  $%.2f", equity_);
+    mvprintw(row++, 0, "Equity:  $%.8f", equity_);
     attroff(COLOR_PAIR(3));
 
     // Signal
@@ -100,7 +100,7 @@ void Dashboard::draw() {
         mvprintw(row++, 0, "Reason:  %s", lastSignal_.reason.c_str());
     }
 
-    mvprintw(row++, 0, "SL: %.4f  TP: %.4f", lastSignal_.stopLoss, lastSignal_.takeProfit);
+    mvprintw(row++, 0, "SL: %.8f  TP: %.8f", lastSignal_.stopLoss, lastSignal_.takeProfit);
     mvprintw(row++, 0, "Press Ctrl+C to exit.");
     refresh();
 #else
