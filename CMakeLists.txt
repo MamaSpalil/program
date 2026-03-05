@@ -65,6 +65,17 @@ set(DATA_SOURCES
     src/data/HistoricalLoader.cpp
     src/data/ExchangeDB.cpp
     src/data/CandleCache.cpp
+    src/data/TradingDatabase.cpp
+    src/data/TradeRepository.cpp
+    src/data/OrderRepository.cpp
+    src/data/PositionRepository.cpp
+    src/data/EquityRepository.cpp
+    src/data/AlertRepository.cpp
+    src/data/BacktestRepository.cpp
+    src/data/DrawingRepository.cpp
+    src/data/AuxRepository.cpp
+    src/data/DatabaseMigrator.cpp
+    src/data/DatabaseMaintenance.cpp
 )
 
 set(INDICATOR_SOURCES
@@ -299,6 +310,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_regression_part1.cpp
         tests/test_regression_part2.cpp
         tests/test_regression_part3.cpp
+        tests/test_trading_db.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
