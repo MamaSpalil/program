@@ -2,6 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include <numeric>
+#include <chrono>
 
 namespace crypto {
 
@@ -162,6 +163,39 @@ void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
         for (double r : returns) sq_sum += (r - avgRet) * (r - avgRet);
         double stdRet = std::sqrt(sq_sum / returns.size());
         result.sharpeRatio = (stdRet > 0) ? (avgRet / stdRet) * std::sqrt(252.0) : 0.0;
+    }
+
+    // Persist results to database if repository is set
+    if (btRepo_) {
+        BacktestResult dbResult;
+        dbResult.id = "bt_" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        dbResult.pnl = result.totalPnL;
+        dbResult.pnlPct = result.totalPnLPct;
+        dbResult.maxDrawdown = result.maxDrawdownPct;
+        dbResult.sharpe = result.sharpeRatio;
+        dbResult.winRate = result.winRate;
+        dbResult.totalTrades = result.totalTrades;
+        dbResult.winningTrades = result.winTrades;
+        dbResult.losingTrades = result.lossTrades;
+        dbResult.profitFactor = result.profitFactor;
+        dbResult.runAt = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        std::vector<BtTradeRecord> dbTrades;
+        for (const auto& t : result.trades) {
+            BtTradeRecord bt;
+            bt.backtestId = dbResult.id;
+            bt.side = t.side;
+            bt.entryPrice = t.entryPrice;
+            bt.exitPrice = t.exitPrice;
+            bt.qty = t.qty;
+            bt.pnl = t.pnl;
+            bt.entryTime = t.entryTime;
+            bt.exitTime = t.exitTime;
+            dbTrades.push_back(std::move(bt));
+        }
+        btRepo_->save(dbResult, dbTrades);
     }
 }
 

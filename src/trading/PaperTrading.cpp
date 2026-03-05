@@ -31,6 +31,25 @@ bool PaperTrading::openPosition(const std::string& symbol, const std::string& si
     pos.pnl = 0.0;
     account_.openPositions.push_back(pos);
     account_.balance -= cost;
+
+    // Persist to database
+    if (posRepo_) {
+        PositionRecord rec;
+        rec.id = symbol + "_paper";
+        rec.symbol = symbol;
+        rec.exchange = "paper";
+        rec.side = side;
+        rec.qty = qty;
+        rec.entryPrice = price;
+        rec.currentPrice = price;
+        rec.isPaper = true;
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        rec.openedAt = now;
+        rec.updatedAt = now;
+        posRepo_->upsert(rec);
+    }
+
     recalcEquity();
     return true;
 }
@@ -61,6 +80,12 @@ bool PaperTrading::closePosition(const std::string& symbol, double currentPrice)
     account_.balance += it->quantity * currentPrice;
     account_.totalPnL += pnl;
     account_.openPositions.erase(it);
+
+    // Remove from database
+    if (posRepo_) {
+        posRepo_->remove(symbol, "paper", true);
+    }
+
     recalcEquity();
     return true;
 }

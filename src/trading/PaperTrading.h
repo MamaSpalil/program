@@ -3,6 +3,7 @@
 #include <vector>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include "../data/PositionRepository.h"
 
 namespace crypto {
 
@@ -61,12 +62,15 @@ public:
 
     bool isPaperMode() const { return true; }
 
+    void setPositionRepository(PositionRepository* repo) { posRepo_ = repo; }
+
 private:
     void recalcEquity();
 
     mutable std::mutex mutex_;
     PaperAccount account_;
     double initialBalance_;
+    PositionRepository* posRepo_{nullptr};
 };
 
 } // namespace crypto

@@ -5,6 +5,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include "../data/AuxRepository.h"
 
 namespace crypto {
 
@@ -48,6 +49,8 @@ public:
     void setPort(uint16_t p) { port_ = p; }
     uint16_t getPort() const { return port_; }
 
+    void setAuxRepository(AuxRepository* repo) { auxRepo_ = repo; }
+
 private:
     WebhookResponse handleRequest(
         const std::string& secret,
@@ -64,6 +67,7 @@ private:
     std::mutex rateMutex_;
 
     std::vector<WebhookSignal> recentSignals_;
+    AuxRepository* auxRepo_{nullptr};
 };
 
 } // namespace crypto
