@@ -46,6 +46,7 @@ public:
         std::string name;
         Vec2        pos;
         Vec2        size;
+        bool        visible{true};
     };
 
     // Apply position and size every frame BEFORE ImGui::Begin() — locks window
@@ -96,61 +97,14 @@ public:
 #endif
     }
 
-    // Recalculate all window layouts based on screen dimensions
-    void recalculate(float screenW, float screenH) {
-        layouts_.clear();
+    // Recalculate all window layouts based on screen dimensions.
+    // Produces 8 windows:
+    //   Main Toolbar, Filters Bar, Pair List, Volume Delta,
+    //   Market Data, Indicators, User Panel, Logs
+    void recalculate(float screenW, float screenH);
 
-        float topY   = 30.0f;     // below menu bar
-        float gap    = 4.0f;
-        float margin = 4.0f;
-        float winW   = screenW - 2.0f * margin;
-        float availH = screenH - topY - margin;
-
-        // Height proportions: Logs 10%, Volume Delta 13%, Market Data 52%, Indicators 25%
-        float logH  = availH * logPct_;
-        float vdH   = availH * vdPct_;
-        float indH  = availH * indPct_;
-        float mdH   = availH - logH - vdH - indH - 3.0f * gap;
-        if (logH < 60.0f)  logH  = 60.0f;
-        if (vdH  < 80.0f)  vdH   = 80.0f;
-        if (mdH  < 200.0f) mdH   = 200.0f;
-        if (indH < 80.0f)  indH  = 80.0f;
-
-        float y = topY;
-
-        // Logs — top
-        layouts_["Logs"] = {
-            "Logs",
-            Vec2(margin, y),
-            Vec2(winW, logH)
-        };
-        y += logH + gap;
-
-        // Volume Delta — below Logs
-        layouts_["Volume Delta"] = {
-            "Volume Delta",
-            Vec2(margin, y),
-            Vec2(winW, vdH)
-        };
-        y += vdH + gap;
-
-        // Market Data — below Volume Delta (tallest)
-        layouts_["Market Data"] = {
-            "Market Data",
-            Vec2(margin, y),
-            Vec2(winW, mdH)
-        };
-        y += mdH + gap;
-
-        // Indicators — below Market Data
-        layouts_["Indicators"] = {
-            "Indicators",
-            Vec2(margin, y),
-            Vec2(winW, indH)
-        };
-    }
-
-    // Layout height proportions (must sum to < 1.0; Market Data gets the remainder)
+    // Layout height proportions for center column
+    // (vdPct + indPct < 1.0; Market Data gets the remainder)
     float logPct() const  { return logPct_; }
     float vdPct()  const  { return vdPct_;  }
     float indPct() const  { return indPct_; }
@@ -163,7 +117,7 @@ public:
     WindowLayout get(const std::string& name) const {
         auto it = layouts_.find(name);
         if (it != layouts_.end()) return it->second;
-        return {name, Vec2(100, 100), Vec2(400, 300)};
+        return {name, Vec2(100, 100), Vec2(400, 300), true};
     }
 
     bool hasLayout(const std::string& name) const {
@@ -173,8 +127,8 @@ public:
 private:
     std::map<std::string, WindowLayout> layouts_;
     float logPct_ = 0.10f;
-    float vdPct_  = 0.13f;
-    float indPct_ = 0.25f;
+    float vdPct_  = 0.15f;
+    float indPct_ = 0.20f;
 };
 
 } // namespace crypto

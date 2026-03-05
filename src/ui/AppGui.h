@@ -262,6 +262,8 @@ private:
     // UI Panels
     void drawMenuBar();
     void drawToolbar();
+    void drawMainToolbarWindow();  // standalone Main Toolbar window
+    void drawFiltersBarWindow();   // standalone Filters Bar window
     void drawMarketDataWindow();  // combined Market Data window with chart
     void drawVolumeDeltaPanel();
     void drawOrderBookPanel();
@@ -303,7 +305,11 @@ private:
     bool showSettings_{false};
     bool showDemo_{false};
     bool showOrderBook_{false};  // Order book mode
-    bool showUserPanel_{false};  // User panel (separate window)
+    bool showUserPanel_{true};   // User panel (separate window)
+    bool showPairList_{true};    // Pair list sidebar
+    bool showVolumeDelta_{true}; // Volume delta panel
+    bool showIndicators_{true};  // Indicators panel
+    bool showLogs_{true};        // Logs panel
 
     // Pair selector state
     int selectedPairIdx_{-1};

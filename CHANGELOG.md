@@ -5,6 +5,42 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-03-05
+
+### Fixed
+
+- **GUI window not appearing** — added `glfw3` to `vcpkg.json` dependencies so GLFW is installed via vcpkg on Windows; without it `find_package(glfw3)` failed silently, `USE_IMGUI` was not defined, and the program compiled in console-only mode (no GUI window)
+- **AppGui::init()** — added `glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE)` and diagnostic `fprintf` messages for `glfwInit()` / `glfwCreateWindow()` failures to aid debugging
+
+### Added
+
+#### Restored All 8 Mandatory UI Panels (Group 0)
+
+- **"Main Toolbar"** window — standalone `ImGui::Begin("Main Toolbar")` at (0,0), full screen width × 32px; contains menu bar (File/View/Help) and toolbar buttons (Connect, Start Trading, Settings, Order Book, User Panel, mode indicator, pair selector, market type)
+- **"Filters Bar"** window — standalone `ImGui::Begin("Filters Bar")` at (0,32), full screen width × 28px; contains filter controls (min volume, min/max price, min/max change%)
+- **"Pair List"** — positioned via LayoutManager at (0,60), 210 × centerH; gated by `showPairList_` flag (default `true`)
+- **"Volume Delta"** — positioned via LayoutManager at (210,60), centerW × centerH\*0.15; gated by `showVolumeDelta_` flag (default `true`)
+- **"Market Data"** — positioned via LayoutManager at (210,volY), centerW × centerH\*0.65
+- **"Indicators"** — positioned via LayoutManager at (210,indY), centerW × centerH\*0.20; gated by `showIndicators_` flag (default `true`)
+- **"User Panel"** — positioned via LayoutManager at (screenW−290,60), 290 × centerH; `showUserPanel_` default changed from `false` to `true`
+- **"Logs"** — positioned via LayoutManager at (0,screenH−120), screenW × 120; gated by `showLogs_` flag (default `true`)
+- **View menu** — added toggle menu items for Pair List, Volume Delta, Indicators, and Logs panels
+
+#### LayoutManager (Group 1)
+
+- **`src/ui/LayoutManager.cpp`** — new file; `recalculate()` implementation moved from header to .cpp; produces layouts for all 8 mandatory windows using the 3-column layout (Pair List | center column | User Panel) with toolbar/filters at top and logs at bottom
+- **`WindowLayout.visible`** field — added `bool visible{true}` to the `WindowLayout` struct stored in `std::map`
+- **Center column proportions** — `vdPct_` (default 0.15), `indPct_` (default 0.20), Market Data gets remainder (0.65)
+
+### Changed
+
+- **`vcpkg.json`** — added `glfw3` dependency for Windows GUI builds
+- **`CMakeLists.txt`** — added `src/ui/LayoutManager.cpp` to `UI_SOURCES`
+- **`AppGui.h`** — added `showPairList_`, `showVolumeDelta_`, `showIndicators_`, `showLogs_` flags (all default `true`); changed `showUserPanel_` default to `true`; added `drawMainToolbarWindow()` and `drawFiltersBarWindow()` declarations
+- **`AppGui.cpp` / `renderFrame()`** — replaced full-screen `##MainWin` background window with 8 individual positioned windows; all core panels gated by show flags
+- **`LayoutManager.h`** — `recalculate()` moved to `.cpp`; `WindowLayout` struct gains `visible` field; default `vdPct_` changed from 0.13 to 0.15, `indPct_` from 0.25 to 0.20
+- **LayoutManager tests** — updated `RecalculateCreatesLayouts` (checks all 8 windows), `WindowsDoNotOverlap` (new 3-column assertions), `WindowsAreFullWidth` (center column width = screenW−210−290), `GetDefaultsForUnknown` (checks `visible` field)
+
 ## [1.5.1] - 2026-03-05
 
 ### Added

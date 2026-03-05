@@ -154,6 +154,7 @@ set(DEPTH_SOURCES
 
 set(UI_SOURCES
     src/ui/Dashboard.cpp
+    src/ui/LayoutManager.cpp
 )
 
 set(PINEVIZ_SOURCES
