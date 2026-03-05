@@ -886,9 +886,9 @@ TEST(LayoutManager, ThreeColumnLayout) {
     auto pl = mgr.get("Pair List");
     auto up = mgr.get("User Panel");
     auto md = mgr.get("Market Data");
-    EXPECT_NEAR(pl.size.x, 210.0f, 1.0f);
+    EXPECT_NEAR(pl.size.x, 200.0f, 1.0f);
     EXPECT_NEAR(up.size.x, 290.0f, 1.0f);
-    EXPECT_NEAR(md.size.x, 1920.0f - 210.0f - 290.0f, 1.0f);
+    EXPECT_NEAR(md.size.x, 1920.0f - 200.0f - 290.0f, 1.0f);
 }
 
 TEST(LayoutManager, NoBoundsExceeded) {
@@ -973,8 +973,8 @@ TEST(LayoutManager, VisibilityHidesWindow) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto md = mgr.get("Market Data");
-    // Default center width = 1920 - 210 - 290 = 1420
-    EXPECT_NEAR(md.size.x, 1420.0f, 1.0f);
+    // Default center width = 1920 - 200 - 290 = 1430
+    EXPECT_NEAR(md.size.x, 1430.0f, 1.0f);
 }
 
 // ── SortState ──────────────────────────────────────────────────

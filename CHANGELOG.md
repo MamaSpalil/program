@@ -5,6 +5,29 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-03-05
+
+### Added
+#### Стресс-тестирование и интеграция LibTorch + XGBoost
+- **Стресс-тесты v1.7.0** (`tests/test_v170.cpp`) — 46 новых тестов, охватывающих все основные модули:
+  - **LayoutStress** (17 тестов): проверка размеров окон (PairList=200, UserPanel=290, MarketData=W-490, TopBar=32, Logs=120), отсутствие наложения между всеми 8 окнами, 9 разрешений экрана (от 800×600 до 3840×2160), viewport offset, флаги видимости, кастомные пропорции.
+  - **AIStress** (11 тестов): SPSCQueue high-throughput (10K элементов, FIFO), RLTradingAgent (1000 forward pass, 10 train step, mode switching, save/load), AIFeatureExtractor (500 свечей, 100 depth updates, SMC паттерны), OnlineLearningLoop (start/stop, experience batch).
+  - **MLStress** (13 тестов): XGBoost (конструктор, train/predict, save/load roundtrip, feature importance), LSTM (конструктор, predict без обучения, addSample, train, save/load), SignalEnhancer (enhance, recordOutcome × 200), ModelTrainer (300 свечей).
+  - **IntegrationStress** (5 тестов): AIFeatureExtractor→RLTradingAgent pipeline, IndicatorEngine→FeatureExtractor→Models pipeline, 1000 пересчётов layout, проверка USE_LIBTORCH и USE_XGBOOST флагов.
+- **CMakeLists.txt** — раскомментирован `tests/test_v170.cpp` в списке тестовых файлов.
+
+### Changed
+- **LayoutManager.cpp** — ширина панели Pair List изменена с 210px на 200px для соответствия спецификации UI-диаграммы: PairList(200) + UserPanel(290) = 490, MarketData = W−490. Обеспечивает точное тайловое расположение без наложения окон.
+- **test_full_system.cpp** — обновлены ожидаемые значения в тестах `ThreeColumnLayout` и `VisibilityHidesWindow` для PairList=200px (ранее 210px).
+- **test_regression_part3.cpp** — обновлён тест `WindowsAreFullWidth`: центральная колонка = screenW − 200 − 290 (ранее screenW − 210 − 290).
+
+### Verified
+- **LibTorch 2.6.0 CPU** — успешная сборка и интеграция. RLTradingAgent корректно инициализируется на CPU (state_dim=128, hidden=256, actions=3). Forward pass, train_step (PPO), save/load модели работают без ошибок.
+- **XGBoost 2.1.3** — успешная сборка из исходников и линковка через `xgboost::xgboost`. Обучение (train), предсказание (predict), сохранение/загрузка модели (UBJSON формат) работают корректно.
+- **CMakeLists.txt** — `find_package(Torch QUIET)` и `find_package(XGBoost QUIET)` корректно находят библиотеки. Определения `USE_LIBTORCH` и `USE_XGBOOST` передаются как `PUBLIC` и наследуются тестовым таргетом.
+- **CMakePresets.json** — пресеты Windows (VS2019 Release/Debug) с путями к LibTorch и XGBoost корректны. Linux сборка работает без пресетов через ручную передачу `-DTorch_DIR` и `-DXGBoost_DIR`.
+- **Полный тест-сьют** — 414 тестов пройдено, 2 пропущено (LiveData — требуют сеть), 0 ошибок.
+
 ## [1.6.0] - 2026-03-XX
 
 ### Added

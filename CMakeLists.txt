@@ -358,7 +358,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_trading_db.cpp
         tests/test_full_system.cpp
         tests/test_ai_engine.cpp
-        # tests/test_v170.cpp  — раскомментировать после создания файла
+        tests/test_v170.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

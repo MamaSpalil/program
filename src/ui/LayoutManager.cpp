@@ -22,7 +22,7 @@ void LayoutManager::recalculate(float screenW, float screenH,
     const float Hfilters = 28.0f;   // Filters Bar height
 
     // Effective dimensions based on show flags
-    const float Wleft  = showPairList  ? 210.0f : 0.0f;
+    const float Wleft  = showPairList  ? 200.0f : 0.0f;
     const float Wright = showUserPanel ? 290.0f : 0.0f;
     const float Hlogs  = showLogs      ? 120.0f : 0.0f;
 
