@@ -169,15 +169,20 @@ bool AppGui::init(const std::string& configPath) {
     }
 
     glfwSetErrorCallback(glfwErrorCb);
-    if (!glfwInit()) return false;
+    if (!glfwInit()) {
+        fprintf(stderr, "AppGui::init — glfwInit() failed\n");
+        return false;
+    }
 
     // GL 3.0 + GLSL 130  (works on most systems)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
     window_ = glfwCreateWindow(1440, 900, "Crypto ML Trader", nullptr, nullptr);
     if (!window_) {
+        fprintf(stderr, "AppGui::init — glfwCreateWindow() failed\n");
         glfwTerminate();
         return false;
     }
@@ -522,7 +527,7 @@ void AppGui::renderFrame() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // Full-screen dockable window
+    // Full-screen dockable window (invisible — hosts menu bar only)
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
@@ -535,31 +540,27 @@ void AppGui::renderFrame() {
     // Recalculate layout based on current screen size
     layoutMgr_.recalculate(vp->WorkSize.x, vp->WorkSize.y);
 
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
-                             ImGuiWindowFlags_NoCollapse |
-                             ImGuiWindowFlags_NoResize   |
-                             ImGuiWindowFlags_NoMove     |
-                             ImGuiWindowFlags_NoBringToFrontOnFocus |
-                             ImGuiWindowFlags_MenuBar;
-    ImGui::Begin("##MainWin", nullptr, flags);
+    // ── All 8 mandatory windows ──
 
-    drawMenuBar();
+    // Main Toolbar — top bar with connect/start/settings buttons
+    drawMainToolbarWindow();
 
-    ImGui::End();
+    // Filters Bar — below toolbar
+    drawFiltersBarWindow();
 
-    // ── Fixed windows: Logs → Volume Delta → Market Data → Indicators ──
+    // Pair List — left sidebar
+    if (showPairList_) drawPairListPanel();
 
-    // Logs window (top, full width, with scroll)
-    drawLogWindow();
-
-    // Volume Delta window (below Logs)
-    drawVolumeDeltaPanel();
-
-    // Market Data window (below Volume Delta — tallest)
+    // Center column: Volume Delta → Market Data → Indicators
+    if (showVolumeDelta_) drawVolumeDeltaPanel();
     drawMarketDataWindow();
+    if (showIndicators_) drawIndicatorsPanel();
 
-    // Indicators window (below Market Data)
-    drawIndicatorsPanel();
+    // User Panel — right sidebar
+    if (showUserPanel_) drawUserPanel();
+
+    // Logs — bottom
+    if (showLogs_) drawLogWindow();
 
     // Reset flag consumed after one frame
     if (layoutNeedsReset_) layoutNeedsReset_ = false;
@@ -578,12 +579,6 @@ void AppGui::renderFrame() {
     if (showScanner_) drawMarketScannerWindow();
     if (showPineEditor_) drawPineEditorWindow();
     if (showTradeHistory_) drawTradeHistoryWindow();
-
-    // Pair List (always visible left sidebar)
-    drawPairListPanel();
-
-    // User Panel (toggled via showUserPanel_)
-    if (showUserPanel_) drawUserPanel();
 
     // Render
     ImGui::Render();
@@ -614,7 +609,11 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Settings Panel",    nullptr, &showSettings_);
+            ImGui::MenuItem("Pair List",         nullptr, &showPairList_);
             ImGui::MenuItem("User Panel",        nullptr, &showUserPanel_);
+            ImGui::MenuItem("Volume Delta",      nullptr, &showVolumeDelta_);
+            ImGui::MenuItem("Indicators",        nullptr, &showIndicators_);
+            ImGui::MenuItem("Logs",              nullptr, &showLogs_);
             ImGui::Separator();
             ImGui::MenuItem("Order Management",  nullptr, &showOrderManagement_);
             ImGui::MenuItem("Paper Trading",     nullptr, &showPaperTrading_);
@@ -633,6 +632,50 @@ void AppGui::drawMenuBar() {
         }
         ImGui::EndMenuBar();
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Main Toolbar Window — standalone window at top with menu bar + toolbar
+// ---------------------------------------------------------------------------
+void AppGui::drawMainToolbarWindow() {
+    auto layout = layoutMgr_.get("Main Toolbar");
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Main Toolbar", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Main Toolbar", layout.pos, layout.size);
+
+    int wflags = ImGuiWindowFlags_NoTitleBar
+               | ImGuiWindowFlags_NoCollapse
+               | ImGuiWindowFlags_NoBringToFrontOnFocus
+               | ImGuiWindowFlags_MenuBar;
+    if (config_.layoutLocked)
+        wflags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+
+    ImGui::Begin("Main Toolbar", nullptr, wflags);
+    drawMenuBar();
+    drawToolbar();
+    ImGui::End();
+}
+
+// ---------------------------------------------------------------------------
+//  Filters Bar Window — standalone window below toolbar
+// ---------------------------------------------------------------------------
+void AppGui::drawFiltersBarWindow() {
+    auto layout = layoutMgr_.get("Filters Bar");
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Filters Bar", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Filters Bar", layout.pos, layout.size);
+
+    int wflags = ImGuiWindowFlags_NoTitleBar
+               | ImGuiWindowFlags_NoCollapse
+               | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    if (config_.layoutLocked)
+        wflags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+
+    ImGui::Begin("Filters Bar", nullptr, wflags);
+    drawFilterPanel();
+    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
@@ -2548,9 +2591,15 @@ void AppGui::drawStatusBar() {
 //  Pair List Panel — left sidebar with SPOT/FUTURES toggle, search, pair list
 // ---------------------------------------------------------------------------
 void AppGui::drawPairListPanel() {
-    ImGui::SetNextWindowSize(ImVec2(200, 400), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(0, 20), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Pair List")) {
+    auto layout = layoutMgr_.get("Pair List");
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("Pair List", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Pair List", layout.pos, layout.size);
+
+    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+
+    if (!ImGui::Begin("Pair List", nullptr, wflags)) {
         ImGui::End();
         return;
     }
@@ -2782,9 +2831,15 @@ void AppGui::drawPairSelector() {
 //  User Panel — embedded right column with balance, orders, trades, price, P&L
 // ---------------------------------------------------------------------------
 void AppGui::drawUserPanel() {
-    ImGui::SetNextWindowSize(ImVec2(280, 500), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 280, 20), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("User Panel", &showUserPanel_)) {
+    auto layout = layoutMgr_.get("User Panel");
+    if (layoutNeedsReset_ || config_.layoutLocked)
+        LayoutManager::lockWindow("User Panel", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("User Panel", layout.pos, layout.size);
+
+    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+
+    if (!ImGui::Begin("User Panel", &showUserPanel_, wflags)) {
         ImGui::End();
         return;
     }

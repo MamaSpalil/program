@@ -91,10 +91,14 @@ TEST(LayoutManager, RecalculateCreatesLayouts) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
 
+    EXPECT_TRUE(mgr.hasLayout("Main Toolbar"));
+    EXPECT_TRUE(mgr.hasLayout("Filters Bar"));
+    EXPECT_TRUE(mgr.hasLayout("Pair List"));
     EXPECT_TRUE(mgr.hasLayout("Logs"));
     EXPECT_TRUE(mgr.hasLayout("Volume Delta"));
     EXPECT_TRUE(mgr.hasLayout("Market Data"));
     EXPECT_TRUE(mgr.hasLayout("Indicators"));
+    EXPECT_TRUE(mgr.hasLayout("User Panel"));
 }
 
 TEST(LayoutManager, GetDefaultsForUnknown) {
@@ -106,23 +110,32 @@ TEST(LayoutManager, GetDefaultsForUnknown) {
     // Should return default position/size
     EXPECT_GT(layout.pos.x, 0);
     EXPECT_GT(layout.size.x, 0);
+    EXPECT_TRUE(layout.visible);
 }
 
 TEST(LayoutManager, WindowsDoNotOverlap) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
 
-    auto log = mgr.get("Logs");
     auto vd = mgr.get("Volume Delta");
     auto md = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
 
-    // Logs should be above Volume Delta
-    EXPECT_LT(log.pos.y + log.size.y, vd.pos.y + 10);
-    // Volume Delta should be above Market Data
-    EXPECT_LT(vd.pos.y + vd.size.y, md.pos.y + 10);
-    // Market Data should be above Indicators
-    EXPECT_LT(md.pos.y + md.size.y, ind.pos.y + 10);
+    // Center column: Volume Delta above Market Data above Indicators
+    EXPECT_LT(vd.pos.y + vd.size.y, md.pos.y + 1);
+    EXPECT_LT(md.pos.y + md.size.y, ind.pos.y + 1);
+
+    // Logs is at bottom, below the center column
+    auto log = mgr.get("Logs");
+    EXPECT_GT(log.pos.y, ind.pos.y);
+
+    // Pair List is left of center column
+    auto pl = mgr.get("Pair List");
+    EXPECT_LE(pl.pos.x + pl.size.x, vd.pos.x + 1);
+
+    // User Panel is right of center column
+    auto up = mgr.get("User Panel");
+    EXPECT_GE(up.pos.x, vd.pos.x + vd.size.x - 1);
 }
 
 TEST(LayoutManager, DifferentScreenSizesProduceDifferentLayouts) {
@@ -166,14 +179,18 @@ TEST(LayoutManager, WindowsAreFullWidth) {
     auto vd  = mgr.get("Volume Delta");
     auto md  = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
+    auto tb  = mgr.get("Main Toolbar");
 
-    // All windows should have the same width (full width minus margins)
-    EXPECT_FLOAT_EQ(log.size.x, vd.size.x);
+    // Center column windows should have the same width
     EXPECT_FLOAT_EQ(vd.size.x, md.size.x);
     EXPECT_FLOAT_EQ(md.size.x, ind.size.x);
 
-    // Width should be close to screen width
+    // Logs and Main Toolbar are full screen width
     EXPECT_GT(log.size.x, 1900.0f);
+    EXPECT_GT(tb.size.x, 1900.0f);
+
+    // Center column width = screenW - pairListW(210) - userPanelW(290)
+    EXPECT_FLOAT_EQ(vd.size.x, 1920.0f - 210.0f - 290.0f);
 }
 
 TEST(LayoutManager, CustomProportions) {
