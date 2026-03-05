@@ -1,6 +1,6 @@
 /**
  * @file test_full_system.cpp
- * @brief Comprehensive system tests covering all modules (v1.0.0 – v1.5.2).
+ * @brief Comprehensive system tests covering all modules (v1.0.0 -- v1.5.2).
  *
  * Windows 10 Pro compatible:
  *   - No fork(), no /tmp/ paths
