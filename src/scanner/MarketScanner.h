@@ -6,6 +6,8 @@
 
 namespace crypto {
 
+class AuxRepository;
+
 struct ScanResult {
     std::string symbol;
     double      price{0.0};
@@ -31,9 +33,16 @@ public:
     // Filter by minimum volume
     std::vector<ScanResult> filterByVolume(double minVolume) const;
 
+    // Optional: set database repository for cache persistence
+    void setAuxRepository(AuxRepository* repo, const std::string& exchange = "binance") {
+        auxRepo_ = repo; exchange_ = exchange;
+    }
+
 private:
     mutable std::mutex mutex_;
     std::vector<ScanResult> results_;
+    AuxRepository* auxRepo_{nullptr};
+    std::string exchange_;
 };
 
 } // namespace crypto

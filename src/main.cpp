@@ -132,6 +132,12 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // Wire repositories to GUI-owned modules
+        gui->setDatabaseRepositories(
+            tradeRepo.get(), alertRepo.get(), backtestRepo.get(),
+            positionRepo.get(), drawingRepo.get(), auxRepo.get(),
+            equityRepo.get());
+
         std::unique_ptr<crypto::Engine> engine;
 
         // Wire up GUI callbacks to engine

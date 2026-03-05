@@ -15,6 +15,13 @@
 #include "../data/CSVExporter.h"
 #include "../indicators/PineVisuals.h"
 #include "../security/KeyVault.h"
+#include "../data/TradeRepository.h"
+#include "../data/AlertRepository.h"
+#include "../data/BacktestRepository.h"
+#include "../data/PositionRepository.h"
+#include "../data/DrawingRepository.h"
+#include "../data/AuxRepository.h"
+#include "../data/EquityRepository.h"
 #include "LayoutManager.h"
 #include <nlohmann/json.hpp>
 #include <atomic>
@@ -239,6 +246,15 @@ public:
 
     bool shouldClose() const { return shouldClose_; }
 
+    /// Wire database repositories to owned modules (TradeHistory, AlertManager, etc.)
+    void setDatabaseRepositories(TradeRepository* tradeRepo,
+                                  AlertRepository* alertRepo,
+                                  BacktestRepository* backtestRepo,
+                                  PositionRepository* positionRepo,
+                                  DrawingRepository* drawingRepo,
+                                  AuxRepository* auxRepo,
+                                  EquityRepository* equityRepo);
+
 private:
     void setupTheme();
     void renderFrame();
@@ -429,6 +445,10 @@ private:
     float indZoomY_{1.0f};
     float indPanX_{0.0f};
     float indPanY_{0.0f};
+
+    // Database repository pointers (non-owning, set by main.cpp)
+    BacktestRepository* btRepo_{nullptr};
+    DrawingRepository*  drawRepo_{nullptr};
 };
 
 } // namespace crypto

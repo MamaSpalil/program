@@ -294,6 +294,21 @@ void AppGui::addLog(const std::string& line) {
         state_.logLines.pop_front();
 }
 
+void AppGui::setDatabaseRepositories(TradeRepository* tradeRepo,
+                                      AlertRepository* alertRepo,
+                                      BacktestRepository* backtestRepo,
+                                      PositionRepository* positionRepo,
+                                      DrawingRepository* drawingRepo,
+                                      AuxRepository* /*auxRepo*/,
+                                      EquityRepository* /*equityRepo*/) {
+    tradeHistory_.setRepository(tradeRepo);
+    alertManager_.setRepository(alertRepo);
+    paperTrader_.setPositionRepository(positionRepo);
+    // BacktestEngine is created per-run; store repo pointer for later use
+    btRepo_ = backtestRepo;
+    drawRepo_ = drawingRepo;
+}
+
 // ---------------------------------------------------------------------------
 // Config load / save
 // ---------------------------------------------------------------------------
@@ -3245,6 +3260,7 @@ void AppGui::drawBacktestWindow() {
         }
         // Run backtest on current candle history
         BacktestEngine bt;
+        if (btRepo_) bt.setRepository(btRepo_);
         BacktestEngine::Config cfg;
         cfg.symbol = btSymbol_;
         cfg.interval = btIntervals[btIntervalIdx_];
