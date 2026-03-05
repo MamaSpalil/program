@@ -15,7 +15,7 @@ void TradeHistory::addTrade(const HistoricalTrade& t) {
         TradingRecord rec;
         rec.id = t.id;
         rec.symbol = t.symbol;
-        rec.exchange = "";  // Not tracked in HistoricalTrade
+        rec.exchange = "default";  // HistoricalTrade does not track exchange
         rec.side = t.side;
         rec.type = t.type;
         rec.qty = t.qty;

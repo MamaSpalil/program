@@ -299,14 +299,16 @@ void AppGui::setDatabaseRepositories(TradeRepository* tradeRepo,
                                       BacktestRepository* backtestRepo,
                                       PositionRepository* positionRepo,
                                       DrawingRepository* drawingRepo,
-                                      AuxRepository* /*auxRepo*/,
-                                      EquityRepository* /*equityRepo*/) {
+                                      AuxRepository* auxRepo,
+                                      EquityRepository* /*equityRepo — used by Engine, not GUI*/) {
     tradeHistory_.setRepository(tradeRepo);
     alertManager_.setRepository(alertRepo);
     paperTrader_.setPositionRepository(positionRepo);
     // BacktestEngine is created per-run; store repo pointer for later use
     btRepo_ = backtestRepo;
     drawRepo_ = drawingRepo;
+    // Wire scanner to AuxRepository for cache persistence
+    scanner_.setAuxRepository(auxRepo);
 }
 
 // ---------------------------------------------------------------------------
