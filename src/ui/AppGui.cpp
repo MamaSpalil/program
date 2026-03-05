@@ -385,6 +385,9 @@ void AppGui::loadConfig(const std::string& path) {
                         ex["base_url"]   = exchangeProfile.value("base_url", ex.value("base_url", ""));
                         ex["ws_host"]    = exchangeProfile.value("ws_host", ex.value("ws_host", ""));
                         ex["ws_port"]    = exchangeProfile.value("ws_port", ex.value("ws_port", ""));
+                        ex["futures_base_url"] = exchangeProfile.value("futures_base_url", ex.value("futures_base_url", ""));
+                        ex["futures_ws_host"]  = exchangeProfile.value("futures_ws_host", ex.value("futures_ws_host", ""));
+                        ex["futures_ws_port"]  = exchangeProfile.value("futures_ws_port", ex.value("futures_ws_port", ""));
                     }
                 }
             } catch (...) {
@@ -402,6 +405,9 @@ void AppGui::loadConfig(const std::string& path) {
     config_.baseUrl      = ex.value("base_url", "https://testnet.binance.vision");
     config_.wsHost       = ex.value("ws_host", "testnet.binance.vision");
     config_.wsPort       = ex.value("ws_port", "443");
+    config_.futuresBaseUrl = ex.value("futures_base_url", "https://testnet.binancefuture.com");
+    config_.futuresWsHost  = ex.value("futures_ws_host", "fstream.binancefuture.com");
+    config_.futuresWsPort  = ex.value("futures_ws_port", "443");
 
     auto& tr = j["trading"];
     config_.symbol         = tr.value("symbol", "BTCUSDT");
@@ -465,7 +471,10 @@ nlohmann::json AppGui::configToJson() const {
         {"testnet",    config_.testnet},
         {"base_url",   config_.baseUrl},
         {"ws_host",    config_.wsHost},
-        {"ws_port",    config_.wsPort}
+        {"ws_port",    config_.wsPort},
+        {"futures_base_url", config_.futuresBaseUrl},
+        {"futures_ws_host",  config_.futuresWsHost},
+        {"futures_ws_port",  config_.futuresWsPort}
     };
     j["trading"] = {
         {"symbol",          config_.symbol},
@@ -541,7 +550,10 @@ void AppGui::saveConfigToFile(const std::string& path) {
             {"testnet",    config_.testnet},
             {"base_url",   config_.baseUrl},
             {"ws_host",    config_.wsHost},
-            {"ws_port",    config_.wsPort}
+            {"ws_port",    config_.wsPort},
+            {"futures_base_url", config_.futuresBaseUrl},
+            {"futures_ws_host",  config_.futuresWsHost},
+            {"futures_ws_port",  config_.futuresWsPort}
         };
         std::ofstream pout(profilesPath);
         if (pout.is_open()) {
@@ -1932,6 +1944,9 @@ void AppGui::drawSettingsPanel() {
             static char baseUrlBuf[256] = {};
             static char wsHostBuf[256] = {};
             static char wsPortBuf[16] = {};
+            static char futuresBaseUrlBuf[256] = {};
+            static char futuresWsHostBuf[256] = {};
+            static char futuresWsPortBuf[16] = {};
             static bool bufInit = false;
             if (!bufInit) {
                 strncpy(apiKeyBuf, config_.apiKey.c_str(), sizeof(apiKeyBuf) - 1);
@@ -1940,6 +1955,9 @@ void AppGui::drawSettingsPanel() {
                 strncpy(baseUrlBuf, config_.baseUrl.c_str(), sizeof(baseUrlBuf) - 1);
                 strncpy(wsHostBuf, config_.wsHost.c_str(), sizeof(wsHostBuf) - 1);
                 strncpy(wsPortBuf, config_.wsPort.c_str(), sizeof(wsPortBuf) - 1);
+                strncpy(futuresBaseUrlBuf, config_.futuresBaseUrl.c_str(), sizeof(futuresBaseUrlBuf) - 1);
+                strncpy(futuresWsHostBuf, config_.futuresWsHost.c_str(), sizeof(futuresWsHostBuf) - 1);
+                strncpy(futuresWsPortBuf, config_.futuresWsPort.c_str(), sizeof(futuresWsPortBuf) - 1);
                 bufInit = true;
             }
             ImGui::InputText("API Key", apiKeyBuf, sizeof(apiKeyBuf));
@@ -1950,6 +1968,12 @@ void AppGui::drawSettingsPanel() {
             ImGui::InputText("Base URL", baseUrlBuf, sizeof(baseUrlBuf));
             ImGui::InputText("WS Host", wsHostBuf, sizeof(wsHostBuf));
             ImGui::InputText("WS Port", wsPortBuf, sizeof(wsPortBuf));
+            ImGui::Separator();
+            ImGui::Text("Futures API");
+            ImGui::InputText("Futures Base URL", futuresBaseUrlBuf, sizeof(futuresBaseUrlBuf));
+            ImGui::InputText("Futures WS Host", futuresWsHostBuf, sizeof(futuresWsHostBuf));
+            ImGui::InputText("Futures WS Port", futuresWsPortBuf, sizeof(futuresWsPortBuf));
+            ImGui::Separator();
             ImGui::Checkbox("Testnet", &config_.testnet);
 
             if (ImGui::Button("Apply Exchange Settings")) {
@@ -1959,6 +1983,9 @@ void AppGui::drawSettingsPanel() {
                 config_.baseUrl = baseUrlBuf;
                 config_.wsHost = wsHostBuf;
                 config_.wsPort = wsPortBuf;
+                config_.futuresBaseUrl = futuresBaseUrlBuf;
+                config_.futuresWsHost = futuresWsHostBuf;
+                config_.futuresWsPort = futuresWsPortBuf;
                 addLog("[Config] Exchange settings updated");
             }
             ImGui::EndTabItem();

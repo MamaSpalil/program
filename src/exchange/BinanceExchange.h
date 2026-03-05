@@ -18,7 +18,10 @@ public:
                      const std::string& apiSecret,
                      const std::string& baseUrl = "https://testnet.binance.vision",
                      const std::string& wsHost  = "testnet.binance.vision",
-                     const std::string& wsPort  = "443");
+                     const std::string& wsPort  = "443",
+                     const std::string& futuresBaseUrl = "",
+                     const std::string& futuresWsHost  = "",
+                     const std::string& futuresWsPort  = "");
     ~BinanceExchange() override;
 
     std::vector<Candle> getKlines(const std::string& symbol,
@@ -53,14 +56,18 @@ private:
     std::string marketType_{"spot"};
     std::string futuresBaseUrl_;
     std::string futuresWsHost_;
+    std::string futuresWsPort_;
 
     std::unique_ptr<WebSocketClient> ws_;
     std::function<void(const Candle&)> klineCb_;
     mutable std::mutex rateMutex_;
 
-    // Rate limiting: track request times
+    // Rate limiting: track request times in a sliding 1-minute window
     mutable std::queue<std::chrono::steady_clock::time_point> requestTimes_;
-    static constexpr int MAX_REQUESTS_PER_SECOND = 10;
+    // Binance limits: 6000 weight/min (spot IP), 2400 weight/min (futures IP)
+    // Most requests have weight 1-5; use conservative per-minute caps.
+    static constexpr int MAX_REQUESTS_PER_MINUTE_SPOT    = 1200;
+    static constexpr int MAX_REQUESTS_PER_MINUTE_FUTURES = 400;
 
     // Geo-blocking fallback state
     mutable int spotEndpointIdx_{0};
