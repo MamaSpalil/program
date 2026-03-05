@@ -150,6 +150,11 @@ std::string BitgetExchange::httpGet(const std::string& path, bool signed_) const
 std::vector<Candle> BitgetExchange::getKlines(const std::string& symbol,
                                                const std::string& interval,
                                                int limit) {
+    // Bitget API max limit is 1000
+    if (limit > 1000) {
+        Logger::get()->debug("[Bitget] getKlines limit {} clamped to 1000", limit);
+        limit = 1000;
+    }
     Logger::get()->debug("[Bitget] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/api/v2/mix/market/candles?symbol=" + symbol +
                        "&productType=USDT-FUTURES" +

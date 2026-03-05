@@ -178,6 +178,12 @@ public:
     virtual std::vector<AccountBalanceDetail> getAccountBalanceDetails() {
         return {};
     }
+
+    // Cancel an open order (signed)
+    virtual bool cancelOrder(const std::string& symbol, const std::string& orderId) {
+        (void)symbol; (void)orderId;
+        return false;
+    }
 };
 
 } // namespace crypto
