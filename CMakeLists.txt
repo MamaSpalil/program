@@ -152,6 +152,12 @@ set(DEPTH_SOURCES
     src/exchange/DepthStream.cpp
 )
 
+set(AI_SOURCES
+    src/ai/RLTradingAgent.cpp
+    src/ai/FeatureExtractor.cpp
+    src/ai/OnlineLearningLoop.cpp
+)
+
 set(UI_SOURCES
     src/ui/Dashboard.cpp
     src/ui/LayoutManager.cpp
@@ -197,6 +203,7 @@ set(ALL_LIB_SOURCES
     ${TAX_SOURCES}
     ${DRAWING_SOURCES}
     ${DEPTH_SOURCES}
+    ${AI_SOURCES}
 )
 
 # ── Library target ─────────────────────────────────────────────────────────────
@@ -252,10 +259,21 @@ if(CURSES_FOUND)
     target_compile_definitions(crypto_lib PUBLIC USE_NCURSES)
 endif()
 
-# LibTorch (optional)
+# LibTorch (optional — provides PyTorch C++ API for AI modules)
+# Integrate via: cmake -DTorch_DIR=<libtorch>/share/cmake/Torch
+# Or: cmake -DCMAKE_PREFIX_PATH=<libtorch>
+# Download from: https://pytorch.org/get-started/locally/
 if(Torch_FOUND)
+    message(STATUS "LibTorch found — AI engine enabled (libs: ${TORCH_LIBRARIES})")
+    target_include_directories(crypto_lib PUBLIC ${TORCH_INCLUDE_DIRS})
     target_link_libraries(crypto_lib PUBLIC ${TORCH_LIBRARIES})
     target_compile_definitions(crypto_lib PUBLIC USE_LIBTORCH)
+    # Apply required CXX flags from Torch (e.g. -D_GLIBCXX_USE_CXX11_ABI)
+    if(TORCH_CXX_FLAGS)
+        target_compile_options(crypto_lib PUBLIC ${TORCH_CXX_FLAGS})
+    endif()
+else()
+    message(STATUS "LibTorch not found — AI engine will use stub (no ML inference)")
 endif()
 
 # XGBoost (optional)
@@ -318,6 +336,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_regression_part3.cpp
         tests/test_trading_db.cpp
         tests/test_full_system.cpp
+        tests/test_ai_engine.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

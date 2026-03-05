@@ -5,6 +5,23 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-XX
+
+### Added
+#### AI & Machine Learning Engine (LibTorch)
+- **RLTradingAgent** (`src/ai/RLTradingAgent.h/.cpp`) — интеграция PyTorch C++ API (LibTorch) для запуска нейронных сетей в рантайме. Имплементация Continuous Reinforcement Learning (PPO) с вычислением GAE (Generalized Advantage Estimation) через тензорные операции.
+- **Dual-Mode Logic** — внедрены два режима ИИ: `Fast Mode` (сверхбыстрый анализ L2 Orderbook напрямую из `DepthStreamManager`) и `Swing Mode` (анализ трендов и MTF матриц на базе `CandleCache`).
+- **FeatureExtractor** (`src/ai/FeatureExtractor.h/.cpp`) — высокопроизводительный модуль формирования вектора состояний без динамических аллокаций. Встроена жесткая математическая логика детектирования Smart Money Concepts: Swing Failure Patterns (SFP) и Fair Value Gaps (FVG).
+- **OnlineLearningLoop** (`src/ai/OnlineLearningLoop.h/.cpp`) — выделенный фоновый поток (`std::jthread`), реализующий lock-free буфер реплея (Replay Buffer). Автоматически забирает результаты сделок (PnL) из `TradeRepository` для формирования функции Reward и обновления весов градиентным спуском (AdamW) без блокировки основного торгового потока.
+- **SPSCQueue** (`src/ai/SPSCQueue.h`) — lock-free SPSC кольцевой буфер с выравниванием по cache-line для передачи данных между потоками без блокировок.
+- **Тесты AI** (`tests/test_ai_engine.cpp`) — 33 теста: SPSCQueue (push/pop/FIFO/capacity/move), RLTradingAgent (конструктор/forward_pass/train_step/mode/save-load/PPOConfig), AIFeatureExtractor (SFP/FVG/OrderBlock/Depth/Swing/Fast features), OnlineLearningLoop (start/stop/pushExperience), интеграция FeatureExtractor→Agent и Dual-Mode.
+
+### Changed
+- **CMakeLists.txt** — добавлена интеграция `find_package(Torch QUIET)` и линковка тензорных библиотек к `crypto_lib`. Включены `TORCH_INCLUDE_DIRS` и `TORCH_CXX_FLAGS`. Добавлен `AI_SOURCES` блок. Для подключения LibTorch: `cmake -DTorch_DIR=<libtorch>/share/cmake/Torch` или `cmake -DCMAKE_PREFIX_PATH=<libtorch>`. Скачать: https://pytorch.org/get-started/locally/ (LibTorch C++ / CPU или CUDA). Обновлены таргеты для поддержки аппаратного ускорения при наличии.
+
+### Fixed
+- **AppGui.cpp** — добавлены отсутствующие `#include <windows.h>` и `#include <GLFW/glfw3native.h>` в блоке `#ifdef _WIN32` для корректной компиляции Win32 API вызовов (`HICON`, `HWND`, `LoadImageA`, `SendMessageA`, `glfwGetWin32Window`). Устраняет ~30 ошибок компиляции C2065/C2146/C3861 на MSVC.
+
 ## [1.5.3] - 2026-03-XX
 
 ### Added
