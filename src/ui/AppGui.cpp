@@ -584,8 +584,11 @@ void AppGui::renderFrame() {
     layoutMgr_.setVdPct(config_.layoutVdPct);
     layoutMgr_.setIndPct(config_.layoutIndPct);
 
-    // Recalculate layout based on current screen size
-    layoutMgr_.recalculate(vp->WorkSize.x, vp->WorkSize.y);
+    // Recalculate layout based on current screen size and show flags
+    layoutMgr_.recalculate(vp->WorkSize.x, vp->WorkSize.y,
+                           vp->WorkPos.x,  vp->WorkPos.y,
+                           showPairList_, showUserPanel_,
+                           showVolumeDelta_, showIndicators_, showLogs_);
 
     // ── All 8 mandatory windows ──
 
@@ -686,17 +689,14 @@ void AppGui::drawMenuBar() {
 // ---------------------------------------------------------------------------
 void AppGui::drawMainToolbarWindow() {
     auto layout = layoutMgr_.get("Main Toolbar");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Main Toolbar", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Main Toolbar", layout.pos, layout.size);
+    LayoutManager::lockWindow("Main Toolbar", layout.pos, layout.size);
 
     int wflags = ImGuiWindowFlags_NoTitleBar
                | ImGuiWindowFlags_NoCollapse
                | ImGuiWindowFlags_NoBringToFrontOnFocus
+               | ImGuiWindowFlags_NoMove
+               | ImGuiWindowFlags_NoResize
                | ImGuiWindowFlags_MenuBar;
-    if (config_.layoutLocked)
-        wflags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 
     ImGui::Begin("Main Toolbar", nullptr, wflags);
     drawMenuBar();
@@ -709,16 +709,13 @@ void AppGui::drawMainToolbarWindow() {
 // ---------------------------------------------------------------------------
 void AppGui::drawFiltersBarWindow() {
     auto layout = layoutMgr_.get("Filters Bar");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Filters Bar", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Filters Bar", layout.pos, layout.size);
+    LayoutManager::lockWindow("Filters Bar", layout.pos, layout.size);
 
     int wflags = ImGuiWindowFlags_NoTitleBar
                | ImGuiWindowFlags_NoCollapse
-               | ImGuiWindowFlags_NoBringToFrontOnFocus;
-    if (config_.layoutLocked)
-        wflags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+               | ImGuiWindowFlags_NoBringToFrontOnFocus
+               | ImGuiWindowFlags_NoMove
+               | ImGuiWindowFlags_NoResize;
 
     ImGui::Begin("Filters Bar", nullptr, wflags);
     drawFilterPanel();
@@ -744,6 +741,11 @@ void AppGui::drawToolbar() {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.15f, 0.35f, 0.18f, 1.0f));
         if (ImGui::Button("  Connect  ")) {
             if (onConnect_) onConnect_(config_);
+#ifdef USE_LIBTORCH
+            addLog("[AI] Status: Enabled — awaiting connection");
+#else
+            addLog("[AI] Status: Disabled — LibTorch not available");
+#endif
         }
         ImGui::PopStyleColor(3);
     } else {
@@ -752,6 +754,7 @@ void AppGui::drawToolbar() {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.40f, 0.15f, 0.15f, 1.0f));
         if (ImGui::Button("  Disconnect  ")) {
             if (onDisconnect_) onDisconnect_();
+            addLog("[AI] Status: Idle — disconnected");
         }
         ImGui::PopStyleColor(3);
     }
@@ -764,6 +767,7 @@ void AppGui::drawToolbar() {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.15f, 0.28f, 0.45f, 1.0f));
         if (ImGui::Button("  Start Trading  ")) {
             if (onStart_) onStart_();
+            addLog("[AI] Status: Working — trading active");
         }
         ImGui::PopStyleColor(3);
     } else {
@@ -772,6 +776,7 @@ void AppGui::drawToolbar() {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.45f, 0.28f, 0.12f, 1.0f));
         if (ImGui::Button("  Stop Trading  ")) {
             if (onStop_) onStop_();
+            addLog("[AI] Status: Idle — trading stopped");
         }
         ImGui::PopStyleColor(3);
     }
@@ -850,6 +855,21 @@ void AppGui::drawToolbar() {
                        config_.marketType.c_str(),
                        config_.mode.c_str());
 
+    // AI status indicator
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 10);
+#ifdef USE_LIBTORCH
+    if (snap.connected && snap.trading) {
+        ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f), "[AI: Working]");
+    } else if (snap.connected) {
+        ImGui::TextColored(ImVec4(0.55f, 0.45f, 0.75f, 1.0f), "[AI: Enabled]");
+    } else {
+        ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.50f, 1.0f), "[AI: Idle]");
+    }
+#else
+    ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.50f, 1.0f), "[AI: Disabled]");
+#endif
+
     ImGui::PopStyleVar();
     ImGui::Separator();
 }
@@ -914,12 +934,9 @@ void AppGui::drawMarketDataWindow() {
 
     // ── Window: fixed position/size via LayoutManager ──
     auto layout = layoutMgr_.get("Market Data");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Market Data", layout.pos, layout.size);
+    LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
 
-    int mdFlags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+    int mdFlags = LayoutManager::lockedFlags();
     mdFlags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
     ImGui::Begin("Market Data", nullptr, mdFlags);
@@ -1508,14 +1525,9 @@ void AppGui::drawIndicatorsPanel() {
     }
 
     auto layout = layoutMgr_.get("Indicators");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Indicators", layout.pos, layout.size);
+    LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
 
-    int wflags = config_.layoutLocked
-        ? LayoutManager::lockedScrollFlags()
-        : ImGuiWindowFlags_HorizontalScrollbar;
+    int wflags = LayoutManager::lockedScrollFlags();
 
     if (!ImGui::Begin("Indicators", nullptr, wflags)) {
         ImGui::End();
@@ -2356,13 +2368,9 @@ void AppGui::drawLogPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawLogWindow() {
     auto layout = layoutMgr_.get("Logs");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Logs", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Logs", layout.pos, layout.size);
+    LayoutManager::lockWindow("Logs", layout.pos, layout.size);
 
-    int wflags = config_.layoutLocked ? LayoutManager::lockedScrollFlags()
-                                      : ImGuiWindowFlags_HorizontalScrollbar;
+    int wflags = LayoutManager::lockedScrollFlags();
 
     if (!ImGui::Begin("Logs", nullptr, wflags)) {
         ImGui::End();
@@ -2384,6 +2392,9 @@ void AppGui::drawLogWindow() {
             } else if (line.find("[Config]") != std::string::npos ||
                        line.find("[Info]")   != std::string::npos) {
                 ImGui::TextColored(ImVec4(0.50f, 0.70f, 0.90f, 1.0f),
+                                   "%s", line.c_str());
+            } else if (line.find("[AI]") != std::string::npos) {
+                ImGui::TextColored(ImVec4(0.70f, 0.50f, 0.90f, 1.0f),
                                    "%s", line.c_str());
             } else if (line.find("[Warn]") != std::string::npos) {
                 ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.25f, 1.0f),
@@ -2443,12 +2454,9 @@ void AppGui::drawFilterPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
     auto layout = layoutMgr_.get("Volume Delta");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Volume Delta", layout.pos, layout.size);
+    LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
 
-    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+    int wflags = LayoutManager::lockedFlags();
     wflags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
     if (!ImGui::Begin("Volume Delta", nullptr, wflags)) {
@@ -2685,12 +2693,9 @@ void AppGui::drawStatusBar() {
 // ---------------------------------------------------------------------------
 void AppGui::drawPairListPanel() {
     auto layout = layoutMgr_.get("Pair List");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("Pair List", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("Pair List", layout.pos, layout.size);
+    LayoutManager::lockWindow("Pair List", layout.pos, layout.size);
 
-    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+    int wflags = LayoutManager::lockedFlags();
 
     if (!ImGui::Begin("Pair List", nullptr, wflags)) {
         ImGui::End();
@@ -2925,12 +2930,9 @@ void AppGui::drawPairSelector() {
 // ---------------------------------------------------------------------------
 void AppGui::drawUserPanel() {
     auto layout = layoutMgr_.get("User Panel");
-    if (layoutNeedsReset_ || config_.layoutLocked)
-        LayoutManager::lockWindow("User Panel", layout.pos, layout.size);
-    else
-        LayoutManager::lockWindowOnce("User Panel", layout.pos, layout.size);
+    LayoutManager::lockWindow("User Panel", layout.pos, layout.size);
 
-    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags() : 0;
+    int wflags = LayoutManager::lockedFlags();
 
     if (!ImGui::Begin("User Panel", &showUserPanel_, wflags)) {
         ImGui::End();

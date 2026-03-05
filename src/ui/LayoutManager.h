@@ -97,11 +97,21 @@ public:
 #endif
     }
 
-    // Recalculate all window layouts based on screen dimensions.
+    // Recalculate all window layouts based on viewport dimensions.
     // Produces 8 windows:
     //   Main Toolbar, Filters Bar, Pair List, Volume Delta,
     //   Market Data, Indicators, User Panel, Logs
-    void recalculate(float screenW, float screenH);
+    //
+    // offsetX/offsetY: viewport WorkPos (global origin of work area)
+    // show* flags: when false, the panel's area collapses to zero and
+    //              neighbours expand to fill the freed space.
+    void recalculate(float screenW, float screenH,
+                     float offsetX = 0.0f, float offsetY = 0.0f,
+                     bool showPairList   = true,
+                     bool showUserPanel  = true,
+                     bool showVolumeDelta = true,
+                     bool showIndicators = true,
+                     bool showLogs       = true);
 
     // Layout height proportions for center column
     // (vdPct + indPct < 1.0; Market Data gets the remainder)
