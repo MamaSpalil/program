@@ -273,6 +273,11 @@ add_executable(crypto_trader src/main.cpp)
 target_compile_options(crypto_trader PRIVATE ${COMMON_FLAGS})
 target_link_libraries(crypto_trader PRIVATE crypto_lib)
 
+# ── Embed application icon on Windows (.rc resource) ──────────────────────────
+if(WIN32)
+    target_sources(crypto_trader PRIVATE resources/app_resource.rc)
+endif()
+
 # ── ImGui / GLFW / OpenGL (optional — provides windowed GUI) ──────────────────
 if(glfw3_FOUND AND OPENGL_FOUND)
     add_library(imgui_lib STATIC ${IMGUI_SOURCES})
@@ -312,6 +317,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_regression_part2.cpp
         tests/test_regression_part3.cpp
         tests/test_trading_db.cpp
+        tests/test_full_system.cpp
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

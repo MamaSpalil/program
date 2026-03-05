@@ -180,7 +180,7 @@ bool AppGui::init(const std::string& configPath) {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
-    window_ = glfwCreateWindow(1440, 900, "Crypto ML Trader", nullptr, nullptr);
+    window_ = glfwCreateWindow(1440, 900, "VT \xe2\x80\x94 Virtual Trade System", nullptr, nullptr);
     if (!window_) {
         fprintf(stderr, "AppGui::init — glfwCreateWindow() failed\n");
         glfwTerminate();
@@ -188,6 +188,33 @@ bool AppGui::init(const std::string& configPath) {
     }
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(1); // vsync
+
+    // Load and set window icon (Win32: LoadImage → glfwSetWindowIcon)
+#ifdef _WIN32
+    {
+        HICON hIcon = (HICON)LoadImageA(
+            GetModuleHandleA(nullptr),
+            "IDI_ICON1",
+            IMAGE_ICON, 32, 32,
+            LR_DEFAULTCOLOR);
+        if (!hIcon) {
+            // Try loading from file as fallback
+            hIcon = (HICON)LoadImageA(
+                nullptr,
+                "resources/app_icon.ico",
+                IMAGE_ICON, 32, 32,
+                LR_LOADFROMFILE);
+        }
+        if (hIcon) {
+            // Send WM_SETICON to the native window
+            HWND hwnd = glfwGetWin32Window(window_);
+            if (hwnd) {
+                SendMessageA(hwnd, WM_SETICON, ICON_BIG,   (LPARAM)hIcon);
+                SendMessageA(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            }
+        }
+    }
+#endif
 
     // ImGui context
     IMGUI_CHECKVERSION();
