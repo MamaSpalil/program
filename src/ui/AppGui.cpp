@@ -1965,16 +1965,35 @@ void AppGui::drawSettingsPanel() {
                              ImGuiInputTextFlags_Password);
             ImGui::InputText("Passphrase", passBuf, sizeof(passBuf),
                              ImGuiInputTextFlags_Password);
-            ImGui::InputText("Base URL", baseUrlBuf, sizeof(baseUrlBuf));
-            ImGui::InputText("WS Host", wsHostBuf, sizeof(wsHostBuf));
-            ImGui::InputText("WS Port", wsPortBuf, sizeof(wsPortBuf));
+            ImGui::InputText("Base URL (Spot)", baseUrlBuf, sizeof(baseUrlBuf));
+            ImGui::InputText("WS Host (Futures)", futuresWsHostBuf, sizeof(futuresWsHostBuf));
+            ImGui::InputText("WS Port (Futures, default 9443)", futuresWsPortBuf, sizeof(futuresWsPortBuf));
             ImGui::Separator();
-            ImGui::Text("Futures API");
+            ImGui::Text("Advanced");
+            ImGui::InputText("Spot WS Host", wsHostBuf, sizeof(wsHostBuf));
+            ImGui::InputText("Spot WS Port", wsPortBuf, sizeof(wsPortBuf));
             ImGui::InputText("Futures Base URL", futuresBaseUrlBuf, sizeof(futuresBaseUrlBuf));
-            ImGui::InputText("Futures WS Host", futuresWsHostBuf, sizeof(futuresWsHostBuf));
-            ImGui::InputText("Futures WS Port", futuresWsPortBuf, sizeof(futuresWsPortBuf));
             ImGui::Separator();
+            bool prevTestnet = config_.testnet;
             ImGui::Checkbox("Testnet", &config_.testnet);
+            // Auto-populate defaults when testnet toggle changes (Binance)
+            if (config_.testnet != prevTestnet && config_.exchangeName == "binance") {
+                if (config_.testnet) {
+                    strncpy(baseUrlBuf, "https://testnet.binance.vision", sizeof(baseUrlBuf) - 1);
+                    strncpy(wsHostBuf, "testnet.binance.vision", sizeof(wsHostBuf) - 1);
+                    strncpy(wsPortBuf, "443", sizeof(wsPortBuf) - 1);
+                    strncpy(futuresBaseUrlBuf, "https://testnet.binancefuture.com", sizeof(futuresBaseUrlBuf) - 1);
+                    strncpy(futuresWsHostBuf, "fstream.binancefuture.com", sizeof(futuresWsHostBuf) - 1);
+                    strncpy(futuresWsPortBuf, "443", sizeof(futuresWsPortBuf) - 1);
+                } else {
+                    strncpy(baseUrlBuf, "https://api.binance.com", sizeof(baseUrlBuf) - 1);
+                    strncpy(wsHostBuf, "stream.binance.com", sizeof(wsHostBuf) - 1);
+                    strncpy(wsPortBuf, "9443", sizeof(wsPortBuf) - 1);
+                    strncpy(futuresBaseUrlBuf, "https://fapi.binance.com", sizeof(futuresBaseUrlBuf) - 1);
+                    strncpy(futuresWsHostBuf, "fstream.binance.com", sizeof(futuresWsHostBuf) - 1);
+                    strncpy(futuresWsPortBuf, "9443", sizeof(futuresWsPortBuf) - 1);
+                }
+            }
 
             if (ImGui::Button("Apply Exchange Settings")) {
                 config_.apiKey = apiKeyBuf;

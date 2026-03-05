@@ -1191,6 +1191,7 @@ TEST(Config, CorruptJsonUsesDefaults) {
     } catch (...) {
         j = nlohmann::json{};
     }
+    EXPECT_FALSE(parseOk); // corrupt JSON should not parse successfully
     // Should not crash; defaults should apply
     std::string activePair = "BTCUSDT";
     if (j.is_object() && j.contains("activePair")) {

@@ -244,6 +244,7 @@ TEST(TaxReporter, LIFOGainCalc) {
 
 TEST(TaxReporter, ExportCSV) {
     TaxReporter reporter;
+    (void)reporter; // reporter instance validates construction; export is static
     TaxReporter::TaxEvent ev;
     ev.symbol = "BTC";
     ev.qty = 1.0;
