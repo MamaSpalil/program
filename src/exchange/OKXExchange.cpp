@@ -160,6 +160,11 @@ std::string OKXExchange::httpGet(const std::string& path, bool signed_) const {
 std::vector<Candle> OKXExchange::getKlines(const std::string& symbol,
                                              const std::string& interval,
                                              int limit) {
+    // OKX API max limit is 300 per request
+    if (limit > 300) {
+        Logger::get()->debug("[OKX] getKlines limit {} clamped to 300", limit);
+        limit = 300;
+    }
     Logger::get()->debug("[OKX] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/api/v5/market/candles?instId=" + symbol +
                        "&bar=" + interval +

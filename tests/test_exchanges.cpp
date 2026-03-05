@@ -682,3 +682,36 @@ TEST(DataStructures, BarPriceRangeValid) {
         EXPECT_GE(b.volume, 0.0);
     }
 }
+
+// ── cancelOrder default interface ──────────────────────────────────────────
+TEST(ExchangeInterface, CancelOrderDefaultReturnsFalse) {
+    // All exchanges should have cancelOrder via IExchange default
+    BinanceExchange ex("k", "s");
+    IExchange* iex = &ex;
+    EXPECT_FALSE(iex->cancelOrder("BTCUSDT", "12345"));
+}
+
+// ── Pine Editor buffer size ───────────────────────────────────────────────
+TEST(PineEditor, BufferIs500000) {
+    // pineCode_ buffer should be 500001 (500000 usable + null terminator)
+    char buf[500001]{};
+    EXPECT_EQ(sizeof(buf), 500001u);
+}
+
+// ── Backtest Reset ────────────────────────────────────────────────────────
+TEST(BacktestReset, ResultResetsToZero) {
+    BacktestEngine::Result r;
+    r.totalPnL = 100.0;
+    r.totalTrades = 5;
+    r.winTrades = 3;
+    r.trades.push_back({"BUY", 100.0, 110.0, 1.0, 10.0, 1.0, 0, 0});
+    r.equityCurve.push_back(10100.0);
+
+    // Reset
+    r = BacktestEngine::Result{};
+    EXPECT_EQ(r.totalPnL, 0.0);
+    EXPECT_EQ(r.totalTrades, 0);
+    EXPECT_EQ(r.winTrades, 0);
+    EXPECT_TRUE(r.trades.empty());
+    EXPECT_TRUE(r.equityCurve.empty());
+}

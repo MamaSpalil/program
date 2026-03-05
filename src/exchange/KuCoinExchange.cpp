@@ -158,10 +158,15 @@ std::string KuCoinExchange::httpGet(const std::string& path, bool signed_) const
 std::vector<Candle> KuCoinExchange::getKlines(const std::string& symbol,
                                                 const std::string& interval,
                                                 int limit) {
+    // KuCoin API max limit is 1500
+    if (limit > 1500) {
+        Logger::get()->debug("[KuCoin] getKlines limit {} clamped to 1500", limit);
+        limit = 1500;
+    }
     Logger::get()->debug("[KuCoin] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
-    (void)limit;
     std::string path = "/api/v1/market/candles?type=" + interval +
-                       "&symbol=" + symbol;
+                       "&symbol=" + symbol +
+                       "&limit=" + std::to_string(limit);
     auto response = httpGet(path);
     Logger::get()->debug("[KuCoin] getKlines response size={}", response.size());
     auto json = nlohmann::json::parse(response);

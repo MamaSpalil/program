@@ -82,6 +82,11 @@ std::string BybitExchange::httpGet(const std::string& path) const {
 std::vector<Candle> BybitExchange::getKlines(const std::string& symbol,
                                                const std::string& interval,
                                                int limit) {
+    // Bybit API max limit is 1000
+    if (limit > 1000) {
+        Logger::get()->debug("[Bybit] getKlines limit {} clamped to 1000", limit);
+        limit = 1000;
+    }
     Logger::get()->debug("[Bybit] getKlines symbol={} interval={} limit={}", symbol, interval, limit);
     std::string path = "/v5/market/kline?category=linear&symbol=" + symbol +
                        "&interval=" + interval + "&limit=" + std::to_string(limit);

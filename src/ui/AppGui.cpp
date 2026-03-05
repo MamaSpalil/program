@@ -3316,7 +3316,22 @@ void AppGui::drawBacktestWindow() {
     int btIntervalsCount = 7;
 
     ImGui::SetNextItemWidth(120);
-    ImGui::InputText("Symbol##BT", btSymbol_, sizeof(btSymbol_));
+    // Pair selection: combo from cachedPairs_ or manual text input
+    if (!cachedPairs_.empty()) {
+        if (ImGui::BeginCombo("Symbol##BT", btSymbol_)) {
+            for (auto& p : cachedPairs_) {
+                bool selected = (p.symbol == btSymbol_);
+                if (ImGui::Selectable(p.symbol.c_str(), selected)) {
+                    std::strncpy(btSymbol_, p.symbol.c_str(), sizeof(btSymbol_) - 1);
+                    btSymbol_[sizeof(btSymbol_) - 1] = '\0';
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    } else {
+        ImGui::InputText("Symbol##BT", btSymbol_, sizeof(btSymbol_));
+    }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(80);
     ImGui::Combo("TF##BT", &btIntervalIdx_, btIntervals, btIntervalsCount);
@@ -3364,6 +3379,12 @@ void AppGui::drawBacktestWindow() {
         std::string fname = std::string(btSymbol_) + "_backtest_trades.csv";
         if (CSVExporter::exportBacktestTrades(btResult_.trades, fname))
             addLog("[Export] Saved " + fname);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset##BT", ImVec2(80, 30))) {
+        btResult_ = BacktestEngine::Result{};
+        btRunning_ = false;
+        addLog("[Backtest] Reset");
     }
 
     ImGui::Separator();
