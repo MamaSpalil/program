@@ -16,6 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SPSCQueue** (`src/ai/SPSCQueue.h`) — lock-free SPSC кольцевой буфер с выравниванием по cache-line для передачи данных между потоками без блокировок.
 - **Тесты AI** (`tests/test_ai_engine.cpp`) — 33 теста: SPSCQueue (push/pop/FIFO/capacity/move), RLTradingAgent (конструктор/forward_pass/train_step/mode/save-load/PPOConfig), AIFeatureExtractor (SFP/FVG/OrderBlock/Depth/Swing/Fast features), OnlineLearningLoop (start/stop/pushExperience), интеграция FeatureExtractor→Agent и Dual-Mode.
 
+#### Binance API: Rate Limits & Iceberg Orders (март 2026)
+- **BinanceExchange.h** — добавлены константы лимитов ордеров: `MAX_ORDERS_PER_10S_SPOT = 100` (100 ордеров/10 сек, спот), `MAX_ORDERS_PER_24H_SPOT = 200000` (200K ордеров/24 часа, спот), `MAX_ORDERS_PER_MINUTE_FUTURES = 1200` (1200 ордеров/мин, фьючерсы).
+- **BinanceExchange.h** — добавлен лимит WebSocket подключений: `MAX_WS_CONNECTIONS_PER_5MIN = 300` (300 соединений за 5 минут с одного IP).
+- **BinanceExchange.h** — добавлена константа `MAX_ICEBERG_PARTS = 100` (максимальное количество частей айсберг-ордера, увеличено до 100 для всех символов с 12 марта 2026).
+- **BinanceExchange.cpp** — реализован `orderRateLimit()`: скользящее окно для отслеживания количества ордеров (10 сек для спота, 1 мин для фьючерсов) с суточным счётчиком (200K/24ч). Вызывается из `placeOrder()`.
+- **BinanceExchange.cpp** — реализован `wsConnectionRateLimit()`: скользящее окно 5 минут для ограничения WebSocket подключений (300/5мин). Вызывается из `subscribeKline()`.
+- **BinanceExchange.cpp** — добавлен комментарий-предупреждение о депрекации потоков `!ticker@arr` (отключение 26 марта 2026); программа использует только индивидуальные потоки `<symbol>@kline_<interval>`.
+
+#### Балансы бирж: Реализация getBalance()
+- **BybitExchange.cpp** — реализован `getBalance()`: запрос GET `/v5/account/wallet-balance?accountType=UNIFIED`, парсинг USDT/BTC балансов из массива `result.list[0].coin`. Ранее возвращал пустой `AccountBalance`.
+- **OKXExchange.cpp** — реализован `getBalance()`: запрос GET `/api/v5/account/balance` (signed), парсинг USDT (`eqUsd`/`availBal`) и BTC из `data[0].details`. Ранее возвращал пустой `AccountBalance`.
+- **KuCoinExchange.cpp** — реализован `getBalance()`: запрос GET `/api/v1/accounts` (signed), парсинг USDT/BTC балансов по `currency` + `type == "trade"`. Ранее возвращал пустой `AccountBalance`.
+- **BitgetExchange.cpp** — реализован `getBalance()`: запрос GET `/api/v2/spot/account/assets` (signed), парсинг USDT (`available` + `frozen`) и BTC. Ранее возвращал пустой `AccountBalance`.
+
+#### Тесты
+- **test_exchanges.cpp** — добавлено 13 тестов: `BinanceRateLimits` (7 тестов: SpotRequestLimit, FuturesRequestLimit, SpotOrderLimitPer10s, SpotOrderLimitPer24h, FuturesOrderLimitPerMinute, WebSocketConnectionLimit, IcebergPartsLimit), `ExchangeBalance` (6 тестов: BybitGetBalanceNoCrash, OKXGetBalanceNoCrash, KuCoinGetBalanceNoCrash, BitgetGetBalanceNoCrash, BinanceGetBalanceSpotNoCrash, BinanceGetBalanceFuturesNoCrash).
+
 ### Changed
 - **CMakeLists.txt** — добавлена интеграция `find_package(Torch QUIET)` и линковка тензорных библиотек к `crypto_lib`. Включены `TORCH_INCLUDE_DIRS` и `TORCH_CXX_FLAGS`. Добавлен `AI_SOURCES` блок. Для подключения LibTorch: `cmake -DTorch_DIR=<libtorch>/share/cmake/Torch` или `cmake -DCMAKE_PREFIX_PATH=<libtorch>`. Скачать: https://pytorch.org/get-started/locally/ (LibTorch C++ / CPU или CUDA). Обновлены таргеты для поддержки аппаратного ускорения при наличии.
 

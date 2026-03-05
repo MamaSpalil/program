@@ -204,7 +204,32 @@ OrderResponse BitgetExchange::placeOrder(const OrderRequest& req) {
 }
 
 AccountBalance BitgetExchange::getBalance() {
+#ifndef USE_CURL
     return {};
+#else
+    try {
+        auto resp = httpGet("/api/v2/spot/account/assets", true);
+        auto j = nlohmann::json::parse(resp);
+        AccountBalance bal;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& asset : j["data"]) {
+                std::string coin = asset.value("coin", "");
+                if (coin == "USDT") {
+                    bal.totalUSDT     = safeStod(asset.value("available", "0"))
+                                      + safeStod(asset.value("frozen", "0"));
+                    bal.availableUSDT = safeStod(asset.value("available", "0"));
+                }
+                if (coin == "BTC") {
+                    bal.btcBalance = safeStod(asset.value("available", "0"));
+                }
+            }
+        }
+        return bal;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] getBalance failed: {}", e.what());
+        return {};
+    }
+#endif
 }
 
 void BitgetExchange::onWsMessage(const std::string& msg) {

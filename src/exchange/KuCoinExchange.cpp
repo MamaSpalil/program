@@ -211,7 +211,32 @@ OrderResponse KuCoinExchange::placeOrder(const OrderRequest& req) {
 }
 
 AccountBalance KuCoinExchange::getBalance() {
+#ifndef USE_CURL
     return {};
+#else
+    try {
+        auto resp = httpGet("/api/v1/accounts", true);
+        auto j = nlohmann::json::parse(resp);
+        AccountBalance bal;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& acc : j["data"]) {
+                std::string currency = acc.value("currency", "");
+                std::string type     = acc.value("type", "");
+                if (currency == "USDT" && type == "trade") {
+                    bal.totalUSDT     = safeStod(acc.value("balance", "0"));
+                    bal.availableUSDT = safeStod(acc.value("available", "0"));
+                }
+                if (currency == "BTC" && type == "trade") {
+                    bal.btcBalance = safeStod(acc.value("available", "0"));
+                }
+            }
+        }
+        return bal;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] getBalance failed: {}", e.what());
+        return {};
+    }
+#endif
 }
 
 void KuCoinExchange::onWsMessage(const std::string& msg) {

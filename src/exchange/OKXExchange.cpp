@@ -215,7 +215,34 @@ OrderResponse OKXExchange::placeOrder(const OrderRequest& req) {
 }
 
 AccountBalance OKXExchange::getBalance() {
+#ifndef USE_CURL
     return {};
+#else
+    try {
+        auto resp = httpGet("/api/v5/account/balance", true);
+        auto j = nlohmann::json::parse(resp);
+        AccountBalance bal;
+        if (j.contains("data") && j["data"].is_array() && !j["data"].empty()) {
+            auto& details = j["data"][0]["details"];
+            if (details.is_array()) {
+                for (auto& d : details) {
+                    std::string ccy = d.value("ccy", "");
+                    if (ccy == "USDT") {
+                        bal.totalUSDT     = safeStod(d.value("eqUsd", "0"));
+                        bal.availableUSDT = safeStod(d.value("availBal", "0"));
+                    }
+                    if (ccy == "BTC") {
+                        bal.btcBalance = safeStod(d.value("availBal", "0"));
+                    }
+                }
+            }
+        }
+        return bal;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getBalance failed: {}", e.what());
+        return {};
+    }
+#endif
 }
 
 void OKXExchange::onWsMessage(const std::string& msg) {

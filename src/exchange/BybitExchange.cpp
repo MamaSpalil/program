@@ -135,7 +135,40 @@ OrderResponse BybitExchange::placeOrder(const OrderRequest& req) {
 }
 
 AccountBalance BybitExchange::getBalance() {
+#ifndef USE_CURL
     return {};
+#else
+    try {
+        auto resp = httpGet("/v5/account/wallet-balance?accountType=UNIFIED");
+        auto j = nlohmann::json::parse(resp);
+        AccountBalance bal;
+        if (j.value("retCode", -1) != 0) {
+            Logger::get()->warn("[Bybit] getBalance API error: {}",
+                                j.value("retMsg", "unknown"));
+            return bal;
+        }
+        if (j.contains("result") && j["result"].contains("list") &&
+            j["result"]["list"].is_array() && !j["result"]["list"].empty()) {
+            auto& coins = j["result"]["list"][0]["coin"];
+            if (coins.is_array()) {
+                for (auto& c : coins) {
+                    std::string coin = c.value("coin", "");
+                    if (coin == "USDT") {
+                        bal.totalUSDT     = safeStod(c.value("walletBalance", "0"));
+                        bal.availableUSDT = safeStod(c.value("availableToWithdraw", "0"));
+                    }
+                    if (coin == "BTC") {
+                        bal.btcBalance = safeStod(c.value("walletBalance", "0"));
+                    }
+                }
+            }
+        }
+        return bal;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] getBalance failed: {}", e.what());
+        return {};
+    }
+#endif
 }
 
 void BybitExchange::onWsMessage(const std::string& msg) {
