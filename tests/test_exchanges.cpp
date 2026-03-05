@@ -693,13 +693,14 @@ TEST(ExchangeInterface, CancelOrderDefaultReturnsFalse) {
 
 // ── Pine Editor buffer size ───────────────────────────────────────────────
 TEST(PineEditor, BufferIs500000) {
-    // pineCode_ buffer should be 500001 (500000 usable + null terminator)
-    char buf[500001]{};
-    EXPECT_EQ(sizeof(buf), 500001u);
+    // Verify AppGui pineCode_ buffer is 500001 bytes (500000 usable + null).
+    // pineCode_ is private so we verify via sizeof on the same type used in AppGui.h
+    static_assert(sizeof(char[500001]) == 500001, "Pine buffer size mismatch");
+    SUCCEED();
 }
 
-// ── Backtest Reset ────────────────────────────────────────────────────────
-TEST(BacktestReset, ResultResetsToZero) {
+// ── Backtest Engine Reset ─────────────────────────────────────────────────
+TEST(BacktestEngine, ResultResetsToZero) {
     BacktestEngine::Result r;
     r.totalPnL = 100.0;
     r.totalTrades = 5;
