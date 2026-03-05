@@ -16,7 +16,7 @@ std::string safeText(sqlite3_stmt* stmt, int col) {
 
 TradeRepository::TradeRepository(TradingDatabase& db) : db_(db) {}
 
-bool TradeRepository::upsert(const TradeRecord& t) {
+bool TradeRepository::upsert(const TradingRecord& t) {
     std::lock_guard<std::mutex> lock(db_.getMutex());
     const char* sql = R"(
         INSERT OR REPLACE INTO trades
@@ -73,9 +73,9 @@ bool TradeRepository::close(const std::string& id, double exitPrice, double pnl,
     return ok;
 }
 
-std::vector<TradeRecord> TradeRepository::getOpen(bool isPaper) const {
+std::vector<TradingRecord> TradeRepository::getOpen(bool isPaper) const {
     std::lock_guard<std::mutex> lock(db_.getMutex());
-    std::vector<TradeRecord> result;
+    std::vector<TradingRecord> result;
     const char* sql = R"(
         SELECT id, symbol, exchange, side, type, qty, entry_price, exit_price,
                pnl, commission, entry_time, exit_time, is_paper, strategy,
@@ -90,7 +90,7 @@ std::vector<TradeRecord> TradeRepository::getOpen(bool isPaper) const {
     sqlite3_bind_int(stmt, 1, isPaper ? 1 : 0);
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        TradeRecord t;
+        TradingRecord t;
         t.id         = safeText(stmt, 0);
         t.symbol     = safeText(stmt, 1);
         t.exchange   = safeText(stmt, 2);
@@ -114,9 +114,9 @@ std::vector<TradeRecord> TradeRepository::getOpen(bool isPaper) const {
     return result;
 }
 
-std::vector<TradeRecord> TradeRepository::getHistory(const std::string& symbol, int limit) const {
+std::vector<TradingRecord> TradeRepository::getHistory(const std::string& symbol, int limit) const {
     std::lock_guard<std::mutex> lock(db_.getMutex());
-    std::vector<TradeRecord> result;
+    std::vector<TradingRecord> result;
     std::string sql;
     if (symbol.empty()) {
         sql = "SELECT id, symbol, exchange, side, type, qty, entry_price, exit_price, "
@@ -139,7 +139,7 @@ std::vector<TradeRecord> TradeRepository::getHistory(const std::string& symbol, 
     }
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        TradeRecord t;
+        TradingRecord t;
         t.id         = safeText(stmt, 0);
         t.symbol     = safeText(stmt, 1);
         t.exchange   = safeText(stmt, 2);
@@ -177,10 +177,8 @@ bool TradeRepository::migrateFromJSON(const std::string& jsonPath) {
         auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
-        sqlite3_exec(db_.handle(), "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
-
         for (const auto& item : j) {
-            TradeRecord t;
+            TradingRecord t;
             t.id         = item.value("id", "");
             t.symbol     = item.value("symbol", "");
             t.exchange   = item.value("exchange", "");
@@ -201,7 +199,6 @@ bool TradeRepository::migrateFromJSON(const std::string& jsonPath) {
             if (!t.id.empty())
                 upsert(t);
         }
-        sqlite3_exec(db_.handle(), "COMMIT", nullptr, nullptr, nullptr);
         Logger::get()->info("[TradeRepo] Migrated {} trades from {}", j.size(), jsonPath);
     } catch (const std::exception& e) {
         Logger::get()->warn("[TradeRepo] Migration error: {}", e.what());

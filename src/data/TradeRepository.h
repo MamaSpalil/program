@@ -5,7 +5,7 @@
 
 namespace crypto {
 
-struct TradeRecord {
+struct TradingRecord {
     std::string id;
     std::string symbol, exchange;
     std::string side, type;
@@ -27,11 +27,11 @@ class TradeRepository {
 public:
     explicit TradeRepository(TradingDatabase& db);
 
-    bool upsert(const TradeRecord& t);
+    bool upsert(const TradingRecord& t);
     bool close(const std::string& id, double exitPrice, double pnl, long long exitTime);
 
-    std::vector<TradeRecord> getOpen(bool isPaper) const;
-    std::vector<TradeRecord> getHistory(const std::string& symbol = "", int limit = 100) const;
+    std::vector<TradingRecord> getOpen(bool isPaper) const;
+    std::vector<TradingRecord> getHistory(const std::string& symbol = "", int limit = 100) const;
 
     bool migrateFromJSON(const std::string& jsonPath);
 
