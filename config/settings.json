@@ -8,7 +8,10 @@
     "testnet": true,
     "base_url": "https://testnet.binance.vision",
     "ws_host": "testnet.binance.vision",
-    "ws_port": "443"
+    "ws_port": "443",
+    "futures_base_url": "https://testnet.binancefuture.com",
+    "futures_ws_host": "fstream.binancefuture.com",
+    "futures_ws_port": "443"
   },
   "trading": {
     "symbol": "BTCUSDT",

@@ -55,18 +55,31 @@ BinanceExchange::BinanceExchange(const std::string& apiKey,
                                    const std::string& apiSecret,
                                    const std::string& baseUrl,
                                    const std::string& wsHost,
-                                   const std::string& wsPort)
+                                   const std::string& wsPort,
+                                   const std::string& futuresBaseUrl,
+                                   const std::string& futuresWsHost,
+                                   const std::string& futuresWsPort)
     : apiKey_(apiKey), apiSecret_(apiSecret),
       baseUrl_(baseUrl), wsHost_(wsHost), wsPort_(wsPort)
 {
     // Detect testnet by checking the base URL and set futures URLs accordingly
     bool isTestnet = (baseUrl_.find("testnet") != std::string::npos);
-    if (isTestnet) {
-        futuresBaseUrl_ = "https://testnet.binancefuture.com";
-        futuresWsHost_  = "fstream.binancefuture.com";
+    if (!futuresBaseUrl.empty()) {
+        futuresBaseUrl_ = futuresBaseUrl;
     } else {
-        futuresBaseUrl_ = "https://fapi.binance.com";
-        futuresWsHost_  = "fstream.binance.com";
+        futuresBaseUrl_ = isTestnet ? "https://testnet.binancefuture.com"
+                                    : "https://fapi.binance.com";
+    }
+    if (!futuresWsHost.empty()) {
+        futuresWsHost_ = futuresWsHost;
+    } else {
+        futuresWsHost_ = isTestnet ? "fstream.binancefuture.com"
+                                   : "fstream.binance.com";
+    }
+    if (!futuresWsPort.empty()) {
+        futuresWsPort_ = futuresWsPort;
+    } else {
+        futuresWsPort_ = isTestnet ? "443" : "9443";
     }
 }
 
@@ -104,16 +117,28 @@ void BinanceExchange::setMarketType(const std::string& marketType) {
 void BinanceExchange::rateLimit() const {
     std::lock_guard<std::mutex> lock(rateMutex_);
     auto now = std::chrono::steady_clock::now();
-    auto windowStart = now - std::chrono::seconds(1);
+    auto windowStart = now - std::chrono::minutes(1);
 
+    // Purge entries older than 1 minute
     while (!requestTimes_.empty() && requestTimes_.front() < windowStart) {
         requestTimes_.pop();
     }
-    if (static_cast<int>(requestTimes_.size()) >= MAX_REQUESTS_PER_SECOND) {
-        auto sleepUntil = requestTimes_.front() + std::chrono::seconds(1);
+
+    int maxPerMinute = (marketType_ == "futures")
+        ? MAX_REQUESTS_PER_MINUTE_FUTURES
+        : MAX_REQUESTS_PER_MINUTE_SPOT;
+
+    if (static_cast<int>(requestTimes_.size()) >= maxPerMinute) {
+        auto sleepUntil = requestTimes_.front() + std::chrono::minutes(1);
         std::this_thread::sleep_until(sleepUntil);
+        // Purge again after sleeping
+        auto currentTime = std::chrono::steady_clock::now();
+        auto updatedWindowStart = currentTime - std::chrono::minutes(1);
+        while (!requestTimes_.empty() && requestTimes_.front() < updatedWindowStart) {
+            requestTimes_.pop();
+        }
     }
-    requestTimes_.push(now);
+    requestTimes_.push(std::chrono::steady_clock::now());
 }
 
 std::string BinanceExchange::httpGet(const std::string& path, bool signed_) const {
@@ -271,7 +296,7 @@ std::string BinanceExchange::httpPost(const std::string& path,
     std::string sig = sign(signedBody);
     std::string fullBody = signedBody + "&signature=" + sig;
 
-    std::string url = baseUrl_ + path;
+    std::string url = effectiveBaseUrl() + path;
     CURL* curl = curl_easy_init();
     if (!curl) throw std::runtime_error("curl_easy_init failed");
 
@@ -338,7 +363,10 @@ std::vector<Candle> BinanceExchange::getKlines(const std::string& symbol,
 
 double BinanceExchange::getPrice(const std::string& symbol) {
     Logger::get()->debug("[Binance] getPrice symbol={}", symbol);
-    auto json = nlohmann::json::parse(httpGet("/api/v3/ticker/price?symbol=" + symbol));
+    std::string path = (marketType_ == "futures")
+        ? "/fapi/v1/ticker/price?symbol=" + symbol
+        : "/api/v3/ticker/price?symbol=" + symbol;
+    auto json = nlohmann::json::parse(httpGet(path));
     double price = safeStod(json["price"].get<std::string>());
     Logger::get()->debug("[Binance] getPrice result={}", price);
     return price;
@@ -358,7 +386,8 @@ OrderResponse BinanceExchange::placeOrder(const OrderRequest& req) {
     }
     body << "&quantity=" << req.qty;
 
-    auto json = nlohmann::json::parse(httpPost("/api/v3/order", body.str()));
+    std::string orderPath = (marketType_ == "futures") ? "/fapi/v1/order" : "/api/v3/order";
+    auto json = nlohmann::json::parse(httpPost(orderPath, body.str()));
     OrderResponse resp;
     resp.orderId      = json.contains("orderId") ? std::to_string(json["orderId"].get<long>()) : "";
     resp.status       = json.value("status", "UNKNOWN");
@@ -368,6 +397,14 @@ OrderResponse BinanceExchange::placeOrder(const OrderRequest& req) {
 }
 
 AccountBalance BinanceExchange::getBalance() {
+    if (marketType_ == "futures") {
+        // Use futures account endpoint for correct balance retrieval
+        auto fInfo = getFuturesBalance();
+        AccountBalance bal;
+        bal.totalUSDT     = fInfo.totalWalletBalance;
+        bal.availableUSDT = fInfo.totalMarginBalance;
+        return bal;
+    }
     auto json = nlohmann::json::parse(httpGet("/api/v3/account", true));
     AccountBalance bal;
     for (auto& asset : json["balances"]) {
@@ -408,7 +445,7 @@ void BinanceExchange::subscribeKline(const std::string& symbol,
         [&]{ std::string s = symbol; for(auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }() +
         "@kline_" + interval;
     if (marketType_ == "futures") {
-        ws_ = std::make_unique<WebSocketClient>(futuresWsHost_, "443", path);
+        ws_ = std::make_unique<WebSocketClient>(futuresWsHost_, futuresWsPort_, path);
     } else {
         ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, path);
     }

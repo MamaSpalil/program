@@ -107,7 +107,11 @@ void Engine::initComponents() {
         if (baseUrl.empty()) baseUrl = testnet ? "https://testnet.binance.vision"      : "https://api.binance.com";
         if (wsHost.empty())  wsHost  = testnet ? "testnet.binance.vision"              : "stream.binance.com";
         if (wsPort.empty())  wsPort  = testnet ? "443"                                 : "9443";
-        impl_->exchange = std::make_unique<BinanceExchange>(apiKey, apiSec, baseUrl, wsHost, wsPort);
+        std::string futuresBaseUrl = ex.value("futures_base_url", "");
+        std::string futuresWsHost  = ex.value("futures_ws_host", "");
+        std::string futuresWsPort  = ex.value("futures_ws_port", "");
+        impl_->exchange = std::make_unique<BinanceExchange>(apiKey, apiSec, baseUrl, wsHost, wsPort,
+                                                             futuresBaseUrl, futuresWsHost, futuresWsPort);
     }
 
     // Save credentials to a per-exchange ExchangeDB for persistence

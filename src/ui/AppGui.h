@@ -139,6 +139,9 @@ struct GuiConfig {
     std::string baseUrl{"https://testnet.binance.vision"};
     std::string wsHost{"testnet.binance.vision"};
     std::string wsPort{"443"};
+    std::string futuresBaseUrl{"https://testnet.binancefuture.com"};
+    std::string futuresWsHost{"fstream.binancefuture.com"};
+    std::string futuresWsPort{"443"};
 
     // Trading
     std::string symbol{"BTCUSDT"};

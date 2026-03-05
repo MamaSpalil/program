@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AppGui.cpp** — устранено предупреждение C4005 (APIENTRY macro redefinition) при компиляции MSVC: `#include <windows.h>` перенесён перед `#include <GLFW/glfw3.h>`, добавлен `#undef APIENTRY` после GLFW для предотвращения конфликта макроопределений из `minwindef.h`.
 - **app_resource.rc** — исправлен путь к иконке: `"resources/app_icon.ico"` → `"app_icon.ico"` (путь относительно каталога .rc файла). Устраняет ошибку RC2135 при компиляции ресурсов Windows.
 - **AppGui.cpp / Dashboard.cpp** — формат отображения цен и балансов изменён с `%.2f`/`%.4f` на `%.8f` для поддержки полной точности API бирж (формат `X.XXXXXXXX`). Затронуты: OHLCV, EMA, ATR, Bollinger Bands, VWAP, SL/TP, ордера, позиции, PnL, балансы, эквити. Процентные значения (RSI, drawdown, confidence) и коэффициенты (Sharpe, PF) сохранены в прежнем формате.
+- **AppGui.cpp (Settings > Exchange)** — улучшены метки полей для ясности live-режима: `Base URL` → `Base URL (Spot)`, `WS Host` → `WS Host (Futures)`, `WS Port` → `WS Port (Futures, default 9443)`. Спотовые WS поля (`Spot WS Host`, `Spot WS Port`) и `Futures Base URL` вынесены в секцию Advanced. Добавлена автоподстановка дефолтных URL при переключении Testnet (Binance): production — `api.binance.com`, `fstream.binance.com`, порт `9443`; testnet — `testnet.binance.vision`, `fstream.binancefuture.com`, порт `443`.
+- **test_regression_part2.cpp** — устранено предупреждение `-Wunused-variable` для переменной `reporter` в тесте `TaxReporter::ExportCSV` (добавлен `(void)reporter`).
+- **test_full_system.cpp** — устранено предупреждение `-Wunused-but-set-variable` для `parseOk` в тесте `Config_CorruptJsonUsesDefaults`: переменная теперь используется в `EXPECT_FALSE(parseOk)` для проверки что некорректный JSON не парсится.
 
 ## [1.5.3] - 2026-03-XX
 
