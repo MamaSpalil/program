@@ -1980,18 +1980,30 @@ void AppGui::drawSettingsPanel() {
             if (config_.testnet != prevTestnet && config_.exchangeName == "binance") {
                 if (config_.testnet) {
                     strncpy(baseUrlBuf, "https://testnet.binance.vision", sizeof(baseUrlBuf) - 1);
+                    baseUrlBuf[sizeof(baseUrlBuf) - 1] = '\0';
                     strncpy(wsHostBuf, "testnet.binance.vision", sizeof(wsHostBuf) - 1);
+                    wsHostBuf[sizeof(wsHostBuf) - 1] = '\0';
                     strncpy(wsPortBuf, "443", sizeof(wsPortBuf) - 1);
+                    wsPortBuf[sizeof(wsPortBuf) - 1] = '\0';
                     strncpy(futuresBaseUrlBuf, "https://testnet.binancefuture.com", sizeof(futuresBaseUrlBuf) - 1);
+                    futuresBaseUrlBuf[sizeof(futuresBaseUrlBuf) - 1] = '\0';
                     strncpy(futuresWsHostBuf, "fstream.binancefuture.com", sizeof(futuresWsHostBuf) - 1);
+                    futuresWsHostBuf[sizeof(futuresWsHostBuf) - 1] = '\0';
                     strncpy(futuresWsPortBuf, "443", sizeof(futuresWsPortBuf) - 1);
+                    futuresWsPortBuf[sizeof(futuresWsPortBuf) - 1] = '\0';
                 } else {
                     strncpy(baseUrlBuf, "https://api.binance.com", sizeof(baseUrlBuf) - 1);
+                    baseUrlBuf[sizeof(baseUrlBuf) - 1] = '\0';
                     strncpy(wsHostBuf, "stream.binance.com", sizeof(wsHostBuf) - 1);
+                    wsHostBuf[sizeof(wsHostBuf) - 1] = '\0';
                     strncpy(wsPortBuf, "9443", sizeof(wsPortBuf) - 1);
+                    wsPortBuf[sizeof(wsPortBuf) - 1] = '\0';
                     strncpy(futuresBaseUrlBuf, "https://fapi.binance.com", sizeof(futuresBaseUrlBuf) - 1);
+                    futuresBaseUrlBuf[sizeof(futuresBaseUrlBuf) - 1] = '\0';
                     strncpy(futuresWsHostBuf, "fstream.binance.com", sizeof(futuresWsHostBuf) - 1);
+                    futuresWsHostBuf[sizeof(futuresWsHostBuf) - 1] = '\0';
                     strncpy(futuresWsPortBuf, "9443", sizeof(futuresWsPortBuf) - 1);
+                    futuresWsPortBuf[sizeof(futuresWsPortBuf) - 1] = '\0';
                 }
             }
 
