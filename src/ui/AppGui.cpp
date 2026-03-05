@@ -294,6 +294,23 @@ void AppGui::addLog(const std::string& line) {
         state_.logLines.pop_front();
 }
 
+void AppGui::setDatabaseRepositories(TradeRepository* tradeRepo,
+                                      AlertRepository* alertRepo,
+                                      BacktestRepository* backtestRepo,
+                                      PositionRepository* positionRepo,
+                                      DrawingRepository* drawingRepo,
+                                      AuxRepository* auxRepo,
+                                      EquityRepository* /*equityRepo — used by Engine, not GUI*/) {
+    tradeHistory_.setRepository(tradeRepo);
+    alertManager_.setRepository(alertRepo);
+    paperTrader_.setPositionRepository(positionRepo);
+    // BacktestEngine is created per-run; store repo pointer for later use
+    btRepo_ = backtestRepo;
+    drawRepo_ = drawingRepo;
+    // Wire scanner to AuxRepository for cache persistence
+    scanner_.setAuxRepository(auxRepo);
+}
+
 // ---------------------------------------------------------------------------
 // Config load / save
 // ---------------------------------------------------------------------------
@@ -561,6 +578,12 @@ void AppGui::renderFrame() {
     if (showScanner_) drawMarketScannerWindow();
     if (showPineEditor_) drawPineEditorWindow();
     if (showTradeHistory_) drawTradeHistoryWindow();
+
+    // Pair List (always visible left sidebar)
+    drawPairListPanel();
+
+    // User Panel (toggled via showUserPanel_)
+    if (showUserPanel_) drawUserPanel();
 
     // Render
     ImGui::Render();
@@ -2525,6 +2548,13 @@ void AppGui::drawStatusBar() {
 //  Pair List Panel — left sidebar with SPOT/FUTURES toggle, search, pair list
 // ---------------------------------------------------------------------------
 void AppGui::drawPairListPanel() {
+    ImGui::SetNextWindowSize(ImVec2(200, 400), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(0, 20), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Pair List")) {
+        ImGui::End();
+        return;
+    }
+
     // ── SPOT / FUTURES toggle ──
     {
         bool isSpot = (config_.marketType == "spot");
@@ -2744,12 +2774,21 @@ void AppGui::drawPairSelector() {
         }
         ImGui::EndCombo();
     }
+
+    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
 //  User Panel — embedded right column with balance, orders, trades, price, P&L
 // ---------------------------------------------------------------------------
 void AppGui::drawUserPanel() {
+    ImGui::SetNextWindowSize(ImVec2(280, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 280, 20), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("User Panel", &showUserPanel_)) {
+        ImGui::End();
+        return;
+    }
+
     GuiState snap;
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
@@ -2922,6 +2961,8 @@ void AppGui::drawUserPanel() {
         if (!snap.lastSignal.reason.empty())
             ImGui::TextWrapped("%s", snap.lastSignal.reason.c_str());
     }
+
+    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
@@ -3221,6 +3262,7 @@ void AppGui::drawBacktestWindow() {
         }
         // Run backtest on current candle history
         BacktestEngine bt;
+        if (btRepo_) bt.setRepository(btRepo_);
         BacktestEngine::Config cfg;
         cfg.symbol = btSymbol_;
         cfg.interval = btIntervals[btIntervalIdx_];

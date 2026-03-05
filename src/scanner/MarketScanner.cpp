@@ -1,4 +1,5 @@
 #include "MarketScanner.h"
+#include "../data/AuxRepository.h"
 #include <algorithm>
 #include <cmath>
 
@@ -7,6 +8,11 @@ namespace crypto {
 void MarketScanner::updateResults(std::vector<ScanResult> results) {
     std::lock_guard<std::mutex> lk(mutex_);
     results_ = std::move(results);
+    // Persist to scanner cache in database
+    if (auxRepo_) {
+        for (const auto& r : results_)
+            auxRepo_->upsertScanResult(r, exchange_);
+    }
 }
 
 std::vector<ScanResult> MarketScanner::getResults() const {

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <chrono>
 
 #ifdef USE_CURL
 #include <curl/curl.h>
@@ -25,12 +26,30 @@ void AlertManager::addAlert(const Alert& alert) {
     Alert a = alert;
     if (a.id.empty()) a.id = "alert_" + std::to_string(nextId_++);
     alerts_.push_back(a);
+
+    // Persist to database
+    if (alertRepo_) {
+        AlertRecord rec;
+        rec.id = a.id;
+        rec.symbol = a.symbol;
+        rec.condition = a.condition;
+        rec.threshold = a.threshold;
+        rec.enabled = a.enabled;
+        rec.triggered = a.triggered;
+        rec.notifyType = a.notifyType;
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        rec.createdAt = now;
+        rec.updatedAt = now;
+        alertRepo_->insert(rec);
+    }
 }
 
 void AlertManager::removeAlert(const std::string& id) {
     std::lock_guard<std::mutex> lk(mutex_);
     alerts_.erase(std::remove_if(alerts_.begin(), alerts_.end(),
         [&](const Alert& a) { return a.id == id; }), alerts_.end());
+    if (alertRepo_) alertRepo_->remove(id);
 }
 
 void AlertManager::updateAlert(const Alert& alert) {
@@ -83,7 +102,11 @@ void AlertManager::check(const AlertTick& tick) {
 void AlertManager::resetAlert(const std::string& id) {
     std::lock_guard<std::mutex> lk(mutex_);
     for (auto& a : alerts_) {
-        if (a.id == id) { a.triggered = false; return; }
+        if (a.id == id) {
+            a.triggered = false;
+            if (alertRepo_) alertRepo_->resetTriggered(id);
+            return;
+        }
     }
 }
 
@@ -203,6 +226,23 @@ bool AlertManager::loadFromFile(const std::string& path) {
         return true;
     } catch (...) {
         return false;
+    }
+}
+
+void AlertManager::loadFromDB() {
+    if (!alertRepo_) return;
+    std::lock_guard<std::mutex> lk(mutex_);
+    auto dbAlerts = alertRepo_->getAll();
+    for (const auto& a : dbAlerts) {
+        Alert alert;
+        alert.id = a.id;
+        alert.symbol = a.symbol;
+        alert.condition = a.condition;
+        alert.threshold = a.threshold;
+        alert.enabled = a.enabled;
+        alert.triggered = a.triggered;
+        alert.notifyType = a.notifyType;
+        alerts_.push_back(std::move(alert));
     }
 }
 

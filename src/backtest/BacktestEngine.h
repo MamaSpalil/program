@@ -1,5 +1,6 @@
 #pragma once
 #include "../data/CandleData.h"
+#include "../data/BacktestRepository.h"
 #include <string>
 #include <vector>
 
@@ -51,11 +52,14 @@ public:
     using SignalFunc = std::function<int(const std::vector<Candle>&, size_t)>;
     Result run(const Config& cfg, const std::vector<Candle>& bars, SignalFunc signalFn);
 
+    void setRepository(BacktestRepository* repo) { btRepo_ = repo; }
+
 private:
     // Simple EMA crossover signal: +1 buy, -1 sell, 0 hold
     static int emaSignal(const std::vector<Candle>& bars, size_t idx);
     static double calcEMA(const std::vector<double>& prices, int period, size_t idx);
     void computeMetrics(Result& result, double initialBalance);
+    BacktestRepository* btRepo_{nullptr};
 };
 
 } // namespace crypto

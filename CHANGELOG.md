@@ -5,6 +5,52 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-03-05
+
+### Added
+
+#### SQLite Trading Database (config/trading.db)
+
+- **TradingDatabase** (`src/data/TradingDatabase.h/.cpp`) — centralized SQLite3 database manager for `config/trading.db`; creates 12 tables (trades, orders, positions, equity_history, alerts, backtest_results, backtest_trades, drawings, funding_rates, scanner_cache, webhook_log, tax_events) with indices; WAL journal mode, synchronous=NORMAL, foreign_keys=ON, 32MB cache, temp_store=MEMORY; shared mutex for thread-safe repository access
+- **TradeRepository** (`src/data/TradeRepository.h/.cpp`) — CRUD for trades table: upsert, close, getOpen, getHistory with symbol/limit filters, migrateFromJSON for `config/trade_history.json`
+- **OrderRepository** (`src/data/OrderRepository.h/.cpp`) — CRUD for orders table: insert, updateStatus with fill info, getOpen (NEW/PARTIALLY_FILLED), getAll with pagination, deleteOld (prune completed orders older than N days)
+- **PositionRepository** (`src/data/PositionRepository.h/.cpp`) — CRUD for positions table with UNIQUE(symbol, exchange, side, is_paper): upsert, updatePrice, updateTPSL, get, getAll, remove
+- **EquityRepository** (`src/data/EquityRepository.h/.cpp`) — buffered writes for equity_history: push to in-memory buffer, flush to DB in batch transaction, getHistory, pruneOld (>365 days)
+- **AlertRepository** (`src/data/AlertRepository.h/.cpp`) — CRUD for alerts: insert, update, remove, setTriggered (increment trigger_count), resetTriggered, getAll, getEnabled, migrateFromJSON for `config/alerts.json`
+- **BacktestRepository** (`src/data/BacktestRepository.h/.cpp`) — save backtest results + trades in single transaction, getAll with symbol filter, getTrades, remove with CASCADE delete of backtest_trades
+- **DrawingRepository** (`src/data/DrawingRepository.h/.cpp`) — CRUD for chart drawings: insert with RGBA color encoding, remove, update, clear by symbol/exchange, load by symbol/exchange
+- **AuxRepository** (`src/data/AuxRepository.h/.cpp`) — four auxiliary tables in one class: funding_rates (save/get/prune), scanner_cache (upsert/get/clearStale), webhook_log (log/get/prune), tax_events (save/get/clear)
+- **DatabaseMigrator** (`src/data/DatabaseMigrator.h/.cpp`) — one-time migration from JSON to SQLite: reads `config/trade_history.json` and `config/alerts.json`, inserts into DB, marks migration complete in `_meta` table; does not delete original JSON files
+- **DatabaseMaintenance** (`src/data/DatabaseMaintenance.h/.cpp`) — background cleanup thread: runs every 24 hours; prunes equity (>365 days), funding rates (>30 days), webhook log (>500 entries), old orders (>30 days); WAL checkpoint
+
+#### Database Integration into Application
+
+- **main.cpp** — TradingDatabase initialized after Logger in both GUI and console modes; all 8 repositories created; DatabaseMigrator runs asynchronously in GUI mode (std::async); DatabaseMaintenance background thread started; equity flush and maintenance stop on shutdown
+- **TradeHistory** — `setRepository(TradeRepository*)` enables parallel write to both JSON and SQLite on every `addTrade()` call
+- **AlertManager** — `setRepository(AlertRepository*)` persists alerts to DB on add/remove/reset; `loadFromDB()` loads alerts from database at startup
+- **PaperTrading** — `setPositionRepository(PositionRepository*)` persists paper positions to DB on open/close
+- **BacktestEngine** — `setRepository(BacktestRepository*)` auto-saves backtest results and trade list to DB after `computeMetrics()`
+- **DrawingManager** — `setRepository(DrawingRepository*)` and `setExchange()` persist drawings to DB on add/remove
+- **WebhookServer** — `setAuxRepository(AuxRepository*)` logs webhook requests to DB after processing
+- **MarketScanner** — `setAuxRepository(AuxRepository*)` caches scan results to DB on `updateResults()`
+- **AppGui::setDatabaseRepositories()** — wires all repository pointers to GUI-owned module instances (TradeHistory, AlertManager, PaperTrading, BacktestEngine, DrawingManager)
+
+#### Restored UI Windows
+
+- **Pair List window** — standalone `ImGui::Begin("Pair List")` window (200x400, top-left); SPOT/FUTURES toggle, search filter, clickable pair list; always visible in render loop
+- **User Panel window** — standalone `ImGui::Begin("User Panel")` window (280x500, top-right); current price, connection status, balance, open orders, positions, signal; toggled via View menu and toolbar button
+
+#### Tests
+
+- **8 new unit tests** in `test_trading_db.cpp` — IndicesCreated (verifies 14 indices), AlertSetAndResetTriggered (trigger count increment, reset), PositionClose (upsert then remove), TradeGetHistory (filter by symbol), ScannerCacheUpsert (scanner cache round-trip), MigrationFlagsTable (_meta table creation), BacktestSaveAndGetTrades (save with trades, verify counts), ForeignKeysEnabled (orphan FK rejection)
+
+### Changed
+
+- **AppGui.h** — added includes for all 7 repository headers; added `setDatabaseRepositories()` public method; added `btRepo_` and `drawRepo_` non-owning pointers
+- **main.cpp** — added includes for all database layer headers; database initialization in both GUI and console modes
+- **MarketScanner.h** — added `setAuxRepository()` setter and forward declaration for AuxRepository
+- **MarketScanner.cpp** — `updateResults()` now persists scan results to AuxRepository if set
+
 ## [1.5.0] - 2026-03-04
 
 ### Added

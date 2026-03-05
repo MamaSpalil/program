@@ -5,6 +5,8 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
+namespace crypto { class DrawingRepository; }
+
 namespace crypto {
 
 enum class DrawingType {
@@ -40,9 +42,14 @@ public:
               const std::string& dir = "config/drawings");
     void clear();
 
+    void setRepository(DrawingRepository* repo) { drawRepo_ = repo; }
+    void setExchange(const std::string& exchange) { exchange_ = exchange; }
+
 private:
     std::vector<DrawingObject> objects_;
     mutable std::mutex mutex_;
+    DrawingRepository* drawRepo_{nullptr};
+    std::string exchange_;
 };
 
 } // namespace crypto

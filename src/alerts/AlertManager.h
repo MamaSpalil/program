@@ -4,6 +4,7 @@
 #include <mutex>
 #include <functional>
 #include <nlohmann/json.hpp>
+#include "../data/AlertRepository.h"
 
 namespace crypto {
 
@@ -55,6 +56,12 @@ public:
     using NotifyCallback = std::function<void(const std::string&)>;
     void setNotifyCallback(NotifyCallback cb) { onNotify_ = std::move(cb); }
 
+    // Optional: set database repository for DB persistence
+    void setRepository(AlertRepository* repo) { alertRepo_ = repo; }
+    
+    // Load alerts from database (if repo is set)
+    void loadFromDB();
+
 private:
     void notify(const Alert& alert, const AlertTick& tick);
     void sendTelegram(const std::string& msg);
@@ -66,6 +73,7 @@ private:
     std::string telegramChatId_;
     NotifyCallback onNotify_;
     int nextId_{1};
+    AlertRepository* alertRepo_{nullptr};
 };
 
 } // namespace crypto

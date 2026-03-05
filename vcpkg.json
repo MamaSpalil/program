@@ -12,8 +12,6 @@
     "spdlog",
     "eigen3",
     "gtest",
-    "glfw3",
-    "opengl",
     "sqlite3"
   ]
 }

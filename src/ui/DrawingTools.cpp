@@ -1,4 +1,5 @@
 #include "DrawingTools.h"
+#include "../data/DrawingRepository.h"
 #include <algorithm>
 #include <fstream>
 #ifdef _WIN32
@@ -12,6 +13,7 @@ namespace crypto {
 void DrawingManager::add(const DrawingObject& obj) {
     std::lock_guard<std::mutex> lk(mutex_);
     objects_.push_back(obj);
+    if (drawRepo_) drawRepo_->insert(obj, exchange_);
 }
 
 void DrawingManager::remove(const std::string& id) {
@@ -20,6 +22,7 @@ void DrawingManager::remove(const std::string& id) {
         std::remove_if(objects_.begin(), objects_.end(),
             [&](const DrawingObject& o) { return o.id == id; }),
         objects_.end());
+    if (drawRepo_) drawRepo_->remove(id);
 }
 
 int DrawingManager::count() const {

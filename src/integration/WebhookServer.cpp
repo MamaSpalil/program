@@ -80,6 +80,20 @@ WebhookResponse WebhookServer::handleRequest(
                 recentSignals_.resize(100);
         }
 
+        // Log to database
+        if (auxRepo_) {
+            WebhookLogEntry logEntry;
+            logEntry.receivedAt = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            logEntry.action = sig.action;
+            logEntry.symbol = sig.symbol;
+            logEntry.qty = sig.qty;
+            logEntry.price = sig.price;
+            logEntry.status = "ok";
+            logEntry.clientIp = ip;
+            auxRepo_->logWebhook(logEntry);
+        }
+
         res.status = 200;
         res.body = "{\"status\":\"received\"}";
         Logger::get()->info("[Webhook] Signal: {} {} qty={}",

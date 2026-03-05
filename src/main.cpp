@@ -9,6 +9,19 @@
 #include <clocale>
 #include <chrono>
 
+#include "data/TradingDatabase.h"
+#include "data/TradeRepository.h"
+#include "data/OrderRepository.h"
+#include "data/PositionRepository.h"
+#include "data/EquityRepository.h"
+#include "data/AlertRepository.h"
+#include "data/BacktestRepository.h"
+#include "data/DrawingRepository.h"
+#include "data/AuxRepository.h"
+#include "data/DatabaseMigrator.h"
+#include "data/DatabaseMaintenance.h"
+#include <future>
+
 #ifdef USE_IMGUI
 #include "ui/AppGui.h"
 #include <thread>
@@ -84,11 +97,46 @@ int main(int argc, char* argv[]) {
         crypto::Logger::init();
         crypto::Logger::get()->info("CryptoTrader GUI starting...");
 
+        // ── Initialize Trading Database ──────────────────────────────
+        std::string dbPath = (std::filesystem::path(configPath).parent_path() / "trading.db").string();
+        auto tradingDb = std::make_shared<crypto::TradingDatabase>(dbPath);
+        if (!tradingDb->init()) {
+            crypto::Logger::get()->error("Failed to initialize trading database");
+        } else {
+            crypto::Logger::get()->info("Trading database initialized: {}", dbPath);
+        }
+
+        // Create repositories
+        auto tradeRepo    = std::make_shared<crypto::TradeRepository>(*tradingDb);
+        auto orderRepo    = std::make_shared<crypto::OrderRepository>(*tradingDb);
+        auto positionRepo = std::make_shared<crypto::PositionRepository>(*tradingDb);
+        auto equityRepo   = std::make_shared<crypto::EquityRepository>(*tradingDb);
+        auto alertRepo    = std::make_shared<crypto::AlertRepository>(*tradingDb);
+        auto backtestRepo = std::make_shared<crypto::BacktestRepository>(*tradingDb);
+        auto drawingRepo  = std::make_shared<crypto::DrawingRepository>(*tradingDb);
+        auto auxRepo      = std::make_shared<crypto::AuxRepository>(*tradingDb);
+
+        // Run migration asynchronously (non-blocking)
+        auto migrator = std::make_shared<crypto::DatabaseMigrator>(*tradingDb, *tradeRepo, *alertRepo, *drawingRepo);
+        auto migrationFuture = std::async(std::launch::async, [migrator]() {
+            migrator->runIfNeeded();
+        });
+
+        // Start database maintenance (background cleanup thread)
+        auto maintenance = std::make_shared<crypto::DatabaseMaintenance>(*tradingDb, *equityRepo, *orderRepo, *auxRepo);
+        maintenance->start();
+
         auto gui = std::make_unique<crypto::AppGui>();
         if (!gui->init(configPath)) {
             std::cerr << "Failed to initialize GUI\n";
             return 1;
         }
+
+        // Wire repositories to GUI-owned modules
+        gui->setDatabaseRepositories(
+            tradeRepo.get(), alertRepo.get(), backtestRepo.get(),
+            positionRepo.get(), drawingRepo.get(), auxRepo.get(),
+            equityRepo.get());
 
         std::unique_ptr<crypto::Engine> engine;
 
@@ -300,6 +348,41 @@ int main(int argc, char* argv[]) {
                     tr.qty       = resp.executedQty;
                     tr.price     = resp.executedPrice;
                     engine->recordTrade(tr);
+
+                    // Also persist order to trading database
+                    crypto::OrderRecord dbOrder;
+                    dbOrder.id = resp.orderId;
+                    dbOrder.symbol = symbol;
+                    dbOrder.exchange = gui->getConfig().exchangeName;
+                    dbOrder.side = side;
+                    dbOrder.type = type;
+                    dbOrder.qty = qty;
+                    dbOrder.price = price;
+                    dbOrder.filledQty = resp.executedQty;
+                    dbOrder.avgFillPrice = resp.executedPrice;
+                    dbOrder.status = resp.status;
+                    dbOrder.isPaper = (gui->getConfig().mode == "paper");
+                    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    dbOrder.createdAt = now;
+                    dbOrder.updatedAt = now;
+                    orderRepo->insert(dbOrder);
+
+                    // Persist trade to trading database
+                    crypto::TradingRecord dbTrade;
+                    dbTrade.id = resp.orderId;
+                    dbTrade.symbol = symbol;
+                    dbTrade.exchange = gui->getConfig().exchangeName;
+                    dbTrade.side = side;
+                    dbTrade.type = type;
+                    dbTrade.qty = resp.executedQty;
+                    dbTrade.entryPrice = resp.executedPrice;
+                    dbTrade.isPaper = (gui->getConfig().mode == "paper");
+                    dbTrade.status = "open";
+                    dbTrade.entryTime = tr.timestamp;
+                    dbTrade.createdAt = tr.timestamp;
+                    dbTrade.updatedAt = tr.timestamp;
+                    tradeRepo->upsert(dbTrade);
                 } else {
                     gui->addLog("[Error] Order failed: " + resp.status);
                 }
@@ -353,6 +436,12 @@ int main(int argc, char* argv[]) {
             engine->stop();
             engine.reset();
         }
+        // Stop database maintenance
+        maintenance->stop();
+        
+        // Flush equity buffer
+        equityRepo->flush();
+
         gui->shutdown();
 
     } catch (const std::exception& e) {
@@ -385,9 +474,38 @@ int main(int argc, char* argv[]) {
         crypto::Logger::init();
         crypto::Logger::get()->info("CryptoTrader starting (console mode)...");
 
+        // ── Initialize Trading Database ──────────────────────────────
+        std::string dbPath = (std::filesystem::path(configPath).parent_path() / "trading.db").string();
+        auto tradingDb = std::make_shared<crypto::TradingDatabase>(dbPath);
+        if (!tradingDb->init()) {
+            crypto::Logger::get()->error("Failed to initialize trading database");
+        } else {
+            crypto::Logger::get()->info("Trading database initialized: {}", dbPath);
+        }
+
+        auto tradeRepo    = std::make_shared<crypto::TradeRepository>(*tradingDb);
+        auto orderRepo    = std::make_shared<crypto::OrderRepository>(*tradingDb);
+        auto positionRepo = std::make_shared<crypto::PositionRepository>(*tradingDb);
+        auto equityRepo   = std::make_shared<crypto::EquityRepository>(*tradingDb);
+        auto alertRepo    = std::make_shared<crypto::AlertRepository>(*tradingDb);
+        auto backtestRepo = std::make_shared<crypto::BacktestRepository>(*tradingDb);
+        auto drawingRepo  = std::make_shared<crypto::DrawingRepository>(*tradingDb);
+        auto auxRepo      = std::make_shared<crypto::AuxRepository>(*tradingDb);
+
+        // Run migration
+        crypto::DatabaseMigrator migrator(*tradingDb, *tradeRepo, *alertRepo, *drawingRepo);
+        migrator.runIfNeeded();
+
+        // Start maintenance
+        auto maintenance = std::make_shared<crypto::DatabaseMaintenance>(*tradingDb, *equityRepo, *orderRepo, *auxRepo);
+        maintenance->start();
+
         auto engine = std::make_unique<crypto::Engine>(configPath);
         g_engine = engine.get();
         engine->run();
+
+        maintenance->stop();
+        equityRepo->flush();
     } catch (const std::exception& e) {
         std::cerr << "Fatal: " << e.what() << "\n";
         return 1;

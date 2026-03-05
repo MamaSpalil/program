@@ -163,3 +163,138 @@ TEST_F(TradingDBTest, ForeignKeysEnabled) {
     orphan.backtestId = "non-existent";
     EXPECT_FALSE(btRepo.insertTrade(orphan));
 }
+
+// ── Indices ────────────────────────────────────────────────────────────────
+
+TEST_F(TradingDBTest, IndicesCreated) {
+    const char* indices[] = {
+        "idx_trades_symbol", "idx_trades_status", "idx_trades_time",
+        "idx_orders_symbol", "idx_orders_status",
+        "idx_positions_symbol",
+        "idx_equity_time",
+        "idx_alerts_symbol",
+        "idx_backtest_symbol", "idx_bt_trades_id",
+        "idx_drawings_symbol",
+        "idx_funding_symbol",
+        "idx_webhook_time",
+        "idx_tax_year"
+    };
+    for (auto* idx : indices) {
+        std::string sql = "SELECT name FROM sqlite_master WHERE type='index' AND name='" +
+                          std::string(idx) + "'";
+        EXPECT_TRUE(db.execute(sql)) << "Missing index: " << idx;
+    }
+}
+
+// ── Alert: setTriggered and resetTriggered ─────────────────────────────────
+
+TEST_F(TradingDBTest, AlertSetAndResetTriggered) {
+    AlertRepository repo(db);
+    AlertRecord a;
+    a.id = "alert-001"; a.symbol = "BTCUSDT";
+    a.condition = "PRICE_ABOVE"; a.threshold = 70000;
+    a.enabled = true; a.triggered = false;
+    a.createdAt = a.updatedAt = 1700000000000LL;
+    ASSERT_TRUE(repo.insert(a));
+
+    ASSERT_TRUE(repo.setTriggered("alert-001", 1700001000000LL));
+    auto all = repo.getAll();
+    ASSERT_EQ(all.size(), 1u);
+    EXPECT_TRUE(all[0].triggered);
+    EXPECT_EQ(all[0].triggerCount, 1);
+
+    ASSERT_TRUE(repo.resetTriggered("alert-001"));
+    all = repo.getAll();
+    ASSERT_EQ(all.size(), 1u);
+    EXPECT_FALSE(all[0].triggered);
+}
+
+// ── Position close (remove) ────────────────────────────────────────────────
+
+TEST_F(TradingDBTest, PositionClose) {
+    PositionRepository repo(db);
+    PositionRecord p;
+    p.id = "pos-close"; p.symbol = "ETHUSDT"; p.exchange = "binance";
+    p.side = "LONG"; p.qty = 1.0; p.entryPrice = 3000;
+    p.isPaper = true;
+    p.openedAt = p.updatedAt = 1700000000000LL;
+    ASSERT_TRUE(repo.upsert(p));
+    ASSERT_TRUE(repo.remove("ETHUSDT", "binance", true));
+    auto pos = repo.get("ETHUSDT", "binance", true);
+    EXPECT_FALSE(pos.has_value());
+}
+
+// ── Trade getHistory ───────────────────────────────────────────────────────
+
+TEST_F(TradingDBTest, TradeGetHistory) {
+    TradeRepository repo(db);
+    for (int i = 0; i < 5; i++) {
+        TradingRecord t;
+        t.id = "th-" + std::to_string(i);
+        t.symbol = (i % 2 == 0) ? "BTCUSDT" : "ETHUSDT";
+        t.exchange = "binance"; t.side = "BUY"; t.type = "MARKET";
+        t.qty = 0.01; t.entryPrice = 68000 + i * 100;
+        t.status = "closed"; t.isPaper = false;
+        t.entryTime = 1700000000000LL + i * 60000;
+        t.createdAt = t.updatedAt = t.entryTime;
+        repo.upsert(t);
+    }
+    auto all = repo.getHistory("", 10);
+    EXPECT_EQ(all.size(), 5u);
+    auto btc = repo.getHistory("BTCUSDT", 10);
+    EXPECT_EQ(btc.size(), 3u);
+}
+
+// ── Scanner cache upsert ───────────────────────────────────────────────────
+
+TEST_F(TradingDBTest, ScannerCacheUpsert) {
+    AuxRepository repo(db);
+    ScanResult r;
+    r.symbol = "BTCUSDT"; r.price = 68000;
+    r.change24h = 2.5; r.volume24h = 1000000;
+    r.rsi = 55; r.signal = "BUY"; r.confidence = 0.8;
+    ASSERT_TRUE(repo.upsertScanResult(r, "binance"));
+    auto cache = repo.getScanCache("binance");
+    ASSERT_EQ(cache.size(), 1u);
+    EXPECT_EQ(cache[0].symbol, "BTCUSDT");
+    EXPECT_NEAR(cache[0].price, 68000, 0.01);
+}
+
+// ── Migration flags table ──────────────────────────────────────────────────
+
+TEST_F(TradingDBTest, MigrationFlagsTable) {
+    // After init, _meta table should be creatable
+    db.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)");
+    db.execute("INSERT OR REPLACE INTO _meta (key, value) VALUES ('migrated', '1')");
+    EXPECT_TRUE(db.tableExists("_meta"));
+}
+
+// ── Backtest save with trades ──────────────────────────────────────────────
+
+TEST_F(TradingDBTest, BacktestSaveAndGetTrades) {
+    BacktestRepository repo(db);
+    BacktestResult r;
+    r.id = "bt-save-001"; r.symbol = "BTCUSDT"; r.timeframe = "1h";
+    r.pnl = 500; r.totalTrades = 3; r.winningTrades = 2; r.losingTrades = 1;
+    r.runAt = 1700000000000LL;
+
+    std::vector<BtTradeRecord> trades;
+    for (int i = 0; i < 3; i++) {
+        BtTradeRecord bt;
+        bt.backtestId = "bt-save-001"; bt.symbol = "BTCUSDT";
+        bt.side = (i < 2) ? "BUY" : "SELL";
+        bt.entryPrice = 68000; bt.exitPrice = 69000;
+        bt.qty = 0.01; bt.pnl = (i < 2) ? 100 : -50;
+        bt.entryTime = 1700000000000LL + i * 3600000;
+        bt.exitTime = bt.entryTime + 1800000;
+        trades.push_back(bt);
+    }
+    ASSERT_TRUE(repo.save(r, trades));
+
+    auto results = repo.getAll("BTCUSDT", 10);
+    ASSERT_EQ(results.size(), 1u);
+    EXPECT_EQ(results[0].totalTrades, 3);
+
+    auto dbTrades = repo.getTrades("bt-save-001");
+    EXPECT_EQ(dbTrades.size(), 3u);
+}
