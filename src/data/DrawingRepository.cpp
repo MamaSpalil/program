@@ -39,10 +39,10 @@ bool DrawingRepository::insert(const DrawingObject& d, const std::string& exchan
         std::chrono::system_clock::now().time_since_epoch()).count();
 
     // Extract RGBA from uint32_t color
-    float r = ((d.color >> 0)  & 0xFF) / 255.0f;
-    float g = ((d.color >> 8)  & 0xFF) / 255.0f;
-    float b = ((d.color >> 16) & 0xFF) / 255.0f;
-    float a = ((d.color >> 24) & 0xFF) / 255.0f;
+    float cr = ((d.color >> 0)  & 0xFF) / 255.0f;
+    float cg = ((d.color >> 8)  & 0xFF) / 255.0f;
+    float cb = ((d.color >> 16) & 0xFF) / 255.0f;
+    float ca = ((d.color >> 24) & 0xFF) / 255.0f;
 
     const char* sql = R"(
         INSERT OR REPLACE INTO drawings
@@ -63,10 +63,10 @@ bool DrawingRepository::insert(const DrawingObject& d, const std::string& exchan
     sqlite3_bind_double(stmt, 6, d.y1);
     sqlite3_bind_double(stmt, 7, d.x2);
     sqlite3_bind_double(stmt, 8, d.y2);
-    sqlite3_bind_double(stmt, 9, r);
-    sqlite3_bind_double(stmt, 10, g);
-    sqlite3_bind_double(stmt, 11, b);
-    sqlite3_bind_double(stmt, 12, a);
+    sqlite3_bind_double(stmt, 9, cr);
+    sqlite3_bind_double(stmt, 10, cg);
+    sqlite3_bind_double(stmt, 11, cb);
+    sqlite3_bind_double(stmt, 12, ca);
     sqlite3_bind_double(stmt, 13, d.thickness);
     sqlite3_bind_text(stmt, 14, d.text.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int64(stmt, 15, now);
@@ -91,10 +91,10 @@ bool DrawingRepository::remove(const std::string& id) {
 
 bool DrawingRepository::update(const DrawingObject& d) {
     std::lock_guard<std::mutex> lock(db_.getMutex());
-    float r = ((d.color >> 0)  & 0xFF) / 255.0f;
-    float g = ((d.color >> 8)  & 0xFF) / 255.0f;
-    float b = ((d.color >> 16) & 0xFF) / 255.0f;
-    float a = ((d.color >> 24) & 0xFF) / 255.0f;
+    float cr = ((d.color >> 0)  & 0xFF) / 255.0f;
+    float cg = ((d.color >> 8)  & 0xFF) / 255.0f;
+    float cb = ((d.color >> 16) & 0xFF) / 255.0f;
+    float ca = ((d.color >> 24) & 0xFF) / 255.0f;
 
     const char* sql = R"(
         UPDATE drawings SET type=?, x1=?, y1=?, x2=?, y2=?,
@@ -111,10 +111,10 @@ bool DrawingRepository::update(const DrawingObject& d) {
     sqlite3_bind_double(stmt, 3, d.y1);
     sqlite3_bind_double(stmt, 4, d.x2);
     sqlite3_bind_double(stmt, 5, d.y2);
-    sqlite3_bind_double(stmt, 6, r);
-    sqlite3_bind_double(stmt, 7, g);
-    sqlite3_bind_double(stmt, 8, b);
-    sqlite3_bind_double(stmt, 9, a);
+    sqlite3_bind_double(stmt, 6, cr);
+    sqlite3_bind_double(stmt, 7, cg);
+    sqlite3_bind_double(stmt, 8, cb);
+    sqlite3_bind_double(stmt, 9, ca);
     sqlite3_bind_double(stmt, 10, d.thickness);
     sqlite3_bind_text(stmt, 11, d.text.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 12, d.id.c_str(), -1, SQLITE_TRANSIENT);
