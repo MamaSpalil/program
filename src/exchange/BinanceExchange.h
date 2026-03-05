@@ -47,6 +47,19 @@ public:
     std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
     FuturesBalanceInfo getFuturesBalance() override;
 
+    // ── Rate limit constants (Binance API, updated March 2026) ─────────────
+    // IP rate limits: 6000 weight/min (spot), 2400 weight/min (futures)
+    static constexpr int MAX_REQUESTS_PER_MINUTE_SPOT    = 1200;
+    static constexpr int MAX_REQUESTS_PER_MINUTE_FUTURES = 400;
+    // Order rate limits — Spot: 100/10s, 200 000/24h; Futures: 1 200/min
+    static constexpr int MAX_ORDERS_PER_10S_SPOT       = 100;
+    static constexpr int MAX_ORDERS_PER_24H_SPOT       = 200000;
+    static constexpr int MAX_ORDERS_PER_MINUTE_FUTURES = 1200;
+    // WebSocket: 300 connections per 5 minutes per IP
+    static constexpr int MAX_WS_CONNECTIONS_PER_5MIN = 300;
+    // Iceberg order parts limit (increased to 100 from March 12, 2026)
+    static constexpr int MAX_ICEBERG_PARTS = 100;
+
 private:
     std::string apiKey_;
     std::string apiSecret_;
@@ -64,10 +77,16 @@ private:
 
     // Rate limiting: track request times in a sliding 1-minute window
     mutable std::queue<std::chrono::steady_clock::time_point> requestTimes_;
-    // Binance limits: 6000 weight/min (spot IP), 2400 weight/min (futures IP)
-    // Most requests have weight 1-5; use conservative per-minute caps.
-    static constexpr int MAX_REQUESTS_PER_MINUTE_SPOT    = 1200;
-    static constexpr int MAX_REQUESTS_PER_MINUTE_FUTURES = 400;
+
+    // Order rate limiting (account-level)
+    mutable std::queue<std::chrono::steady_clock::time_point> orderTimes_;
+    mutable std::mutex orderRateMutex_;
+    mutable std::atomic<int> dailyOrderCount_{0};
+    mutable std::chrono::steady_clock::time_point dailyOrderReset_{std::chrono::steady_clock::now()};
+
+    // WebSocket connection rate limiting
+    mutable std::queue<std::chrono::steady_clock::time_point> wsConnectTimes_;
+    mutable std::mutex wsRateMutex_;
 
     // Geo-blocking fallback state
     mutable int spotEndpointIdx_{0};
@@ -84,6 +103,8 @@ private:
     std::string httpPost(const std::string& path,
                           const std::string& body) const;
     void rateLimit() const;
+    void orderRateLimit() const;
+    void wsConnectionRateLimit() const;
     Candle parseKlineJson(const nlohmann::json& k) const;
     void onWsMessage(const std::string& msg);
 

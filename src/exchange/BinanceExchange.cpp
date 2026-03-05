@@ -141,6 +141,66 @@ void BinanceExchange::rateLimit() const {
     requestTimes_.push(std::chrono::steady_clock::now());
 }
 
+void BinanceExchange::orderRateLimit() const {
+    std::lock_guard<std::mutex> lock(orderRateMutex_);
+    auto now = std::chrono::steady_clock::now();
+
+    // Reset daily counter every 24 hours
+    if (now - dailyOrderReset_ >= std::chrono::hours(24)) {
+        dailyOrderCount_ = 0;
+        dailyOrderReset_ = now;
+    }
+
+    if (marketType_ == "futures") {
+        // Futures: 1200 orders per minute
+        auto windowStart = now - std::chrono::minutes(1);
+        while (!orderTimes_.empty() && orderTimes_.front() < windowStart) {
+            orderTimes_.pop();
+        }
+        if (static_cast<int>(orderTimes_.size()) >= MAX_ORDERS_PER_MINUTE_FUTURES) {
+            auto sleepUntil = orderTimes_.front() + std::chrono::minutes(1);
+            std::this_thread::sleep_until(sleepUntil);
+        }
+    } else {
+        // Spot: 100 orders per 10 seconds
+        auto windowStart = now - std::chrono::seconds(10);
+        while (!orderTimes_.empty() && orderTimes_.front() < windowStart) {
+            orderTimes_.pop();
+        }
+        if (static_cast<int>(orderTimes_.size()) >= MAX_ORDERS_PER_10S_SPOT) {
+            auto sleepUntil = orderTimes_.front() + std::chrono::seconds(10);
+            std::this_thread::sleep_until(sleepUntil);
+        }
+        // Spot: 200 000 orders per 24 hours
+        if (dailyOrderCount_.load() >= MAX_ORDERS_PER_24H_SPOT) {
+            Logger::get()->warn("[Binance] Daily order limit ({}) reached, waiting for reset",
+                                MAX_ORDERS_PER_24H_SPOT);
+            std::this_thread::sleep_until(dailyOrderReset_ + std::chrono::hours(24));
+            dailyOrderCount_ = 0;
+            dailyOrderReset_ = std::chrono::steady_clock::now();
+        }
+    }
+    orderTimes_.push(std::chrono::steady_clock::now());
+    dailyOrderCount_.fetch_add(1);
+}
+
+void BinanceExchange::wsConnectionRateLimit() const {
+    std::lock_guard<std::mutex> lock(wsRateMutex_);
+    auto now = std::chrono::steady_clock::now();
+    auto windowStart = now - std::chrono::minutes(5);
+
+    while (!wsConnectTimes_.empty() && wsConnectTimes_.front() < windowStart) {
+        wsConnectTimes_.pop();
+    }
+    if (static_cast<int>(wsConnectTimes_.size()) >= MAX_WS_CONNECTIONS_PER_5MIN) {
+        auto sleepUntil = wsConnectTimes_.front() + std::chrono::minutes(5);
+        Logger::get()->warn("[Binance] WS connection rate limit ({}/5min) reached, throttling",
+                            MAX_WS_CONNECTIONS_PER_5MIN);
+        std::this_thread::sleep_until(sleepUntil);
+    }
+    wsConnectTimes_.push(std::chrono::steady_clock::now());
+}
+
 std::string BinanceExchange::httpGet(const std::string& path, bool signed_) const {
 #ifndef USE_CURL
     throw std::runtime_error("libcurl not available");
@@ -373,6 +433,7 @@ double BinanceExchange::getPrice(const std::string& symbol) {
 }
 
 OrderResponse BinanceExchange::placeOrder(const OrderRequest& req) {
+    orderRateLimit();
     std::ostringstream body;
     body << "symbol=" << req.symbol
          << "&side=" << (req.side == OrderRequest::Side::BUY ? "BUY" : "SELL")
@@ -440,7 +501,10 @@ void BinanceExchange::onWsMessage(const std::string& msg) {
 void BinanceExchange::subscribeKline(const std::string& symbol,
                                       const std::string& interval,
                                       std::function<void(const Candle&)> cb) {
+    wsConnectionRateLimit();
     klineCb_ = std::move(cb);
+    // NOTE: Use individual symbol streams only.
+    // Aggregate streams like !ticker@arr are deprecated (removed March 26, 2026).
     std::string path = "/stream?streams=" +
         [&]{ std::string s = symbol; for(auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }() +
         "@kline_" + interval;

@@ -823,3 +823,91 @@ TEST(BacktestEngine, ResultResetsToZero) {
     EXPECT_TRUE(r.trades.empty());
     EXPECT_TRUE(r.equityCurve.empty());
 }
+
+// ── Binance Rate Limit Constants ───────────────────────────────────────────
+
+TEST(BinanceRateLimits, SpotRequestLimit) {
+    // 6000 weight/min IP limit → conservative 1200 req/min
+    EXPECT_EQ(BinanceExchange::MAX_REQUESTS_PER_MINUTE_SPOT, 1200);
+}
+
+TEST(BinanceRateLimits, FuturesRequestLimit) {
+    // 2400 weight/min IP limit → conservative 400 req/min
+    EXPECT_EQ(BinanceExchange::MAX_REQUESTS_PER_MINUTE_FUTURES, 400);
+}
+
+TEST(BinanceRateLimits, SpotOrderLimitPer10s) {
+    // Spot: 100 orders per 10 seconds
+    EXPECT_EQ(BinanceExchange::MAX_ORDERS_PER_10S_SPOT, 100);
+}
+
+TEST(BinanceRateLimits, SpotOrderLimitPer24h) {
+    // Spot: 200 000 orders per 24 hours
+    EXPECT_EQ(BinanceExchange::MAX_ORDERS_PER_24H_SPOT, 200000);
+}
+
+TEST(BinanceRateLimits, FuturesOrderLimitPerMinute) {
+    // Futures: 1200 orders per minute per account
+    EXPECT_EQ(BinanceExchange::MAX_ORDERS_PER_MINUTE_FUTURES, 1200);
+}
+
+TEST(BinanceRateLimits, WebSocketConnectionLimit) {
+    // 300 WebSocket connections per 5 minutes from one IP
+    EXPECT_EQ(BinanceExchange::MAX_WS_CONNECTIONS_PER_5MIN, 300);
+}
+
+TEST(BinanceRateLimits, IcebergPartsLimit) {
+    // ICEBERG_PARTS increased to 100 for all symbols (from March 12, 2026)
+    EXPECT_EQ(BinanceExchange::MAX_ICEBERG_PARTS, 100);
+}
+
+// ── Balance: non-Binance exchanges return real struct (not crash) ──────────
+
+TEST(ExchangeBalance, BybitGetBalanceNoCrash) {
+    BybitExchange ex("invalid", "invalid");
+    AccountBalance bal = ex.getBalance();
+    // Without valid credentials, balance should be zero but not crash
+    EXPECT_GE(bal.totalUSDT, 0.0);
+    EXPECT_GE(bal.availableUSDT, 0.0);
+}
+
+TEST(ExchangeBalance, OKXGetBalanceNoCrash) {
+    OKXExchange ex("invalid", "invalid", "passphrase");
+    AccountBalance bal = ex.getBalance();
+    EXPECT_GE(bal.totalUSDT, 0.0);
+    EXPECT_GE(bal.availableUSDT, 0.0);
+}
+
+TEST(ExchangeBalance, KuCoinGetBalanceNoCrash) {
+    KuCoinExchange ex("invalid", "invalid", "passphrase");
+    AccountBalance bal = ex.getBalance();
+    EXPECT_GE(bal.totalUSDT, 0.0);
+    EXPECT_GE(bal.availableUSDT, 0.0);
+}
+
+TEST(ExchangeBalance, BitgetGetBalanceNoCrash) {
+    BitgetExchange ex("invalid", "invalid", "passphrase");
+    AccountBalance bal = ex.getBalance();
+    EXPECT_GE(bal.totalUSDT, 0.0);
+    EXPECT_GE(bal.availableUSDT, 0.0);
+}
+
+TEST(ExchangeBalance, BinanceGetBalanceSpotNoCrash) {
+    BinanceExchange ex("invalid", "invalid");
+    ex.setMarketType("spot");
+    // May throw on geo-blocked or network error, but should not segfault
+    try {
+        AccountBalance bal = ex.getBalance();
+        EXPECT_GE(bal.totalUSDT, 0.0);
+    } catch (const std::exception&) {
+        // Expected when geo-blocked or no network — not a bug
+        SUCCEED();
+    }
+}
+
+TEST(ExchangeBalance, BinanceGetBalanceFuturesNoCrash) {
+    BinanceExchange ex("invalid", "invalid");
+    ex.setMarketType("futures");
+    AccountBalance bal = ex.getBalance();
+    EXPECT_GE(bal.totalUSDT, 0.0);
+}
