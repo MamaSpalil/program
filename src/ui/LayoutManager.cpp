@@ -1,100 +1,107 @@
 #include "LayoutManager.h"
+#include <algorithm>
+#include <cmath>
 
 namespace crypto {
 
-void LayoutManager::recalculate(float screenW, float screenH) {
+void LayoutManager::recalculate(float screenW, float screenH,
+                                 float offsetX, float offsetY,
+                                 bool showPairList, bool showUserPanel,
+                                 bool showVolumeDelta, bool showIndicators,
+                                 bool showLogs) {
     layouts_.clear();
 
-    // Fixed dimensions from layout spec
-    const float toolbarH   = 32.0f;
-    const float filtersH   = 28.0f;
-    const float logsH      = 120.0f;
-    const float pairListW  = 210.0f;
-    const float userPanelW = 290.0f;
+    // Viewport origin & size
+    const float Xvp = offsetX;
+    const float Yvp = offsetY;
+    const float Wvp = std::max(0.0f, screenW);
+    const float Hvp = std::max(0.0f, screenH);
 
-    const float centerW = screenW - pairListW - userPanelW;
-    const float centerH = screenH - toolbarH - filtersH - logsH;
-    const float centerTop = toolbarH + filtersH;  // = 60
+    // Fixed constants
+    const float Htop     = 32.0f;   // Main Toolbar height
+    const float Hfilters = 28.0f;   // Filters Bar height
 
-    // Main Toolbar — full width, top
+    // Effective dimensions based on show flags
+    const float Wleft  = showPairList  ? 210.0f : 0.0f;
+    const float Wright = showUserPanel ? 290.0f : 0.0f;
+    const float Hlogs  = showLogs      ? 120.0f : 0.0f;
+
+    // Dynamic center column dimensions
+    const float Wcenter = std::max(0.0f, Wvp - Wleft - Wright);
+    const float Hcenter = std::max(0.0f, Hvp - Htop - Hfilters - Hlogs);
+
+    // Center column height distribution using floor for integer pixel alignment
+    const float Hvd  = showVolumeDelta ? std::floor(Hcenter * vdPct_)  : 0.0f;
+    const float Hind = showIndicators  ? std::floor(Hcenter * indPct_) : 0.0f;
+    const float Hmarket = std::max(0.0f, Hcenter - Hvd - Hind);
+
+    // Y-base for the center row (below toolbar + filters)
+    const float Ybase   = Yvp + Htop + Hfilters;
+    const float Xcenter = Xvp + Wleft;
+    const float Xright  = Xvp + Wvp - Wright;
+
+    // 1. Main Toolbar — full width, top
     layouts_["Main Toolbar"] = {
         "Main Toolbar",
-        Vec2(0, 0),
-        Vec2(screenW, toolbarH),
-        true
+        Vec2(Xvp, Yvp),
+        Vec2(std::max(0.0f, Wvp), Htop),
+        true   // always visible
     };
 
-    // Filters Bar — full width, below toolbar
+    // 2. Filters Bar — full width, below toolbar
     layouts_["Filters Bar"] = {
         "Filters Bar",
-        Vec2(0, toolbarH),
-        Vec2(screenW, filtersH),
-        true
+        Vec2(Xvp, Yvp + Htop),
+        Vec2(std::max(0.0f, Wvp), Hfilters),
+        true   // always visible
     };
 
-    // Pair List — left sidebar
+    // 3. Pair List — left sidebar
     layouts_["Pair List"] = {
         "Pair List",
-        Vec2(0, centerTop),
-        Vec2(pairListW, centerH),
-        true
+        Vec2(Xvp, Ybase),
+        Vec2(std::max(0.0f, Wleft), std::max(0.0f, Hcenter)),
+        showPairList
     };
 
-    // Center column: Volume Delta, Market Data, Indicators
-    // Use configurable proportions (vdPct_, indPct_; Market Data gets remainder)
-    float vdH  = centerH * vdPct_;
-    float indH = centerH * indPct_;
-    float mdH  = centerH - vdH - indH;
-
-    // Enforce minimums
-    if (vdH  < 40.0f)  vdH  = 40.0f;
-    if (indH < 40.0f)  indH = 40.0f;
-    if (mdH  < 100.0f) mdH  = 100.0f;
-
-    float volY = centerTop;
-
-    // Volume Delta — center column, top
-    layouts_["Volume Delta"] = {
-        "Volume Delta",
-        Vec2(pairListW, volY),
-        Vec2(centerW, vdH),
-        true
-    };
-
-    float marketY = volY + vdH;
-
-    // Market Data — center column, middle (tallest)
-    layouts_["Market Data"] = {
-        "Market Data",
-        Vec2(pairListW, marketY),
-        Vec2(centerW, mdH),
-        true
-    };
-
-    float indY = marketY + mdH;
-
-    // Indicators — center column, bottom
-    layouts_["Indicators"] = {
-        "Indicators",
-        Vec2(pairListW, indY),
-        Vec2(centerW, indH),
-        true
-    };
-
-    // User Panel — right sidebar
+    // 4. User Panel — right sidebar
     layouts_["User Panel"] = {
         "User Panel",
-        Vec2(screenW - userPanelW, centerTop),
-        Vec2(userPanelW, centerH),
-        true
+        Vec2(Xright, Ybase),
+        Vec2(std::max(0.0f, Wright), std::max(0.0f, Hcenter)),
+        showUserPanel
     };
 
-    // Logs — bottom, full width
+    // 5. Volume Delta — center column, top
+    layouts_["Volume Delta"] = {
+        "Volume Delta",
+        Vec2(Xcenter, Ybase),
+        Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hvd)),
+        showVolumeDelta
+    };
+
+    // 6. Market Data — center column, middle (gets remaining height)
+    layouts_["Market Data"] = {
+        "Market Data",
+        Vec2(Xcenter, Ybase + Hvd),
+        Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hmarket)),
+        true   // always visible
+    };
+
+    // 7. Indicators — center column, bottom
+    layouts_["Indicators"] = {
+        "Indicators",
+        Vec2(Xcenter, Ybase + Hvd + Hmarket),
+        Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hind)),
+        showIndicators
+    };
+
+    // 8. Logs — bottom, full width
     layouts_["Logs"] = {
         "Logs",
-        Vec2(0, screenH - logsH),
-        Vec2(screenW, logsH),
-        true
+        Vec2(Xvp, Yvp + Hvp - Hlogs),
+        Vec2(std::max(0.0f, Wvp), std::max(0.0f, Hlogs)),
+        showLogs
     };
 }
 

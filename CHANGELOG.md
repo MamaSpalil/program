@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] - 2026-03-XX
 
 ### Added
+#### Dynamic Tile Layout System & AI Status Logging
+- **LayoutManager::recalculate()** (`src/ui/LayoutManager.cpp`) — полностью переработан метод расчёта позиций и размеров 8 окон Tile Layout. Реализована математически точная модель разбиения viewport: фиксированные константы (Htop=32, Hfilters=28, Hlogs=120, Wleft=210, Wright=290), динамические пропорции центральной колонки (vdPct, indPct, Market Data = remainder), защита от отрицательных размеров через `std::max(0.0f, ...)`.
+- **Dynamic Panel Toggling** — добавлена поддержка флагов видимости (`showPairList`, `showUserPanel`, `showVolumeDelta`, `showIndicators`, `showLogs`) в `LayoutManager::recalculate()`. При скрытии панели её площадь обнуляется, соседние окна автоматически расширяются. Тернарная логика для W_left^active, W_right^active, H_logs^active, H_vd^active, H_ind^active.
+- **Viewport Offset Support** — `recalculate()` теперь принимает `offsetX`/`offsetY` (WorkPos), обеспечивая корректное позиционирование при наличии системных элементов (меню, taskbar).
+- **AI Status Indicator** — в тулбаре отображается текущий статус ИИ: `[AI: Working]` (торговля активна + LibTorch), `[AI: Enabled]` (подключено + LibTorch), `[AI: Idle]` (ожидание), `[AI: Disabled]` (без LibTorch).
+- **AI Log Messages** — логирование действий ИИ с тегом `[AI]` при подключении, отключении, старте и остановке торговли. Цветовое выделение `[AI]` записей в окне Logs (фиолетовый).
+
+### Changed
+- **Window Locking** — все 8 окон Tile Layout теперь всегда фиксированы (`ImGuiCond_Always` + `NoMove | NoResize | NoCollapse`). Убрана зависимость от `layoutLocked` / `layoutNeedsReset_` для позиционирования. ImGui.ini больше не перезаписывает позиции.
+- **LayoutManager.h** — расширена сигнатура `recalculate()` с обратной совместимостью (default-параметры для offset и show flags). Добавлены `#include <algorithm>` и `#include <cmath>` для `std::max` и `std::floor`.
+
 #### AI & Machine Learning Engine (LibTorch)
 - **RLTradingAgent** (`src/ai/RLTradingAgent.h/.cpp`) — интеграция PyTorch C++ API (LibTorch) для запуска нейронных сетей в рантайме. Имплементация Continuous Reinforcement Learning (PPO) с вычислением GAE (Generalized Advantage Estimation) через тензорные операции.
 - **Dual-Mode Logic** — внедрены два режима ИИ: `Fast Mode` (сверхбыстрый анализ L2 Orderbook напрямую из `DepthStreamManager`) и `Swing Mode` (анализ трендов и MTF матриц на базе `CandleCache`).
