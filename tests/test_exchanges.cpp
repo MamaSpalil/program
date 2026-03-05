@@ -798,13 +798,13 @@ TEST(SettingsJson, AllExchangeFieldsPresent) {
 }
 
 TEST(SettingsJson, BinanceProductionFuturesPort9443) {
-    // Verify that production Binance futures WS port is 9443
+    // Empty futures params trigger auto-detection from base URL.
+    // For production (non-testnet) URL, the default futures WS port is "9443".
     BinanceExchange ex("key", "secret", "https://api.binance.com",
                        "stream.binance.com", "9443",
-                       "", "", "");
-    // When no explicit futures WS port, production defaults to 9443
-    // Verified via constructor logic — not directly queryable, but
-    // the subscribeKline path will use the stored futuresWsPort_
+                       "" /*futuresBaseUrl: auto*/,
+                       "" /*futuresWsHost: auto*/,
+                       "" /*futuresWsPort: auto → "9443" for production*/);
     SUCCEED();
 }
 TEST(BacktestEngine, ResultResetsToZero) {

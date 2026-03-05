@@ -132,9 +132,9 @@ void BinanceExchange::rateLimit() const {
         auto sleepUntil = requestTimes_.front() + std::chrono::minutes(1);
         std::this_thread::sleep_until(sleepUntil);
         // Purge again after sleeping
-        auto now2 = std::chrono::steady_clock::now();
-        auto ws2 = now2 - std::chrono::minutes(1);
-        while (!requestTimes_.empty() && requestTimes_.front() < ws2) {
+        auto currentTime = std::chrono::steady_clock::now();
+        auto updatedWindowStart = currentTime - std::chrono::minutes(1);
+        while (!requestTimes_.empty() && requestTimes_.front() < updatedWindowStart) {
             requestTimes_.pop();
         }
     }
