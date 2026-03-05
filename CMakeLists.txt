@@ -35,7 +35,13 @@ find_package(OpenGL QUIET)
 # ── Compile options ────────────────────────────────────────────────────────────
 if(MSVC)
     set(COMMON_FLAGS /W4 /permissive- /wd4267)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0601)
+    add_definitions(
+        -D_CRT_SECURE_NO_WARNINGS
+        -DNOMINMAX
+        -DWIN32_LEAN_AND_MEAN
+        -D_WIN32_WINNT=0x0601
+        -D_USE_MATH_DEFINES
+    )
 else()
     set(COMMON_FLAGS
         -Wall -Wextra -Wpedantic
@@ -148,6 +154,11 @@ set(DRAWING_SOURCES
     src/ui/MultiTimeframe.cpp
 )
 
+# NOTE: src/futures/FuturesData.cpp — добавить когда файл будет создан
+# set(FUTURES_SOURCES
+#     src/futures/FuturesData.cpp
+# )
+
 set(DEPTH_SOURCES
     src/exchange/DepthStream.cpp
 )
@@ -202,6 +213,7 @@ set(ALL_LIB_SOURCES
     ${INTEGRATION_SOURCES}
     ${TAX_SOURCES}
     ${DRAWING_SOURCES}
+    # ${FUTURES_SOURCES}   # раскомментировать после создания src/futures/FuturesData.cpp
     ${DEPTH_SOURCES}
     ${AI_SOURCES}
 )
@@ -260,15 +272,13 @@ if(CURSES_FOUND)
 endif()
 
 # LibTorch (optional — provides PyTorch C++ API for AI modules)
-# Integrate via: cmake -DTorch_DIR=<libtorch>/share/cmake/Torch
-# Or: cmake -DCMAKE_PREFIX_PATH=<libtorch>
+# Integrate via: cmake -DTorch_DIR=C:/libs/libtorch/share/cmake/Torch
 # Download from: https://pytorch.org/get-started/locally/
 if(Torch_FOUND)
     message(STATUS "LibTorch found — AI engine enabled (libs: ${TORCH_LIBRARIES})")
     target_include_directories(crypto_lib PUBLIC ${TORCH_INCLUDE_DIRS})
     target_link_libraries(crypto_lib PUBLIC ${TORCH_LIBRARIES})
     target_compile_definitions(crypto_lib PUBLIC USE_LIBTORCH)
-    # Apply required CXX flags from Torch (e.g. -D_GLIBCXX_USE_CXX11_ABI)
     if(TORCH_CXX_FLAGS)
         target_compile_options(crypto_lib PUBLIC ${TORCH_CXX_FLAGS})
     endif()
@@ -291,6 +301,18 @@ add_executable(crypto_trader src/main.cpp)
 target_compile_options(crypto_trader PRIVATE ${COMMON_FLAGS})
 target_link_libraries(crypto_trader PRIVATE crypto_lib)
 
+# ── Копирование LibTorch DLL рядом с .exe ─────────────────────────────────────
+# $<TARGET_RUNTIME_DLLS> требует CMake >= 3.21, поэтому используем xcopy напрямую.
+# VS2019 поставляется с CMake 3.20 — используем ручное копирование.
+if(Torch_FOUND AND WIN32)
+    add_custom_command(TARGET crypto_trader POST_BUILD
+        COMMAND xcopy /Y /D
+            "C:\\libs\\libtorch\\lib\\*.dll"
+            "$<TARGET_FILE_DIR:crypto_trader>"
+        COMMENT "Copying LibTorch DLLs to output directory"
+    )
+endif()
+
 # ── Embed application icon on Windows (.rc resource) ──────────────────────────
 if(WIN32)
     target_sources(crypto_trader PRIVATE resources/app_resource.rc)
@@ -304,7 +326,6 @@ if(glfw3_FOUND AND OPENGL_FOUND)
         src
     )
     target_compile_options(imgui_lib PRIVATE ${COMMON_FLAGS})
-    # Link imgui_lib against everything crypto_lib already exposes (json, spdlog, etc.)
     target_link_libraries(imgui_lib PUBLIC
         crypto_lib
         glfw
@@ -318,7 +339,7 @@ else()
     message(STATUS "GLFW or OpenGL not found — GUI disabled (console mode)")
 endif()
 
-# ── Tests (single combined executable) ─────────────────────────────────────────
+# ── Tests (single combined executable) ────────────────────────────────────────
 if(GTest_FOUND OR GTEST_FOUND)
     enable_testing()
 
@@ -337,6 +358,7 @@ if(GTest_FOUND OR GTEST_FOUND)
         tests/test_trading_db.cpp
         tests/test_full_system.cpp
         tests/test_ai_engine.cpp
+        # tests/test_v170.cpp  — раскомментировать после создания файла
     )
     target_link_libraries(crypto_trader_tests PRIVATE crypto_lib GTest::GTest GTest::Main)
     target_compile_definitions(crypto_trader_tests PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

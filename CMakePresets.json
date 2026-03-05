@@ -28,7 +28,15 @@
       },
       "binaryDir": "${sourceDir}/build/vs2019-x64-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "Torch_DIR": {
+          "type": "PATH",
+          "value": "C:/libs/libtorch/share/cmake/Torch"
+        },
+        "XGBoost_DIR": {
+          "type": "PATH",
+          "value": "C:/libs/xgboost/lib/cmake/XGBoost"
+        }
       }
     },
     {
@@ -43,7 +51,15 @@
       },
       "binaryDir": "${sourceDir}/build/vs2019-x64-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "Torch_DIR": {
+          "type": "PATH",
+          "value": "C:/libs/libtorch/share/cmake/Torch"
+        },
+        "XGBoost_DIR": {
+          "type": "PATH",
+          "value": "C:/libs/xgboost/lib/cmake/XGBoost"
+        }
       }
     }
   ],
