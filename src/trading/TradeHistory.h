@@ -3,6 +3,7 @@
 #include <vector>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include "../data/TradeRepository.h"
 
 namespace crypto {
 
@@ -47,9 +48,13 @@ public:
     bool loadFromDisk(const std::string& path);
     void clear();
 
+    // Optional: set database repository for parallel persistence
+    void setRepository(TradeRepository* repo) { repo_ = repo; }
+
 private:
     mutable std::mutex mutex_;
     std::vector<HistoricalTrade> trades_;
+    TradeRepository* repo_{nullptr};
 };
 
 } // namespace crypto

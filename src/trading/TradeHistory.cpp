@@ -9,6 +9,28 @@ namespace crypto {
 void TradeHistory::addTrade(const HistoricalTrade& t) {
     std::lock_guard<std::mutex> lk(mutex_);
     trades_.push_back(t);
+
+    // Parallel write to database if repository is set
+    if (repo_) {
+        TradingRecord rec;
+        rec.id = t.id;
+        rec.symbol = t.symbol;
+        rec.exchange = "";  // Not tracked in HistoricalTrade
+        rec.side = t.side;
+        rec.type = t.type;
+        rec.qty = t.qty;
+        rec.entryPrice = t.entryPrice;
+        rec.exitPrice = t.exitPrice;
+        rec.pnl = t.pnl;
+        rec.commission = t.commission;
+        rec.entryTime = t.entryTime;
+        rec.exitTime = t.exitTime;
+        rec.isPaper = t.isPaper;
+        rec.status = (t.exitTime > 0) ? "closed" : "open";
+        rec.createdAt = t.entryTime;
+        rec.updatedAt = t.exitTime > 0 ? t.exitTime : t.entryTime;
+        repo_->upsert(rec);
+    }
 }
 
 std::vector<HistoricalTrade> TradeHistory::getAll() const {
