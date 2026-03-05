@@ -259,8 +259,8 @@ TEST(AIFeatureExtractorAI, SFP_BullishDetection) {
 
     // Create a pivot low then a sweep below it with close above
     // Need: 2*lookback+1 = 5 candles for pivot + 1 more for sweep = at least 6
+    // pivot low at idx 2: price=90, low=90-5=85
     double prices[] = {100, 105, 90, 108, 102, 0};
-    //                     pivot low at idx 2 (low=85)
 
     for (int i = 0; i < 5; ++i) {
         Candle c{};

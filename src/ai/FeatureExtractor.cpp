@@ -393,17 +393,23 @@ std::vector<OBResult> AIFeatureExtractor::calc_OrderBlocks() const {
     auto pivots = findPivots();
     if (pivots.size() < 2) return results;
 
-    // Walk through pairs of consecutive pivots to detect structure breaks
-    for (size_t p = 1; p < pivots.size(); ++p) {
-        const auto& prev = pivots[p - 1];
+    // Track the last seen pivot high and low prices for BOS comparison.
+    // A bullish BOS requires a new pivot high to exceed the previous pivot high.
+    // A bearish BOS requires a new pivot low to fall below the previous pivot low.
+    double lastPivotHigh = -std::numeric_limits<double>::max();
+    double lastPivotLow  =  std::numeric_limits<double>::max();
+
+    // Walk through pivots to detect structure breaks
+    for (size_t p = 0; p < pivots.size(); ++p) {
         const auto& curr = pivots[p];
 
-        // Bullish BOS: a pivot low followed by a higher pivot high that
-        // exceeds the previous pivot high
-        if (!prev.isHigh && curr.isHigh && curr.price > prev.price) {
+        // Bullish BOS: current pivot high exceeds the previous pivot high
+        if (curr.isHigh && lastPivotHigh > -std::numeric_limits<double>::max()
+            && curr.price > lastPivotHigh) {
             // The Order Block is the last bearish candle before the impulse
+            int searchStart = (p > 0) ? pivots[p - 1].index : 0;
             int obIdx = -1;
-            for (int j = curr.index - 1; j >= prev.index; --j) {
+            for (int j = curr.index - 1; j >= searchStart; --j) {
                 if (j < N && candles_[j].close < candles_[j].open) {
                     obIdx = j;
                     break;
@@ -429,11 +435,13 @@ std::vector<OBResult> AIFeatureExtractor::calc_OrderBlocks() const {
             }
         }
 
-        // Bearish BOS: a pivot high followed by a lower pivot low
-        if (prev.isHigh && !curr.isHigh && curr.price < prev.price) {
+        // Bearish BOS: current pivot low falls below the previous pivot low
+        if (!curr.isHigh && lastPivotLow < std::numeric_limits<double>::max()
+            && curr.price < lastPivotLow) {
             // The Order Block is the last bullish candle before the impulse
+            int searchStart = (p > 0) ? pivots[p - 1].index : 0;
             int obIdx = -1;
-            for (int j = curr.index - 1; j >= prev.index; --j) {
+            for (int j = curr.index - 1; j >= searchStart; --j) {
                 if (j < N && candles_[j].close > candles_[j].open) {
                     obIdx = j;
                     break;
@@ -458,6 +466,10 @@ std::vector<OBResult> AIFeatureExtractor::calc_OrderBlocks() const {
                 results.push_back(ob);
             }
         }
+
+        // Update tracked pivot levels for next iteration
+        if (curr.isHigh)  lastPivotHigh = curr.price;
+        if (!curr.isHigh) lastPivotLow  = curr.price;
     }
 
     return results;
