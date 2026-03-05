@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **AppGui.cpp** — добавлены отсутствующие `#include <windows.h>` и `#include <GLFW/glfw3native.h>` в блоке `#ifdef _WIN32` для корректной компиляции Win32 API вызовов (`HICON`, `HWND`, `LoadImageA`, `SendMessageA`, `glfwGetWin32Window`). Устраняет ~30 ошибок компиляции C2065/C2146/C3861 на MSVC.
+- **AppGui.cpp** — устранено предупреждение C4005 (APIENTRY macro redefinition) при компиляции MSVC: `#include <windows.h>` перенесён перед `#include <GLFW/glfw3.h>`, добавлен `#undef APIENTRY` после GLFW для предотвращения конфликта макроопределений из `minwindef.h`.
+- **app_resource.rc** — исправлен путь к иконке: `"resources/app_icon.ico"` → `"app_icon.ico"` (путь относительно каталога .rc файла). Устраняет ошибку RC2135 при компиляции ресурсов Windows.
+- **AppGui.cpp / Dashboard.cpp** — формат отображения цен и балансов изменён с `%.2f`/`%.4f` на `%.8f` для поддержки полной точности API бирж (формат `X.XXXXXXXX`). Затронуты: OHLCV, EMA, ATR, Bollinger Bands, VWAP, SL/TP, ордера, позиции, PnL, балансы, эквити. Процентные значения (RSI, drawdown, confidence) и коэффициенты (Sharpe, PF) сохранены в прежнем формате.
 
 ## [1.5.3] - 2026-03-XX
 

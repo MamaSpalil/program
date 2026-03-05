@@ -6,9 +6,12 @@
 #include "../../third_party/imgui/imgui_impl_glfw.h"
 #include "../../third_party/imgui/imgui_impl_opengl3.h"
 
-#include <GLFW/glfw3.h>
 #ifdef _WIN32
 #  include <windows.h>
+#endif
+#include <GLFW/glfw3.h>
+#ifdef _WIN32
+#  undef APIENTRY                // prevent C4005 if subsequent headers redefine the macro
 #  define GLFW_EXPOSE_NATIVE_WIN32
 #  include <GLFW/glfw3native.h>
 #endif
@@ -921,12 +924,12 @@ void AppGui::drawMarketDataWindow() {
             rsiVal = rsivec.back();
         }
 
-        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Price: %.4f",
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Price: %.8f",
                            snap.lastCandle.close);
         ImGui::SameLine(0, 20);
         ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "RSI: %.1f", rsiVal);
         ImGui::SameLine(0, 20);
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "EMA9: %.4f", ema9Val);
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "EMA9: %.8f", ema9Val);
         ImGui::SameLine(0, 20);
 
         ImVec4 sigColor;
@@ -956,7 +959,7 @@ void AppGui::drawMarketDataWindow() {
         ImGui::TextColored(chgColor, "(%+.2f%%)", pctChange);
         ImGui::SameLine(0, 20);
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f),
-            "O: %.4f  H: %.4f  L: %.4f  V: %.1f",
+            "O: %.8f  H: %.8f  L: %.8f  V: %.1f",
             snap.lastCandle.open, snap.lastCandle.high,
             snap.lastCandle.low, snap.lastCandle.volume);
     }
@@ -1273,7 +1276,7 @@ void AppGui::drawMarketDataWindow() {
             float yLine = p.y + priceH - frac * priceH;
             double priceVal = pMin + frac * range;
             char label[32];
-            snprintf(label, sizeof(label), "%.2f", priceVal);
+            snprintf(label, sizeof(label), "%.8f", priceVal);
             draw->AddText(ImVec2(p.x + chartW + 4, yLine - 6),
                           IM_COL32(160, 160, 165, 220), label);
         }
@@ -1286,7 +1289,7 @@ void AppGui::drawMarketDataWindow() {
                 draw->AddLine(ImVec2(p.x, yLast), ImVec2(p.x + chartW, yLast),
                               IM_COL32(80, 140, 220, 150), 1.0f);
                 char priceLabel[32];
-                snprintf(priceLabel, sizeof(priceLabel), "%.2f", lastPrice);
+                snprintf(priceLabel, sizeof(priceLabel), "%.8f", lastPrice);
                 draw->AddRectFilled(ImVec2(p.x + chartW + 1, yLast - 8),
                                     ImVec2(p.x + w, yLast + 8),
                                     IM_COL32(60, 120, 200, 200));
@@ -1305,7 +1308,7 @@ void AppGui::drawMarketDataWindow() {
                         draw->AddLine(ImVec2(p.x, yVal), ImVec2(p.x + chartW, yVal),
                                       IM_COL32(140, 100, 200, 120), 1.0f);
                         char overlayLabel[64];
-                        snprintf(overlayLabel, sizeof(overlayLabel), "%s: %.4f", pName.c_str(), pVal);
+                        snprintf(overlayLabel, sizeof(overlayLabel), "%s: %.8f", pName.c_str(), pVal);
                         draw->AddText(ImVec2(p.x + 4, labelY),
                                       IM_COL32(180, 140, 240, 200), overlayLabel);
                         labelY += 14;
@@ -1330,7 +1333,7 @@ void AppGui::drawMarketDataWindow() {
                     // Price label at crosshair Y
                     double crossPrice = pMax - ((double)(my - p.y) / priceH) * range;
                     char crossLabel[32];
-                    snprintf(crossLabel, sizeof(crossLabel), "%.4f", crossPrice);
+                    snprintf(crossLabel, sizeof(crossLabel), "%.8f", crossPrice);
                     draw->AddRectFilled(ImVec2(p.x + chartW + 1, my - 8),
                                         ImVec2(p.x + w, my + 8),
                                         IM_COL32(80, 80, 90, 200));
@@ -1380,9 +1383,9 @@ void AppGui::drawMarketDataWindow() {
                     // OHLCV tooltip
                     ImGui::BeginTooltip();
                     ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-                        "O: %.4f  H: %.4f", nearBar.open, nearBar.high);
+                        "O: %.8f  H: %.8f", nearBar.open, nearBar.high);
                     ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f),
-                        "L: %.4f  C: %.4f", nearBar.low, nearBar.close);
+                        "L: %.8f  C: %.8f", nearBar.low, nearBar.close);
                     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f),
                         "Vol: %.2f", nearBar.volume);
                     char dateBuf[64];
@@ -1430,7 +1433,7 @@ void AppGui::drawMarketDataWindow() {
                             draw->AddText(ImVec2(barX - 4, priceY - 7),
                                 IM_COL32(255, 255, 255, 200), "X");
                             char pnlBuf[32];
-                            snprintf(pnlBuf, sizeof(pnlBuf), "%.2f", m.pnl);
+                            snprintf(pnlBuf, sizeof(pnlBuf), "%.8f", m.pnl);
                             draw->AddRectFilled(
                                 ImVec2(barX + 6, priceY - 8),
                                 ImVec2(barX + 55, priceY + 8),
@@ -1539,13 +1542,13 @@ void AppGui::drawIndicatorsPanel() {
     if (config_.indEmaEnabled) {
         ImGui::Columns(3, "##indcols", false);
         ImGui::TextColored(ImVec4(0.50f, 0.75f, 0.50f, 1.0f), "EMA Fast (%d)", config_.emaFast);
-        ImGui::Text("%.4f", snap.emaFast);
+        ImGui::Text("%.8f", snap.emaFast);
         ImGui::NextColumn();
         ImGui::TextColored(ImVec4(0.75f, 0.50f, 0.50f, 1.0f), "EMA Slow (%d)", config_.emaSlow);
-        ImGui::Text("%.4f", snap.emaSlow);
+        ImGui::Text("%.8f", snap.emaSlow);
         ImGui::NextColumn();
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.75f, 1.0f), "EMA Trend (%d)", config_.emaTrend);
-        ImGui::Text("%.4f", snap.emaTrend);
+        ImGui::Text("%.8f", snap.emaTrend);
         ImGui::Columns(1);
         ImGui::Separator();
     }
@@ -1570,7 +1573,7 @@ void AppGui::drawIndicatorsPanel() {
             }
             if (config_.indAtrEnabled) {
                 ImGui::Text("ATR (%d)", config_.atrPeriod);
-                ImGui::Text("%.4f", snap.atr);
+                ImGui::Text("%.8f", snap.atr);
                 ImGui::NextColumn();
             }
             if (config_.indMacdEnabled) {
@@ -1579,7 +1582,7 @@ void AppGui::drawIndicatorsPanel() {
                     snap.macd.histogram >= 0
                         ? ImVec4(0.30f, 0.80f, 0.30f, 1.0f)
                         : ImVec4(0.80f, 0.30f, 0.30f, 1.0f),
-                    "%.4f (S: %.4f H: %.4f)",
+                    "%.8f (S: %.8f H: %.8f)",
                     snap.macd.macd, snap.macd.signal, snap.macd.histogram);
                 ImGui::NextColumn();
             }
@@ -1593,7 +1596,7 @@ void AppGui::drawIndicatorsPanel() {
         ImGui::Text("Bollinger Bands (%d, %.1f)", config_.bbPeriod, config_.bbStddev);
         ImGui::SameLine(220);
         ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.80f, 1.0f),
-            "Upper: %.4f  Mid: %.4f  Lower: %.4f",
+            "Upper: %.8f  Mid: %.8f  Lower: %.8f",
             snap.bb.upper, snap.bb.middle, snap.bb.lower);
     }
 
@@ -1623,7 +1626,7 @@ void AppGui::drawIndicatorsPanel() {
             for (const auto& [pName, pVal] : plots) {
                 if (!plotStr.empty()) plotStr += "  ";
                 char buf[64];
-                std::snprintf(buf, sizeof(buf), "%s: %.4f", pName.c_str(), pVal);
+                std::snprintf(buf, sizeof(buf), "%s: %.8f", pName.c_str(), pVal);
                 plotStr += buf;
             }
             ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.90f, 1.0f), "%s", plotStr.c_str());
@@ -1684,13 +1687,13 @@ void AppGui::drawUserIndicatorDashboard() {
                         ImGui::TextColored(valColor, "N/A");
                     } else if (pVal > 0) {
                         valColor = ImVec4(0.30f, 0.85f, 0.35f, 1.0f);
-                        ImGui::TextColored(valColor, "%.4f", pVal);
+                        ImGui::TextColored(valColor, "%.8f", pVal);
                     } else if (pVal < 0) {
                         valColor = ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
-                        ImGui::TextColored(valColor, "%.4f", pVal);
+                        ImGui::TextColored(valColor, "%.8f", pVal);
                     } else {
                         valColor = ImVec4(0.80f, 0.80f, 0.82f, 1.0f);
-                        ImGui::TextColored(valColor, "%.4f", pVal);
+                        ImGui::TextColored(valColor, "%.8f", pVal);
                     }
                 }
                 ImGui::EndTable();
@@ -1748,8 +1751,8 @@ void AppGui::drawSignalPanel() {
         ImGui::PopStyleColor();
 
         ImGui::Separator();
-        ImGui::Text("Stop Loss:   %.4f", snap.lastSignal.stopLoss);
-        ImGui::Text("Take Profit: %.4f", snap.lastSignal.takeProfit);
+        ImGui::Text("Stop Loss:   %.8f", snap.lastSignal.stopLoss);
+        ImGui::Text("Take Profit: %.8f", snap.lastSignal.takeProfit);
         if (!snap.lastSignal.reason.empty())
             ImGui::TextWrapped("Reason: %s", snap.lastSignal.reason.c_str());
 
@@ -1766,7 +1769,7 @@ void AppGui::drawSignalPanel() {
                 ImVec4 cl = (sig.type == Signal::Type::BUY)
                     ? ImVec4(0.20f, 0.80f, 0.30f, 1.0f)
                     : ImVec4(0.85f, 0.25f, 0.25f, 1.0f);
-                ImGui::TextColored(cl, "  %s @ %.4f (%.1f%%)",
+                ImGui::TextColored(cl, "  %s @ %.8f (%.1f%%)",
                                    t, sig.price, sig.confidence * 100.0);
             }
         }
@@ -1802,13 +1805,13 @@ void AppGui::drawTradingPanel() {
 
         // Quantity
         ImGui::SetNextItemWidth(120);
-        ImGui::InputDouble("Qty", &orderQty_, 0.001, 0.01, "%.4f");
+        ImGui::InputDouble("Qty", &orderQty_, 0.001, 0.01, "%.8f");
         if (orderQty_ < 0.0) orderQty_ = 0.0;
 
         // Limit price (only for Limit orders)
         if (orderTypeIdx_ == 1) {
             ImGui::SetNextItemWidth(120);
-            ImGui::InputDouble("Price", &orderPrice_, 1.0, 10.0, "%.2f");
+            ImGui::InputDouble("Price", &orderPrice_, 1.0, 10.0, "%.8f");
         }
 
         ImGui::Separator();
@@ -1865,7 +1868,7 @@ void AppGui::drawPortfolioPanel() {
         ImVec4 eqColor = (pnl >= 0)
             ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
             : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
-        ImGui::TextColored(eqColor, "$%.2f", snap.equity);
+        ImGui::TextColored(eqColor, "$%.8f", snap.equity);
         ImGui::SameLine();
         ImGui::TextColored(eqColor, " (%+.2f%%)", pnlPct);
 
@@ -2355,11 +2358,11 @@ void AppGui::drawFilterPanel() {
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(80);
-    ImGui::InputDouble("##MinPrice", &config_.filterMinPrice, 0, 0, "P>%.2f");
+    ImGui::InputDouble("##MinPrice", &config_.filterMinPrice, 0, 0, "P>%.8f");
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(80);
-    ImGui::InputDouble("##MaxPrice", &config_.filterMaxPrice, 0, 0, "P<%.2f");
+    ImGui::InputDouble("##MaxPrice", &config_.filterMaxPrice, 0, 0, "P<%.8f");
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(80);
@@ -2546,12 +2549,12 @@ void AppGui::drawOrderBookPanel() {
                 IM_COL32(180, 40, 40, 60));
 
             ImGui::TextColored(ImVec4(0.90f, 0.35f, 0.35f, 1.0f),
-                "%.4f", level.price);
+                "%.8f", level.price);
             ImGui::SameLine(colW * 0.4f);
             ImGui::Text("%.6f", level.qty);
             ImGui::SameLine(colW * 0.75f);
             ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
-                "%.2f", level.price * level.qty);
+                "%.8f", level.price * level.qty);
         }
 
         // Spread
@@ -2561,7 +2564,7 @@ void AppGui::drawOrderBookPanel() {
             spread = snap.orderBook.asks[0].price - snap.orderBook.bids[0].price;
         }
         ImGui::TextColored(ImVec4(0.70f, 0.70f, 0.72f, 1.0f),
-            "  Spread: %.4f", spread);
+            "  Spread: %.8f", spread);
         ImGui::Separator();
 
         // Bids (buy orders) — bottom, green
@@ -2580,12 +2583,12 @@ void AppGui::drawOrderBookPanel() {
                 IM_COL32(40, 160, 60, 60));
 
             ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.40f, 1.0f),
-                "%.4f", level.price);
+                "%.8f", level.price);
             ImGui::SameLine(colW * 0.4f);
             ImGui::Text("%.6f", level.qty);
             ImGui::SameLine(colW * 0.75f);
             ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f),
-                "%.2f", level.price * level.qty);
+                "%.8f", level.price * level.qty);
         }
 
         if (snap.orderBook.bids.empty() && snap.orderBook.asks.empty()) {
@@ -2886,7 +2889,7 @@ void AppGui::drawUserPanel() {
     ImGui::TextColored(ImVec4(0.60f, 0.70f, 0.85f, 1.0f), "%s", config_.symbol.c_str());
     if (snap.currentPrice > 0) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "$%.2f", snap.currentPrice);
+        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "$%.8f", snap.currentPrice);
     }
     if (!snap.currentPriceError.empty()) {
         ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f), "%s", snap.currentPriceError.c_str());
@@ -2910,12 +2913,12 @@ void AppGui::drawUserPanel() {
     if (ImGui::CollapsingHeader("Balance", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (config_.marketType == "futures") {
             // Futures balance
-            ImGui::Text("Wallet:     $%.2f", snap.futuresBalance.totalWalletBalance);
+            ImGui::Text("Wallet:     $%.8f", snap.futuresBalance.totalWalletBalance);
             ImVec4 uplCol = snap.futuresBalance.totalUnrealizedProfit >= 0
                 ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
                 : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
-            ImGui::TextColored(uplCol, "Unreal P&L: $%.2f", snap.futuresBalance.totalUnrealizedProfit);
-            ImGui::Text("Margin:     $%.2f", snap.futuresBalance.totalMarginBalance);
+            ImGui::TextColored(uplCol, "Unreal P&L: $%.8f", snap.futuresBalance.totalUnrealizedProfit);
+            ImGui::Text("Margin:     $%.8f", snap.futuresBalance.totalMarginBalance);
         } else {
             // Spot balance / OKX account details
             if (!snap.accountBalanceDetails.empty()) {
@@ -2932,9 +2935,9 @@ void AppGui::drawUserPanel() {
                         ImGui::TableSetColumnIndex(0);
                         ImGui::Text("%s", d.currency.c_str());
                         ImGui::TableSetColumnIndex(1);
-                        ImGui::Text("%.4f", d.availBal);
+                        ImGui::Text("%.8f", d.availBal);
                         ImGui::TableSetColumnIndex(2);
-                        ImGui::Text("$%.2f", d.usdValue);
+                        ImGui::Text("$%.8f", d.usdValue);
                     }
                     ImGui::EndTable();
                 }
@@ -2944,7 +2947,7 @@ void AppGui::drawUserPanel() {
                 ImVec4 eqCol = pnl >= 0
                     ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
                     : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
-                ImGui::TextColored(eqCol, "Equity: $%.2f", snap.equity);
+                ImGui::TextColored(eqCol, "Equity: $%.8f", snap.equity);
                 ImGui::Text("Drawdown: %.2f%%", snap.drawdown * 100.0);
             }
         }
@@ -2973,9 +2976,9 @@ void AppGui::drawUserPanel() {
                         : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
                     ImGui::TextColored(sCol, "%s", o.side.c_str());
                     ImGui::TableSetColumnIndex(2);
-                    ImGui::Text("%.4f", o.price);
+                    ImGui::Text("%.8f", o.price);
                     ImGui::TableSetColumnIndex(3);
-                    ImGui::Text("%.4f", o.qty);
+                    ImGui::Text("%.8f", o.qty);
                 }
                 ImGui::EndTable();
             }
@@ -3003,9 +3006,9 @@ void AppGui::drawUserPanel() {
                         : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
                     ImGui::TextColored(sCol, "%s", t.side.c_str());
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::Text("%.4f", t.price);
+                    ImGui::Text("%.8f", t.price);
                     ImGui::TableSetColumnIndex(2);
-                    ImGui::Text("%.4f", t.qty);
+                    ImGui::Text("%.8f", t.qty);
                     ImGui::TableSetColumnIndex(3);
                     ImGui::Text("%.6f", t.commission);
                 }
@@ -3023,11 +3026,11 @@ void AppGui::drawUserPanel() {
                 for (auto& p : snap.futuresPositions) {
                     if (p.positionAmt == 0) continue;
                     ImGui::TextColored(ImVec4(0.60f, 0.70f, 0.85f, 1.0f), "%s", p.symbol.c_str());
-                    ImGui::Text("  Amt: %.4f  Entry: %.2f", p.positionAmt, p.entryPrice);
+                    ImGui::Text("  Amt: %.8f  Entry: %.8f", p.positionAmt, p.entryPrice);
                     ImVec4 uplCol = p.unrealizedProfit >= 0
                         ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
                         : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
-                    ImGui::TextColored(uplCol, "  UPL: $%.4f", p.unrealizedProfit);
+                    ImGui::TextColored(uplCol, "  UPL: $%.8f", p.unrealizedProfit);
                     ImGui::Text("  Leverage: %.0fx  %s", p.leverage, p.marginType.c_str());
                     ImGui::Separator();
                 }
@@ -3099,13 +3102,13 @@ void AppGui::drawOrderManagementWindow() {
     // Price (LIMIT / STOP_LIMIT)
     if (omTypeIdx_ >= 1) {
         ImGui::SetNextItemWidth(-1);
-        ImGui::InputDouble("Price##OM", &omPrice_, 1.0, 10.0, "%.2f");
+        ImGui::InputDouble("Price##OM", &omPrice_, 1.0, 10.0, "%.8f");
     }
 
     // Stop Price (STOP_LIMIT only)
     if (omTypeIdx_ == 2) {
         ImGui::SetNextItemWidth(-1);
-        ImGui::InputDouble("Stop Price##OM", &omStopPrice_, 1.0, 10.0, "%.2f");
+        ImGui::InputDouble("Stop Price##OM", &omStopPrice_, 1.0, 10.0, "%.8f");
     }
 
     // Reduce Only (futures)
@@ -3118,8 +3121,8 @@ void AppGui::drawOrderManagementWindow() {
     // Estimated cost
     double estPrice = (omTypeIdx_ == 0) ? snap.currentPrice : omPrice_;
     double estCost = omQuantity_ * estPrice;
-    ImGui::Text("Est. Cost:  $%.2f", estCost);
-    ImGui::Text("Balance:    $%.2f", snap.futuresBalance.totalWalletBalance);
+    ImGui::Text("Est. Cost:  $%.8f", estCost);
+    ImGui::Text("Balance:    $%.8f", snap.futuresBalance.totalWalletBalance);
 
     ImGui::Separator();
 
@@ -3162,9 +3165,9 @@ void AppGui::drawOrderManagementWindow() {
         ImGui::Text("Side: %s", (omSideIdx_ == 0) ? "BUY" : "SELL");
         ImGui::Text("Type: %s", orderTypes[omTypeIdx_]);
         ImGui::Text("Quantity: %.6f", omQuantity_);
-        if (omTypeIdx_ >= 1) ImGui::Text("Price: %.2f", omPrice_);
-        if (omTypeIdx_ == 2) ImGui::Text("Stop Price: %.2f", omStopPrice_);
-        ImGui::Text("Est. Cost: $%.2f", estCost);
+        if (omTypeIdx_ >= 1) ImGui::Text("Price: %.8f", omPrice_);
+        if (omTypeIdx_ == 2) ImGui::Text("Stop Price: %.8f", omStopPrice_);
+        ImGui::Text("Est. Cost: $%.8f", estCost);
         ImGui::Separator();
 
         if (ImGui::Button("Confirm", ImVec2(120, 0))) {
@@ -3210,12 +3213,12 @@ void AppGui::drawOrderManagementWindow() {
             ImVec4 sideCol = (p.positionAmt > 0)
                 ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
             ImGui::TextColored(sideCol, "%s", p.positionAmt > 0 ? "LONG" : "SHORT");
-            ImGui::TableNextColumn(); ImGui::Text("%.4f", std::abs(p.positionAmt));
-            ImGui::TableNextColumn(); ImGui::Text("%.2f", p.entryPrice);
+            ImGui::TableNextColumn(); ImGui::Text("%.8f", std::abs(p.positionAmt));
+            ImGui::TableNextColumn(); ImGui::Text("%.8f", p.entryPrice);
             ImGui::TableNextColumn();
             ImVec4 pnlCol = (p.unrealizedProfit >= 0)
                 ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-            ImGui::TextColored(pnlCol, "%.2f", p.unrealizedProfit);
+            ImGui::TextColored(pnlCol, "%.8f", p.unrealizedProfit);
             ImGui::TableNextColumn(); ImGui::Text("-");
             ImGui::TableNextColumn(); ImGui::Text("-");
             ImGui::TableNextColumn();
@@ -3247,8 +3250,8 @@ void AppGui::drawPaperTradingWindow() {
 
     auto acc = paperTrader_.getAccount();
 
-    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f), "Virtual Balance: $%.2f", acc.balance);
-    ImGui::Text("Equity:          $%.2f", acc.equity);
+    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.3f, 1.0f), "Virtual Balance: $%.8f", acc.balance);
+    ImGui::Text("Equity:          $%.8f", acc.equity);
 
     double pnlPct = (acc.equity > 0 && acc.balance > 0) ? ((acc.totalPnL / 10000.0) * 100.0) : 0.0;
     ImVec4 pnlCol = acc.totalPnL >= 0 ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
@@ -3271,12 +3274,12 @@ void AppGui::drawPaperTradingWindow() {
             for (auto& p : acc.openPositions) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("%s", p.symbol.c_str());
-                ImGui::TableNextColumn(); ImGui::Text("%.4f", p.quantity);
-                ImGui::TableNextColumn(); ImGui::Text("%.2f", p.entryPrice);
-                ImGui::TableNextColumn(); ImGui::Text("%.2f", p.currentPrice);
+                ImGui::TableNextColumn(); ImGui::Text("%.8f", p.quantity);
+                ImGui::TableNextColumn(); ImGui::Text("%.8f", p.entryPrice);
+                ImGui::TableNextColumn(); ImGui::Text("%.8f", p.currentPrice);
                 ImGui::TableNextColumn();
                 ImVec4 c = p.pnl >= 0 ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-                ImGui::TextColored(c, "%.2f", p.pnl);
+                ImGui::TextColored(c, "%.8f", p.pnl);
             }
             ImGui::EndTable();
         }
@@ -3398,12 +3401,12 @@ void AppGui::drawBacktestWindow() {
     if (btResult_.totalTrades > 0) {
         ImVec4 pnlCol = btResult_.totalPnL >= 0
             ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-        ImGui::TextColored(pnlCol, "PnL: $%.2f (%.1f%%)", btResult_.totalPnL, btResult_.totalPnLPct);
+        ImGui::TextColored(pnlCol, "PnL: $%.8f (%.1f%%)", btResult_.totalPnL, btResult_.totalPnLPct);
         ImGui::Text("Trades: %d  Win: %d (%.1f%%)", btResult_.totalTrades,
                      btResult_.winTrades, btResult_.winRate * 100.0);
-        ImGui::Text("Max DD: -$%.2f (-%.1f%%)", btResult_.maxDrawdown, btResult_.maxDrawdownPct);
+        ImGui::Text("Max DD: -$%.8f (-%.1f%%)", btResult_.maxDrawdown, btResult_.maxDrawdownPct);
         ImGui::Text("Sharpe: %.2f  PF: %.2f", btResult_.sharpeRatio, btResult_.profitFactor);
-        ImGui::Text("Avg Win: $%.2f  Avg Loss: $%.2f", btResult_.avgWin, btResult_.avgLoss);
+        ImGui::Text("Avg Win: $%.8f  Avg Loss: $%.8f", btResult_.avgWin, btResult_.avgLoss);
 
         // Equity curve mini chart
         if (!btResult_.equityCurve.empty()) {
@@ -3433,11 +3436,11 @@ void AppGui::drawBacktestWindow() {
                 ImGui::TableNextColumn();
                 ImVec4 sc = (t.side == "BUY") ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
                 ImGui::TextColored(sc, "%s", t.side.c_str());
-                ImGui::TableNextColumn(); ImGui::Text("%.2f", t.entryPrice);
-                ImGui::TableNextColumn(); ImGui::Text("%.2f", t.exitPrice);
+                ImGui::TableNextColumn(); ImGui::Text("%.8f", t.entryPrice);
+                ImGui::TableNextColumn(); ImGui::Text("%.8f", t.exitPrice);
                 ImGui::TableNextColumn();
                 ImVec4 pc = t.pnl >= 0 ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-                ImGui::TextColored(pc, "%.2f", t.pnl);
+                ImGui::TextColored(pc, "%.8f", t.pnl);
                 ImGui::TableNextColumn(); ImGui::TextColored(pc, "%.1f%%", t.pnlPct);
             }
             ImGui::EndTable();
@@ -3468,7 +3471,7 @@ void AppGui::drawAlertsWindow() {
     ImGui::Combo("Cond##AL", &alertCondIdx_, conditions, 6);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(80);
-    ImGui::InputDouble("##ALThresh", &alertThreshold_, 0, 0, "%.2f");
+    ImGui::InputDouble("##ALThresh", &alertThreshold_, 0, 0, "%.8f");
 
     ImGui::SetNextItemWidth(100);
     ImGui::Combo("Notify##AL", &alertNotifyIdx_, notifyTypes, 3);
@@ -3543,7 +3546,7 @@ void AppGui::drawMarketScannerWindow() {
                     config_.symbol = r.symbol;
                     if (onRefreshData_) onRefreshData_();
                 }
-                ImGui::TableNextColumn(); ImGui::Text("%.2f", r.price);
+                ImGui::TableNextColumn(); ImGui::Text("%.8f", r.price);
                 ImGui::TableNextColumn();
                 ImVec4 chgCol = r.change24h >= 0
                     ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
@@ -3680,7 +3683,7 @@ void AppGui::drawTradeHistoryWindow() {
     double wr = tradeHistory_.winRate();
 
     ImGui::Text("Trades: %d | Win: %d (%.1f%%) | Loss: %d", total, wins, wr * 100.0, losses);
-    ImGui::Text("PnL: $%.2f | Avg Win: $%.2f | Avg Loss: $%.2f",
+    ImGui::Text("PnL: $%.8f | Avg Win: $%.8f | Avg Loss: $%.8f",
                 pnl, tradeHistory_.avgWin(), tradeHistory_.avgLoss());
     ImGui::Text("Sharpe: -- | Max DD: %.1f%% | PF: %.2f",
                 tradeHistory_.maxDrawdown() * 100.0, tradeHistory_.profitFactor());
@@ -3747,11 +3750,11 @@ void AppGui::drawTradeHistoryWindow() {
             ImGui::TableNextColumn();
             ImVec4 sc = (t.side == "BUY") ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
             ImGui::TextColored(sc, "%s", t.side.c_str());
-            ImGui::TableNextColumn(); ImGui::Text("%.2f", t.entryPrice);
-            ImGui::TableNextColumn(); ImGui::Text("%.2f", t.exitPrice);
+            ImGui::TableNextColumn(); ImGui::Text("%.8f", t.entryPrice);
+            ImGui::TableNextColumn(); ImGui::Text("%.8f", t.exitPrice);
             ImGui::TableNextColumn();
             ImVec4 pc = t.pnl >= 0 ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
-            ImGui::TextColored(pc, "%.2f", t.pnl);
+            ImGui::TextColored(pc, "%.8f", t.pnl);
             ImGui::TableNextColumn(); ImGui::Text("%s", t.isPaper ? "Y" : "N");
         }
         ImGui::EndTable();

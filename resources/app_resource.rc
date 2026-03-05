@@ -1,2 +1,2 @@
 // Windows resource file for CryptoTrader — embeds the VT application icon.
-IDI_ICON1 ICON "resources/app_icon.ico"
+IDI_ICON1 ICON "app_icon.ico"
