@@ -189,8 +189,8 @@ TEST(LayoutManager, WindowsAreFullWidth) {
     EXPECT_GT(log.size.x, 1900.0f);
     EXPECT_GT(tb.size.x, 1900.0f);
 
-    // Center column width = screenW - pairListW(210) - userPanelW(290)
-    EXPECT_FLOAT_EQ(vd.size.x, 1920.0f - 210.0f - 290.0f);
+    // Center column width = screenW - pairListW(200) - userPanelW(290)
+    EXPECT_FLOAT_EQ(vd.size.x, 1920.0f - 200.0f - 290.0f);
 }
 
 TEST(LayoutManager, CustomProportions) {
