@@ -5,6 +5,72 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-03-XX
+
+### Added
+
+- **Иконка VT** (`resources/app_icon.ico`) —
+  новая иконка "Virtual Trade System" с буквами VT
+  и мини-графиком свечей; 5 размеров (16/32/48/
+  64/256px) в одном .ico; встроена в .exe через
+  resources/app_resource.rc; установлена в тайтлбар
+  GLFW через glfwSetWindowIcon(); заголовок окна
+  изменён на "VT — Virtual Trade System";
+  скрипт генерации tools/generate_icon.py (Pillow)
+
+- **Полный набор системных тестов**
+  (`tests/test_full_system.cpp`) — 75+ тестов
+  охватывающих все модули: инфраструктура и сборка
+  (отсутствие linux-debug пресета, наличие glfw3
+  в vcpkg.json), CandleCache (store/load/upsert/
+  latestOpenTime), TradingDatabase все 12+1 таблиц
+  (WAL, FK, индексы), все 8 репозиториев
+  (Trade/Order/Position/Equity/Alert/Backtest/
+  Drawing/Aux), DatabaseMigrator _meta таблица,
+  индикаторы EMA/RSI/ATR/BB/VWAP/Pearson,
+  RiskManager и DailyLossGuard, PaperTrading,
+  OrderManagement, TradeHistory, BacktestEngine,
+  AlertManager, Binance kline парсинг и safeStod,
+  ExchangeEndpointManager (geoblock/round-robin),
+  LayoutManager 3-колоночный layout v1.5.2
+  (showUserPanel_ default=true, все 8 окон),
+  SortState три состояния, форматы Pair List,
+  Config save/load (atomicWrite, layoutProps,
+  imgui.ini путь), Scheduler cron, GridBot
+  уровни, WebhookServer (auth/rateLimit/IP),
+  KeyVault, TaxReporter FIFO/LIFO, MarketScanner,
+  CSVExporter, Volume Delta log1p нормализация;
+  Windows 10 Pro совместимость: GetTempPathA,
+  std::filesystem, gmtime_s, нет POSIX-only API
+
+### Fixed
+
+- **CMakePresets.json** — удалена конфигурация
+  "linux-debug" с генератором "Unix Makefiles"
+  который вызывал ошибку "CMAKE_MAKE_PROGRAM
+  is not set" на Windows 10; оставлены только
+  vs2019-x64-release и vs2019-x64-debug
+
+### Changed
+
+- **CMakeLists.txt** — добавлены:
+  resources/app_resource.rc в WIN32 sources,
+  tests/test_full_system.cpp в тест-исполняемый;
+  target_sources условный WIN32 блок для .rc
+
+- **Заголовок окна** — изменён с "Crypto ML Trader"
+  на "VT — Virtual Trade System"
+
+### Tests
+
+- **75+ новых тестов** в test_full_system.cpp;
+  покрытие всех модулей начиная с v1.0.0 до v1.5.2;
+  подтверждена совместимость Windows 10 Pro
+  MSVC VS2019 x64; время выполнения < 30 секунд;
+  все предыдущие тесты (test_regression_part1/2/3,
+  test_modules, test_trading_db, test_layout_and_ui)
+  продолжают проходить без изменений
+
 ## [1.5.2] - 2026-03-05
 
 ### Fixed

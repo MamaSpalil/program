@@ -45,36 +45,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
-    },
-    {
-      "name": "windows-x64-release-vs2022",
-      "displayName": "Windows x64 Release (VS 2022)",
-      "description": "MSVC Release build for Visual Studio 2022",
-      "inherits": "windows-x64-release",
-      "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build/vs2022-x64-release"
-    },
-    {
-      "name": "linux-release",
-      "displayName": "Linux Release",
-      "description": "GCC/Clang Release build with vcpkg dependencies",
-      "inherits": "vcpkg",
-      "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/linux-release",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "linux-debug",
-      "displayName": "Linux Debug",
-      "description": "GCC/Clang Debug build with vcpkg dependencies",
-      "inherits": "vcpkg",
-      "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build/linux-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
     }
   ],
   "buildPresets": [
@@ -89,11 +59,6 @@
       "displayName": "Windows Debug",
       "configurePreset": "windows-x64-debug",
       "configuration": "Debug"
-    },
-    {
-      "name": "linux-release",
-      "displayName": "Linux Release",
-      "configurePreset": "linux-release"
     }
   ]
 }
