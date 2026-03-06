@@ -915,7 +915,7 @@ TEST(LayoutManager, ThreeColumnLayout) {
     auto md = mgr.get("Market Data");
     EXPECT_NEAR(pl.size.x, 200.0f, 1.0f);
     EXPECT_NEAR(up.size.x, 290.0f, 1.0f);
-    EXPECT_NEAR(md.size.x, 1920.0f - 200.0f - 290.0f, 1.0f);
+    EXPECT_NEAR(md.size.x, 1920.0f - 200.0f - 290.0f - 2.0f, 1.0f); // -2 for 1px gaps
 }
 
 TEST(LayoutManager, NoBoundsExceeded) {
@@ -1000,8 +1000,8 @@ TEST(LayoutManager, VisibilityHidesWindow) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto md = mgr.get("Market Data");
-    // Default center width = 1920 - 200 - 290 = 1430
-    EXPECT_NEAR(md.size.x, 1430.0f, 1.0f);
+    // Default center width = 1920 - 200 - 290 - 2(gaps) = 1428
+    EXPECT_NEAR(md.size.x, 1428.0f, 1.0f);
 }
 
 // ── SortState ──────────────────────────────────────────────────
@@ -2805,10 +2805,10 @@ TEST(LayoutLockV220, LockedScrollFlagsIncludeHScroll) {
     EXPECT_NE(flags & layout_detail::SF_NoMove, 0);
 }
 
-TEST(LayoutLockV220, DefaultLayoutLockedIsFalse) {
-    // GuiConfig default should be unlocked
+TEST(LayoutLockV220, DefaultLayoutLockedIsTrue) {
+    // GuiConfig default should be locked for consistent layout
     GuiConfig cfg;
-    EXPECT_FALSE(cfg.layoutLocked);
+    EXPECT_TRUE(cfg.layoutLocked);
 }
 
 // ── SymbolFormatter edge cases v2.2.0 ──────────────────────────────────────

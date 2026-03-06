@@ -84,8 +84,8 @@ TEST(LayoutStress, MarketDataWidthWminus490) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto md = mgr.get("Market Data");
-    // W - PairList(200) - UserPanel(290) = W - 490
-    EXPECT_FLOAT_EQ(md.size.x, 1920.0f - 490.0f);
+    // W - PairList(200) - UserPanel(290) - 2px gaps = W - 492
+    EXPECT_FLOAT_EQ(md.size.x, 1920.0f - 492.0f);
 }
 
 TEST(LayoutStress, TopBarHeight32) {

@@ -195,7 +195,7 @@ struct GuiConfig {
     float layoutLogPct{0.10f};
     float layoutVdPct{0.15f};
     float layoutIndPct{0.20f};
-    bool  layoutLocked{false};  // when true, windows cannot be moved/resized
+    bool  layoutLocked{true};   // when true, windows cannot be moved/resized (default ON)
 };
 
 class AppGui {
