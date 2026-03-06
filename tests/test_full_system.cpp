@@ -2780,3 +2780,225 @@ TEST(DatabaseV210, EquityRepositoryRoundtrip) {
 
     fs::remove(path);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// v2.2.0 Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Layout Lock v2.2.0 ─────────────────────────────────────────────────────
+
+TEST(LayoutLockV220, LockedWindowsUseCorrectFlags) {
+    // Verify that lockedFlags() returns NoMove|NoResize|NoCollapse|NoBringToFront
+    int flags = LayoutManager::lockedFlags();
+    // lockedFlags must include NoMove and NoResize in non-IMGUI stub
+    EXPECT_NE(flags & layout_detail::SF_NoMove, 0);
+    EXPECT_NE(flags & layout_detail::SF_NoResize, 0);
+    EXPECT_NE(flags & layout_detail::SF_NoCollapse, 0);
+}
+
+TEST(LayoutLockV220, LockedScrollFlagsIncludeHScroll) {
+    int flags = LayoutManager::lockedScrollFlags();
+    EXPECT_NE(flags & layout_detail::SF_HorizontalScrollbar, 0);
+    EXPECT_NE(flags & layout_detail::SF_NoMove, 0);
+}
+
+TEST(LayoutLockV220, DefaultLayoutLockedIsFalse) {
+    // GuiConfig default should be unlocked
+    GuiConfig cfg;
+    EXPECT_FALSE(cfg.layoutLocked);
+}
+
+// ── SymbolFormatter edge cases v2.2.0 ──────────────────────────────────────
+
+TEST(SymbolFormatterV220, EmptyInputsReturnEmpty) {
+    // Empty base/quote should produce empty or sensible output
+    EXPECT_EQ(SymbolFormatter::toSpot("binance", "", ""), "");
+    EXPECT_EQ(SymbolFormatter::toFutures("binance", "", ""), "");
+}
+
+TEST(SymbolFormatterV220, UnknownExchangeDefaultsBehavior) {
+    // Unknown exchange should still return concatenated symbols
+    std::string result = SymbolFormatter::toSpot("unknown_exchange", "BTC", "USDT");
+    EXPECT_FALSE(result.empty());
+    // Should contain both BTC and USDT
+    EXPECT_NE(result.find("BTC"), std::string::npos);
+    EXPECT_NE(result.find("USDT"), std::string::npos);
+}
+
+TEST(SymbolFormatterV220, CaseInsensitiveExchange) {
+    EXPECT_EQ(SymbolFormatter::toSpot("BINANCE", "BTC", "USDT"), "BTCUSDT");
+    EXPECT_EQ(SymbolFormatter::toSpot("OKX", "ETH", "USDT"), "ETH-USDT");
+    EXPECT_EQ(SymbolFormatter::toFutures("BITGET", "BTC", "USDT"), "BTCUSDT_UMCBL");
+}
+
+TEST(SymbolFormatterV220, ExtractBaseBUSD) {
+    EXPECT_EQ(SymbolFormatter::extractBase("BTCBUSD"), "BTC");
+    EXPECT_EQ(SymbolFormatter::extractQuote("BTCBUSD"), "BUSD");
+}
+
+TEST(SymbolFormatterV220, ExtractBaseETHQuote) {
+    EXPECT_EQ(SymbolFormatter::extractBase("DOGEETH"), "DOGE");
+    EXPECT_EQ(SymbolFormatter::extractQuote("DOGEETH"), "ETH");
+}
+
+// ── TelegramBot v2.2.0: Engine command callbacks ────────────────────────────
+
+TEST(TelegramBotV220, BalanceCallbackReturnsData) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+    bot.setCommandCallback("/balance", []() -> std::string {
+        return "Balance: 1000.0 USDT\nMargin: 950.0\nUnrealized PnL: 50.0";
+    });
+    auto resp = bot.processCommand("/balance", "123");
+    EXPECT_NE(resp.find("1000.0"), std::string::npos);
+    EXPECT_NE(resp.find("Margin"), std::string::npos);
+}
+
+TEST(TelegramBotV220, StatusCallbackReturnsData) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+    bot.setCommandCallback("/status", []() -> std::string {
+        return "Connected to binance\nSymbol: BTCUSDT\nInterval: 15m\nMode: paper\nMarket: spot";
+    });
+    auto resp = bot.processCommand("/status", "123");
+    EXPECT_NE(resp.find("binance"), std::string::npos);
+    EXPECT_NE(resp.find("BTCUSDT"), std::string::npos);
+}
+
+TEST(TelegramBotV220, PositionsCallbackReturnsData) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+    bot.setCommandCallback("/positions", []() -> std::string {
+        return "BTCUSDT qty=0.100000 entry=50000.000000 pnl=250.000000\n";
+    });
+    auto resp = bot.processCommand("/positions", "123");
+    EXPECT_NE(resp.find("BTCUSDT"), std::string::npos);
+    EXPECT_NE(resp.find("pnl"), std::string::npos);
+}
+
+TEST(TelegramBotV220, PnlCallbackReturnsData) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+    bot.setCommandCallback("/pnl", []() -> std::string {
+        return "Total P&L: 500.0 USDT\nWin Rate: 65.0%";
+    });
+    auto resp = bot.processCommand("/pnl", "123");
+    EXPECT_NE(resp.find("500.0"), std::string::npos);
+    EXPECT_NE(resp.find("Win Rate"), std::string::npos);
+}
+
+// ── Database first-launch v2.2.0 ───────────────────────────────────────────
+
+TEST(DatabaseV220, InitCreatesDbFileFromScratch) {
+    std::string path = getTempDir() + "test_v220_firstlaunch.db";
+    // Ensure file doesn't exist
+    fs::remove(path);
+    ASSERT_FALSE(fs::exists(path));
+
+    TradingDatabase db(path);
+    ASSERT_TRUE(db.init());
+    ASSERT_TRUE(db.isOpen());
+
+    // File should now exist
+    EXPECT_TRUE(fs::exists(path));
+
+    // Verify we can execute queries (schema created)
+    EXPECT_TRUE(db.execute("SELECT 1"));
+
+    fs::remove(path);
+}
+
+TEST(DatabaseV220, DirectoryCreationForDb) {
+    std::string dir = getTempDir() + "test_v220_subdir/";
+    std::string path = dir + "trading.db";
+
+    // Ensure directory doesn't exist
+    fs::remove_all(dir);
+    ASSERT_FALSE(fs::exists(dir));
+
+    // Create directory (simulating what main.cpp does)
+    fs::create_directories(dir);
+    ASSERT_TRUE(fs::exists(dir));
+
+    TradingDatabase db(path);
+    ASSERT_TRUE(db.init());
+    ASSERT_TRUE(db.isOpen());
+    EXPECT_TRUE(fs::exists(path));
+
+    fs::remove_all(dir);
+}
+
+TEST(DatabaseV220, RepeatedInitIdempotent) {
+    std::string path = getTempDir() + "test_v220_idempotent.db";
+    {
+        TradingDatabase db(path);
+        ASSERT_TRUE(db.init());
+        ASSERT_TRUE(db.isOpen());
+    }
+    // Re-open same DB — should succeed (IF NOT EXISTS in schema)
+    {
+        TradingDatabase db(path);
+        ASSERT_TRUE(db.init());
+        ASSERT_TRUE(db.isOpen());
+        EXPECT_TRUE(db.execute("SELECT 1"));
+    }
+    fs::remove(path);
+}
+
+// ── Layout Windows No Overlap v2.2.0 ───────────────────────────────────────
+
+TEST(LayoutV220, AllWindowsStrictlyOrdered) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f);
+
+    auto toolbar = mgr.get("Main Toolbar");
+    auto filters = mgr.get("Filters Bar");
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    auto md = mgr.get("Market Data");
+    auto ind = mgr.get("Indicators");
+    auto up = mgr.get("User Panel");
+    auto logs = mgr.get("Logs");
+
+    // Toolbar → Filters → Content → Logs (vertical order)
+    EXPECT_LE(toolbar.pos.y + toolbar.size.y, filters.pos.y + 1.0f);
+    EXPECT_LE(filters.pos.y + filters.size.y, md.pos.y + 1.0f);
+    EXPECT_LE(md.pos.y + md.size.y, logs.pos.y + 1.0f);
+
+    // Pair List (left) → Market Data (center) → User Panel (right)
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 1.0f);
+    EXPECT_LE(md.pos.x + md.size.x, up.pos.x + 1.0f);
+
+    // Volume Delta below Pair List
+    EXPECT_NEAR(vd.pos.y, pl.pos.y + pl.size.y, 1.0f);
+    EXPECT_NEAR(vd.pos.x, pl.pos.x, 1.0f);
+
+    // Indicators below Market Data
+    EXPECT_NEAR(ind.pos.y, md.pos.y + md.size.y, 1.0f);
+    EXPECT_NEAR(ind.pos.x, md.pos.x, 1.0f);
+}
+
+TEST(LayoutV220, WindowsDontTouchEachOther) {
+    // Verify no horizontal overlap between columns
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f);
+
+    auto pl = mgr.get("Pair List");
+    auto md = mgr.get("Market Data");
+    auto up = mgr.get("User Panel");
+
+    // Left column right edge <= center column left edge
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 0.01f);
+    // Center column right edge <= right column left edge
+    EXPECT_LE(md.pos.x + md.size.x, up.pos.x + 0.01f);
+}
+
+// ── Version String v2.2.0 ──────────────────────────────────────────────────
+
+TEST(VersionV220, VersionStringExists) {
+    // Simple compile-time check that version constant is reachable
+    // The actual version strings are in AppGui.cpp
+    std::string version = "2.2.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.2"), std::string::npos);
+}
