@@ -589,4 +589,34 @@ int BitgetExchange::getLeverage(const std::string& symbol) {
 #endif
 }
 
+FuturesBalanceInfo BitgetExchange::getFuturesBalance() {
+#ifndef USE_CURL
+    return {};
+#else
+    try {
+        rateLimit();
+        auto resp = httpGet("/api/v2/mix/account/accounts?productType=USDT-FUTURES", true);
+        auto j = nlohmann::json::parse(resp);
+
+        if (j.value("code", "") != "00000") {
+            Logger::get()->warn("[Bitget] getFuturesBalance error: code={} msg={}",
+                                j.value("code", ""), j.value("msg", ""));
+            return {};
+        }
+
+        FuturesBalanceInfo info;
+        if (j.contains("data") && j["data"].is_array() && !j["data"].empty()) {
+            auto& d = j["data"][0];
+            info.totalWalletBalance    = safeStod(d.value("equity", "0"));
+            info.totalUnrealizedProfit = safeStod(d.value("unrealizedPL", "0"));
+            info.totalMarginBalance    = safeStod(d.value("available", "0"));
+        }
+        return info;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] getFuturesBalance failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
 } // namespace crypto

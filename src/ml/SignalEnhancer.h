@@ -4,6 +4,7 @@
 #include "FeatureExtractor.h"
 #include "../data/CandleData.h"
 #include <deque>
+#include <mutex>
 
 namespace crypto {
 
@@ -33,7 +34,8 @@ private:
     XGBoostModel& xgb_;
     Config cfg_;
 
-    // Rolling accuracy
+    // Rolling accuracy — guarded by mtx_
+    mutable std::mutex mtx_;
     std::deque<std::pair<int,int>> outcomes_;
 
     double weightInd_{0.4};

@@ -58,8 +58,8 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
         double price = bars[i].close;
 
         if (!inPosition && signal != 0) {
-            // Open position — use 95% of balance
-            double cost = balance * 0.95;
+            // Open position — use configurable fraction of balance
+            double cost = balance * cfg.positionSizePct;
             double commission = cost * cfg.commission;
             posQty = (cost - commission) / price;
             entryPrice = price;

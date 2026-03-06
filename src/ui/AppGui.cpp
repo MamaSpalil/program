@@ -475,6 +475,12 @@ void AppGui::loadConfig(const std::string& path) {
         config_.indBbEnabled   = ie.value("bb",   true);
     }
 
+    if (j.contains("chart")) {
+        auto& ch = j["chart"];
+        chartBarWidth_     = ch.value("bar_width",     8.0f);
+        chartScrollOffset_ = ch.value("scroll_offset", 0);
+    }
+
     state_.equity = config_.initialCapital;
     state_.initialCapital = config_.initialCapital;
 }
@@ -552,6 +558,10 @@ nlohmann::json AppGui::configToJson() const {
         {"atr",  config_.indAtrEnabled},
         {"macd", config_.indMacdEnabled},
         {"bb",   config_.indBbEnabled}
+    };
+    j["chart"] = {
+        {"bar_width",     chartBarWidth_},
+        {"scroll_offset", chartScrollOffset_}
     };
     return j;
 }

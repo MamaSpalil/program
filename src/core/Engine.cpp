@@ -31,7 +31,7 @@ struct Engine::Impl {
     std::string                             exchangeName;
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
-    int                                     maxCandleHistory{5000}; // minimum 5000 bars for full chart visualization
+    int                                     maxCandleHistory{5000}; // configurable via engine.max_candle_history
     OrderBook                               lastOrderBook;
     std::chrono::steady_clock::time_point   lastOrderBookFetch{};
 };
@@ -56,6 +56,11 @@ void Engine::loadConfig(const std::string& path) {
     if (!f.is_open())
         throw std::runtime_error("Cannot open config: " + path);
     f >> config_;
+
+    if (config_.contains("engine")) {
+        auto& eng = config_["engine"];
+        impl_->maxCandleHistory = eng.value("max_candle_history", 5000);
+    }
 }
 
 void Engine::initComponents() {

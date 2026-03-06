@@ -715,4 +715,42 @@ int OKXExchange::getLeverage(const std::string& symbol) {
 #endif
 }
 
+FuturesBalanceInfo OKXExchange::getFuturesBalance() {
+#ifndef USE_CURL
+    return {};
+#else
+    try {
+        rateLimit();
+        auto resp = httpGet("/api/v5/account/balance", true);
+        auto j = nlohmann::json::parse(resp);
+
+        if (j.value("code", "") != "0") {
+            Logger::get()->warn("[OKX] getFuturesBalance error: code={} msg={}",
+                                j.value("code", ""), j.value("msg", ""));
+            return {};
+        }
+
+        FuturesBalanceInfo info;
+        if (j.contains("data") && j["data"].is_array() && !j["data"].empty()) {
+            auto& acct = j["data"][0];
+            info.totalMarginBalance    = safeStod(acct.value("totalEq", "0"));
+            info.totalWalletBalance    = safeStod(acct.value("adjEq", "0"));
+            if (acct.contains("details") && acct["details"].is_array()) {
+                for (auto& d : acct["details"]) {
+                    if (d.value("ccy", "") == "USDT") {
+                        info.totalWalletBalance    = safeStod(d.value("cashBal", "0"));
+                        info.totalUnrealizedProfit = safeStod(d.value("upl", "0"));
+                        break;
+                    }
+                }
+            }
+        }
+        return info;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] getFuturesBalance failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
 } // namespace crypto

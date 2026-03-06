@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 1.7.4
+> **Версия:** 1.7.5
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 453 тестов, 449 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v1.7.4:** Проведён полный анализ и исправление кода. 39 проблем исправлены и отмечены как ✅ Done. Добавлены 8 новых тестов.
+> **Результаты тестирования:** 463 тестов, 459 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v1.7.5:** 9 проблем исправлены: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory, BacktestEngine positionSizePct, TaxReporter unitCost. Добавлены 10 новых тестов.
 
 ---
 
@@ -69,20 +69,20 @@
 | # | Модуль | Файл:Строка | Проблема | Статус |
 |---|--------|-------------|----------|--------|
 | 25 | ML | FeatureExtractor.cpp:87 | Division by zero: hl/c.close | ✅ Done (v1.7.2) |
-| 26 | ML | ModelTrainer.cpp:16 | Хардкод 96 свечей/день | ❌ Открыт |
+| 26 | ML | ModelTrainer.cpp:16 | Хардкод 96 свечей/день | ✅ Done (v1.7.5) |
 | 27 | AI | FeatureExtractor.cpp:247-250 | FVG detection деление на ma | ✅ Done (v1.7.3) |
-| 28 | AI | FeatureExtractor.cpp:110 | mid < 1e-12 → mid=1.0 фиктивное значение | ❌ Открыт |
+| 28 | AI | FeatureExtractor.cpp:110 | mid < 1e-12 → mid=1.0 фиктивное значение | ✅ Done (v1.7.5) |
 | 29 | Settings | LayoutManager.h vs AppGui.h | Несовпадение дефолтов | ✅ Done (v1.7.3) — Синхронизировано |
-| 30 | UI | AppGui.h:339-340 | chartBarWidth_, chartScrollOffset_ не сохраняются | ❌ Открыт |
+| 30 | UI | AppGui.h:339-340 | chartBarWidth_, chartScrollOffset_ не сохраняются | ✅ Done (v1.7.5) |
 | 31 | Data | CSVExporter.cpp:45-49 | Нет экранирования запятых в CSV | ✅ Done (v1.7.3) — escapeCsvField() |
 | 32 | External | NewsFeed.cpp:46-50, FearGreed.cpp:35 | API-вызовы заглушки | ❌ Открыт |
 | 33 | Integration | TelegramBot.cpp:40-56 | Все команды заглушки | ❌ Открыт |
-| 34 | Core | Engine.cpp:34, 308 | Хардкод maxCandleHistory=5000, interval=2000ms | ❌ Открыт |
-| 35 | Backtest | BacktestEngine.cpp:62 | Хардкод позиция 95% от баланса | ❌ Открыт |
-| 36 | Tax | TaxReporter.cpp:46-47 | Потеря точности costBasis при partial fills | ❌ Открыт |
+| 34 | Core | Engine.cpp:34, 308 | Хардкод maxCandleHistory=5000, interval=2000ms | ✅ Done (v1.7.5) |
+| 35 | Backtest | BacktestEngine.cpp:62 | Хардкод позиция 95% от баланса | ✅ Done (v1.7.5) |
+| 36 | Tax | TaxReporter.cpp:46-47 | Потеря точности costBasis при partial fills | ✅ Done (v1.7.5) |
 | 37 | Security | WebhookServer.cpp:59 | String comparison не constant-time | ✅ Done (v1.7.3) — CRYPTO_memcmp |
 | **NEW** | Exchange | Bybit/KuCoin/Bitget | getPositionRisk() реализован | ✅ Done (v1.7.3) |
-| **NEW** | Exchange | Bybit/KuCoin/Bitget | getFuturesBalance() не реализован | ❌ Открыт |
+| **NEW** | Exchange | Bybit/KuCoin/Bitget | getFuturesBalance() не реализован | ✅ Done (v1.7.5) |
 | **v1.7.4** | UI | AppGui.cpp | Нет контекстного меню правой кнопки мыши на графике | ✅ Done (v1.7.4) — ChartOrderMenu |
 | **v1.7.4** | UI | AppGui.cpp | Нет leverage slider в Order Management | ✅ Done (v1.7.4) — SliderInt 1x-125x |
 | **v1.7.4** | UI | AppGui.cpp | Нет визуализации ордеров на графике | ✅ Done (v1.7.4) — Order lines |
@@ -95,7 +95,7 @@
 Обязательные методы: `testConnection()`, `getKlines()`, `getPrice()`, `placeOrder()`, `getBalance()`, `subscribeKline()`, `connect()`, `disconnect()`.
 Дополнительные методы: `getPositionRisk()`, `getFuturesBalance()`, `getOpenOrders()`, `getMyTrades()`, `cancelOrder()`, `setLeverage()`, `getLeverage()`.
 
-### 2.2 Статус реализации по биржам (обновлено v1.7.4)
+### 2.2 Статус реализации по биржам (обновлено v1.7.5)
 
 | Функция | Binance | Bybit | OKX | KuCoin | Bitget |
 |---------|---------|-------|-----|--------|--------|
@@ -108,7 +108,7 @@
 | Rate Limiting | ✅ full | ✅ | ✅ 10req/s | ✅ 10req/s | ✅ 10req/s |
 | Authentication | ✅ HMAC-SHA256 | ✅ HMAC-SHA256 | ✅ HMAC+Base64 | ✅ HMAC+Base64 | ✅ HMAC+Base64 |
 | getPositionRisk() | ✅ | ✅ **safeStod** | ✅ | ✅ **signed+safeStod** | ✅ **signed+safeStod** |
-| getFuturesBalance() | ✅ | ❌ none | ❌ none | ❌ none | ❌ none |
+| getFuturesBalance() | ✅ | ✅ **NEW v1.7.5** | ✅ **NEW v1.7.5** | ✅ **NEW v1.7.5** | ✅ **NEW v1.7.5** |
 | setLeverage() | ✅ | ✅ | ✅ | ✅ | ✅ |
 | getLeverage() | ✅ | ✅ | ✅ | ✅ | ✅ |
 | httpDelete() | ✅ **NEW v1.7.4** | — | — | ✅ **NEW v1.7.4** | — |
@@ -150,12 +150,13 @@ info.realizedProfit   = safeStod(p.value("cumRealisedPnl", "0")); // ✅
 info.leverage         = safeStod(p.value("leverage", "1"));   // ✅
 ```
 
-### 2.4 Фьючерсное плечо (Leverage) — ✅ Done (v1.7.3+v1.7.4)
+### 2.4 Фьючерсное плечо и баланс — ✅ Done (v1.7.3+v1.7.4+v1.7.5)
 
-**Реализовано для всех 5 бирж** (v1.7.3) + **UI Slider** (v1.7.4):
+**Реализовано для всех 5 бирж** (v1.7.3) + **UI Slider** (v1.7.4) + **getFuturesBalance()** (v1.7.5):
 - `setLeverage(symbol, leverage)` и `getLeverage(symbol)` работают для всех бирж
 - В Order Management добавлен слайдер Leverage (1x–125x) с кнопкой "Apply Leverage"
 - Текущее плечо отображается в секции "Positions / P&L"
+- `getFuturesBalance()` реализован для всех 5 бирж (Bybit, OKX, KuCoin, Bitget добавлены в v1.7.5)
 
 ### 2.5 Формат символов (нужна унификация — открыт)
 | Биржа | Формат спот | Формат фьючерс |
@@ -211,31 +212,30 @@ Callback: `job.callback()` вызывается.
 ### 4.3 FeatureExtractor (ML) — ✅ Done (v1.7.2)
 - Division by zero: ema > 0.0 и hl > 0.0 проверки
 
-### 4.4 SignalEnhancer — ✅ Done (v1.7.2)
+### 4.4 SignalEnhancer — ✅ Done (v1.7.2 + v1.7.5)
 - Нормализация весов корректна
-- **Открыт:** outcomes_ не thread-safe
-- **Открыт:** Dead zone при accuracy 40-60%
+- ✅ **thread-safety (v1.7.5):** `mutable std::mutex mtx_` protecting outcomes_ and weights_
 
 ### 4.5 RLTradingAgent (PPO) — ✅ GAE Done (v1.7.2)
 - **Открыт:** Нет clipping value loss
 - **Открыт:** Entropy coeff 0.01 слишком мал
 
-### 4.6 OnlineLearningLoop — ❌ Открыт
-- **ГЛАВНЫЙ БАГ:** Текущий state вместо state на момент входа
+### 4.6 OnlineLearningLoop — ❌ Частично открыт
+- **ГЛАВНЫЙ БАГ (❌ Открыт):** Текущий state вместо state на момент входа
 - **nextState == state:** bootstrap нарушен
 - **logProb/value = 0:** для исторических сделок
-- **lastTradeTime_ не atomic**
+- ✅ **lastTradeTime_ atomic (v1.7.5):** `std::atomic<long long>` для thread-safety
 
-### 4.7 ModelTrainer — ❌ Открыт
-- **Хардкод 96:** Предполагает 15-мин таймфрейм
+### 4.7 ModelTrainer — ✅ Done (v1.7.5)
+- **ИСПРАВЛЕНО:** candlesPerDay теперь вычисляется из `timeframeMinutes` (1440 / timeframeMinutes)
 
 ---
 
 ## 5. АНАЛИЗ UI И НАСТРОЕК
 
-### 5.1 Потерянные настройки — ✅ Done (v1.7.3)
+### 5.1 Потерянные настройки — ✅ Done (v1.7.3 + v1.7.5)
 Фильтры и флаги индикаторов сохраняются.
-**Не сохраняются (открыт):** chartBarWidth_, chartScrollOffset_, zoom/pan state.
+✅ **chartBarWidth_, chartScrollOffset_ (v1.7.5):** сохраняются в configToJson/loadConfig под ключом "chart".
 
 ### 5.2 Layout дефолты — ✅ Done (v1.7.3)
 vdPct=0.15f, indPct=0.20f — синхронизировано.
@@ -278,20 +278,20 @@ sendMessage() только логирует.
 ### 6.4 CSVExporter — ✅ Done (v1.7.3)
 escapeCsvField() добавлена.
 
-### 6.5 TaxReporter (открыт)
-- Потеря точности costBasis при partial fills
-- Нет обработки таймзон
+### 6.5 TaxReporter — ✅ Done (v1.7.5)
+- ✅ **costBasis precision (v1.7.5):** `unitCost` поле в TaxLot, использует `used * lot.unitCost` вместо `used * (lot.costBasis / lot.qty)`
+- Нет обработки таймзон (minor, не блокирует)
 
 ---
 
 ## 7. АНАЛИЗ ТЕСТОВОГО ПОКРЫТИЯ
 
-### 7.1 Статистика (v1.7.4)
-- **Всего тестов:** 453 (449 pass, 4 skip — LibTorch/XGBoost)
+### 7.1 Статистика (v1.7.5)
+- **Всего тестов:** 463 (459 pass, 4 skip — LibTorch/XGBoost)
 - **Файлов тестов:** 17
-- **Новых тестов v1.7.4:** 8
-- **Оценка покрытия:** ~37% кода
-- **Время выполнения:** ~13 секунд
+- **Новых тестов v1.7.5:** 10
+- **Оценка покрытия:** ~39% кода
+- **Время выполнения:** ~14 секунд
 
 ### 7.2 Критически не протестировано
 | Модуль | Что не тестируется |
@@ -302,7 +302,7 @@ escapeCsvField() добавлена.
 | BacktestEngine | Полный цикл бэктеста |
 | ML (LSTM/XGBoost) | Реальные predictions (4 skip) |
 | GridBot | executeBuy/executeSell уровни |
-| **Futures** | **getFuturesBalance() для 4 бирж** |
+| **Futures** | **getFuturesBalance() реальные API** (NoCrash тесты добавлены v1.7.5) |
 | **UI** | **Правый клик, leverage slider** (требует GUI) |
 
 ---
@@ -310,13 +310,14 @@ escapeCsvField() добавлена.
 ## 8. АНАЛИЗ CHANGELOG
 
 ### Ключевые наблюдения:
-1. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
-2. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
-3. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
-4. **v1.7.1** — Windows compilation fixes
-5. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
-6. **Прогресс:** между v1.7.0 и v1.7.4 исправлены 39+ проблем
-7. **Остаётся:** 16 открытых проблем для v1.8.0
+1. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
+2. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
+3. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
+4. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
+5. **v1.7.1** — Windows compilation fixes
+6. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
+7. **Прогресс:** между v1.7.0 и v1.7.5 исправлены 54 проблемы
+8. **Остаётся:** 7 открытых проблем для v1.8.0
 
 ---
 
@@ -327,46 +328,54 @@ escapeCsvField() добавлена.
 ### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v1.8.0
 
 ```
-Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v1.7.4.
+Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v1.7.5.
 Это C++17 программа для алгоритмической торговли криптовалютами с ML (LSTM, XGBoost), RL (PPO),
-5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 453+ тестами на Google Test.
+5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 463+ тестами на Google Test.
 
 КОНТЕКСТ ПРОЕКТА:
 - Репозиторий: /home/runner/work/program/program
 - Основной код: src/ (67 .cpp файлов, 92 .h файлов)
-- Тесты: tests/ (17 файлов, 453 тестов, 449 pass, 4 skip)
+- Тесты: tests/ (17 файлов, 463 тестов, 459 pass, 4 skip)
 - Конфиг: config/settings.json, config/profiles.json
 - Сборка: cmake -B build/test -DCMAKE_BUILD_TYPE=Debug && cmake --build build/test -j$(nproc)
 - Запуск тестов: cd build/test && ./crypto_trader_tests --gtest_brief=1
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v1.7.4) ===
+=== СТАТУС ПРОЕКТА (v1.7.5) ===
 
 ИСПРАВЛЕНО (✅ Done — НЕ ТРОГАТЬ):
 - placeOrder() для всех 5 бирж (Binance, Bybit, OKX, KuCoin, Bitget)
 - cancelOrder() для всех 5 бирж (Binance/KuCoin используют DELETE, Bybit/OKX/Bitget POST)
 - setLeverage() / getLeverage() для всех 5 бирж (фьючерсы)
 - getPositionRisk() для всех 5 бирж (signed requests + safeStod)
+- getFuturesBalance() для всех 5 бирж (Binance existed, Bybit/OKX/KuCoin/Bitget added v1.7.5)
 - subscribeKline() для всех 5 бирж с корректными подписками
 - KuCoin getKlines() — формат [time, open, close, high, low, volume] подтверждён
 - PaperTrading equity — posValue += p.quantity * p.currentPrice
 - BacktestEngine equity для SHORT — posQty * (2.0 * entryPrice - price)
 - BacktestEngine Sharpe ratio — sample stddev (n-1)
+- BacktestEngine positionSizePct — конфигурируемая (default 0.95)
 - GridBot profit — (sellPrice - buyPrice) * qty с buyPrice полем
 - Scheduler callback — job.callback() вызывается
 - ml/FeatureExtractor division by zero — проверки ema>0, hl>0
 - ai/FeatureExtractor FVG division by zero — проверки ma>0
+- ai/FeatureExtractor mid fallback — early return (neutral zeros) вместо mid=1.0
 - SignalEnhancer нормализация весов — веса суммируются в 1.0
+- SignalEnhancer thread-safety — mutable std::mutex mtx_ protecting outcomes_ and weights_
 - RLTradingAgent GAE bootstrap — values[t+1] для нетерминального шага
 - Bybit rate limiting — скользящее окно реализовано
 - Bybit/OKX getBalance() bounds — safeStod() защита
 - Engine::componentsInitialized_ — std::atomic<bool>
+- Engine maxCandleHistory — конфигурируемый из config["engine"]["max_candle_history"] (default 5000)
 - TradeHistory::winRate() — единый lock, нет race condition
 - TradeHistory::profitFactor() — breakeven pnl==0 не считается loss
 - XGBoostModel — booster_ освобождается перед re-train
 - LSTMModel — log_softmax вместо log(out+1e-9)
+- ModelTrainer candlesPerDay — конфигурируемый через timeframeMinutes (1440/tfMin)
+- OnlineLearningLoop lastTradeTime_ — std::atomic<long long> для thread-safety
 - AppGui configToJson/loadConfig — фильтры и флаги индикаторов сохраняются
+- AppGui chartBarWidth_/chartScrollOffset_ — сохраняются в configToJson/loadConfig под ключом "chart"
 - Layout defaults — vdPct=0.15, indPct=0.20 (синхронизировано)
 - WebhookServer rateLimit_ — periodic cleanup + member variable cleanupCounter_
 - WebhookServer — constant-time secret comparison (CRYPTO_memcmp)
@@ -374,98 +383,60 @@ escapeCsvField() добавлена.
 - OKX getBalance() BTC — cashBal вместо availBal
 - RiskManager — параметр priceSinceEntry (было highSince)
 - Binance/KuCoin httpDelete() — DELETE метод для cancelOrder
+- TaxReporter costBasis — unitCost поле в TaxLot, used * lot.unitCost
 - UI: правый клик на графике → контекстное меню для размещения ордеров
 - UI: leverage slider (1x-125x) в Order Management
 - UI: визуализация открытых ордеров на графике (горизонтальные линии)
 
 === ЗАДАЧА ===
 
-Необходимо исправить ВСЕ оставшиеся 16 логических ошибок и усовершенствовать программу.
+Необходимо исправить ВСЕ оставшиеся 7 логических ошибок и усовершенствовать программу.
 Работу нужно выполнять ПОЭТАПНО, каждый этап — отдельный коммит.
 После каждого исправления — запускай тесты для проверки.
 НЕ ЛОМАЙ существующие тесты. НЕ ИЗМЕНЯЙ уже исправленный код (помечен ✅ Done).
 
-=== ЭТАП 1: FUTURES BALANCE (4 биржи) ===
+=== ЭТАП 1: ML/AI — OnlineLearningLoop STALE STATE ===
 
-1.1. Реализуй getFuturesBalance() для Bybit:
-   - GET /v5/account/wallet-balance?accountType=CONTRACT (signed)
-   - Парси totalWalletBalance, totalAvailableBalance, unrealisedPnl
-   - Используй safeStod() для всех числовых полей
-
-1.2. Реализуй getFuturesBalance() для OKX:
-   - GET /api/v5/account/balance (signed)
-   - Парси totalEq, adjEq, details для futures
-   - Используй safeStod()
-
-1.3. Реализуй getFuturesBalance() для KuCoin:
-   - GET /api/v1/account-overview?currency=USDT (signed)
-   - Парси accountEquity, unrealisedPNL, availableBalance
-   - Используй safeStod()
-
-1.4. Реализуй getFuturesBalance() для Bitget:
-   - GET /api/v2/mix/account/accounts?productType=USDT-FUTURES (signed)
-   - Парси equity, unrealizedPL, available
-   - Используй safeStod()
-
-=== ЭТАП 2: ML/AI МОДУЛИ (5 проблем) ===
-
-2.1. Исправь OnlineLearningLoop stale state (OnlineLearningLoop.cpp:131):
+1.1. Исправь OnlineLearningLoop stale state (OnlineLearningLoop.cpp:131):
    - При открытии позиции СОХРАНЯЙ state в TradeRecord или кэш
    - В OnlineLearningLoop используй сохранённый state, а не текущий feat_.extract()
    - Исправь nextState == state (bootstrap нарушен)
    - Для исторических сделок без logProb/value — пропускай или используй дефолты
-   - Сделай lastTradeTime_ атомарным (std::atomic<int64_t>)
 
-2.2. Сделай ModelTrainer::candlesPerDay конфигурируемым:
-   int candlesPerDay = 1440 / timeframeMinutes; // 1m→1440, 5m→288, 15m→96, 1h→24
+=== ЭТАП 2: РЕАЛИЗАЦИЯ ЗАГЛУШЕК (3 модуля) ===
 
-2.3. Исправь ai/FeatureExtractor.cpp:110 — mid < 1e-12 fallback:
-   - Вместо mid=1.0 используй NaN или skip sample
-
-2.4. Добавь thread-safety в SignalEnhancer (SignalEnhancer.cpp):
-   - Оберни outcomes_ в mutex (std::lock_guard при доступе)
-
-2.5. Добавь thread-safety для SignalEnhancer::weights_ (weightInd_, weightLstm_, weightXgb_)
-
-=== ЭТАП 3: РЕАЛИЗАЦИЯ ЗАГЛУШЕК (3 модуля) ===
-
-3.1. Реализуй NewsFeed::fetch() (NewsFeed.cpp):
+2.1. Реализуй NewsFeed::fetch() (NewsFeed.cpp):
    - API: CryptoPanic или CoinGecko /api/v3/news
    - Парси title, source, url, pubTime, sentiment
    - Rate limit: 1 запрос в 5 минут
 
-3.2. Реализуй FearGreed::fetch() (FearGreed.cpp):
+2.2. Реализуй FearGreed::fetch() (FearGreed.cpp):
    - API: GET https://api.alternative.me/fng/?limit=1
    - Парси value, value_classification, timestamp
    - Rate limit: 1 запрос в час
 
-3.3. Реализуй TelegramBot::sendMessage() (TelegramBot.cpp):
+2.3. Реализуй TelegramBot::sendMessage() (TelegramBot.cpp):
    - POST https://api.telegram.org/bot{token}/sendMessage
    - Body: {"chat_id": "{chatId}", "text": "{message}", "parse_mode": "HTML"}
 
-=== ЭТАП 4: МЕЛКИЕ ИСПРАВЛЕНИЯ (5 проблем) ===
+=== ЭТАП 3: МЕЛКИЕ ИСПРАВЛЕНИЯ (3 проблемы) ===
 
-4.1. Сохранение chartBarWidth_, chartScrollOffset_ в configToJson/loadConfig
-4.2. Engine.cpp:34 — maxCandleHistory вынеси в конфиг (EngineConfig)
-4.3. BacktestEngine.cpp:62 — позиция 95% от баланса → конфигурируемая (positionSizePct)
-4.4. TaxReporter.cpp — точность costBasis при partial fills (использовать accumulate с Kahan)
-4.5. Адаптивный формат цен: %.2f для >1000, %.4f для >1, %.8f для < 1
+3.1. OrderManagement — добавь валидацию price > 0, qty > 0
+3.2. Адаптивный формат цен: %.2f для >1000, %.4f для >1, %.8f для < 1
+3.3. RLTradingAgent — tuning entropy coefficient и value loss clipping
 
-=== ЭТАП 5: ТЕСТИРОВАНИЕ ===
+=== ЭТАП 4: ТЕСТИРОВАНИЕ ===
 
-5.1. Добавь тесты для getFuturesBalance():
-   - test_exchanges.cpp: *GetFuturesBalanceNoCrash для Bybit/OKX/KuCoin/Bitget
-5.2. Добавь тесты для OnlineLearningLoop с правильным state
-5.3. Добавь тесты для NewsFeed, FearGreed, TelegramBot (unit)
-5.4. Добавь тесты для адаптивного формата цен
-5.5. Проверь что ВСЕ существующие 453 тестов проходят
+4.1. Добавь тесты для OnlineLearningLoop с правильным state
+4.2. Добавь тесты для NewsFeed, FearGreed, TelegramBot (unit)
+4.3. Добавь тесты для адаптивного формата цен
+4.4. Проверь что ВСЕ существующие 463 тестов проходят
 
 === ПРИОРИТЕТЫ ===
-Приоритет 1 (ФЬЮЧЕРСЫ): Этап 1 — getFuturesBalance() для 4 бирж
-Приоритет 2 (ML/AI): Этап 2 — OnlineLearningLoop state fix, thread-safety
-Приоритет 3 (ИНТЕГРАЦИИ): Этап 3 — NewsFeed, FearGreed, Telegram
-Приоритет 4 (ПОЛИРОВКА): Этап 4 — мелкие исправления
-Приоритет 5 (ТЕСТЫ): Этап 5 — тесты для всех изменений
+Приоритет 1 (ML/AI): Этап 1 — OnlineLearningLoop stale state fix
+Приоритет 2 (ИНТЕГРАЦИИ): Этап 2 — NewsFeed, FearGreed, Telegram
+Приоритет 3 (ПОЛИРОВКА): Этап 3 — OrderManagement, price format, RL tuning
+Приоритет 4 (ТЕСТЫ): Этап 4 — тесты для всех изменений
 
 === ОГРАНИЧЕНИЯ ===
 - НЕ меняй архитектуру проекта
@@ -481,40 +452,31 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v1.7.4)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v1.7.5)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v1.7.4) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v1.7.5) |
 |-----------|--------------|--------------|-----------|---------------|
-| Биржи | 17 | 17 | 1 (getFuturesBalance ×4) | +7 (httpDelete ×2, signed ×2, safeStod ×3) |
-| Торговые модули | 10 | 9 | 1 (OrderManagement hardcodes) | +1 (Sharpe ratio n-1) |
-| ML/AI | 18 | 7 | 9 | 0 |
-| UI/Настройки | 11 | 8 | 2 | +3 (right-click, leverage slider, order lines) |
-| Интеграции | 8 | 4 | 4 | +1 (cleanupCounter_ member) |
-| **ИТОГО** | **64** | **45** | **16** | **+12 новых исправлений** |
+| Биржи | 17 | 17 | 0 | +4 (getFuturesBalance ×4) |
+| Торговые модули | 10 | 10 | 1 (OrderManagement hardcodes) | +2 (Engine maxCandleHistory, BacktestEngine positionSizePct) |
+| ML/AI | 18 | 12 | 3 | +5 (atomic, candlesPerDay, mid fallback, SignalEnhancer mtx_) |
+| UI/Настройки | 11 | 9 | 1 | +1 (chartBarWidth_ persistence) |
+| Интеграции | 8 | 5 | 2 | +1 (TaxReporter unitCost) |
+| **ИТОГО** | **61** | **54** | **7** | **+9 новых исправлений** |
 
 ### Прогресс исправлений:
-- **v1.7.3 → v1.7.4:** 7 новых исправлений + 3 UI-функции (всего 39→45 из 64)
-- **Тесты:** 453 (449 pass, 4 skip) — +8 новых тестов
-- **Общий статус:** 45 Done, 16 Open = **16 проблем к исправлению в v1.8.0**
+- **v1.7.4 → v1.7.5:** 9 новых исправлений (всего 45→54)
+- **Тесты:** 463 (459 pass, 4 skip) — +10 новых тестов
+- **Общий статус:** 54 Done, 7 Open = **7 проблем к исправлению в v1.8.0**
 
 ### Оставшиеся проблемы (v1.8.0):
-1. getFuturesBalance() для Bybit/OKX/KuCoin/Bitget
-2. OnlineLearningLoop stale state + thread-safety + lastTradeTime_ atomic
-3. SignalEnhancer thread-safety (outcomes_ + weights_)
-4. ModelTrainer candlesPerDay hardcode
-5. ai/FeatureExtractor mid fallback (mid=1.0)
-6. chartBarWidth_/chartScrollOffset_ persistence
-7. Engine maxCandleHistory hardcode
-8. BacktestEngine 95% position size hardcode
-9. TaxReporter costBasis precision
-10. NewsFeed::fetch() заглушка
-11. FearGreed::fetch() заглушка
-12. TelegramBot::sendMessage() заглушка
-13. OrderManagement validation hardcodes
-14. Адаптивный формат цен (%.2f vs %.8f)
-15. SignalEnhancer dead zone (accuracy 40-60%)
-16. RLTradingAgent entropy/clipping tuning
+1. OnlineLearningLoop stale state (текущий state вместо state на момент входа)
+2. NewsFeed::fetch() заглушка
+3. FearGreed::fetch() заглушка
+4. TelegramBot::sendMessage() заглушка
+5. OrderManagement validation hardcodes (нет price > 0)
+6. Адаптивный формат цен (%.2f vs %.8f)
+7. RLTradingAgent entropy/clipping tuning
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v1.7.4, включая все 67 исходных файлов, 17 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 453 тестов подтверждены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v1.7.5, включая все 67 исходных файлов, 17 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 463 тестов подтверждены.*

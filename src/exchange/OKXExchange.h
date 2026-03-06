@@ -41,6 +41,7 @@ public:
     std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
     std::vector<AccountBalanceDetail> getAccountBalanceDetails() override;
     void setMarketType(const std::string& marketType) override;
+    FuturesBalanceInfo getFuturesBalance() override;
     bool cancelOrder(const std::string& symbol, const std::string& orderId) override;
     bool setLeverage(const std::string& symbol, int leverage) override;
     int getLeverage(const std::string& symbol) override;

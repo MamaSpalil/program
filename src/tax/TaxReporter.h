@@ -16,6 +16,7 @@ public:
     struct TaxLot {
         double    qty{0.0};
         double    costBasis{0.0};
+        double    unitCost{0.0}; // per-unit cost for precision
         long long acquireTime{0};
     };
 

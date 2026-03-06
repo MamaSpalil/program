@@ -114,10 +114,11 @@ void OnlineLearningLoop::pollTrades() {
     try {
         // Fetch recent trade history (limit 50)
         auto history = trades_->getHistory("", 50);
+        long long lastTime = lastTradeTime_.load(std::memory_order_relaxed);
 
         for (const auto& t : history) {
             // Skip trades we have already processed
-            if (t.exitTime <= lastTradeTime_) continue;
+            if (t.exitTime <= lastTime) continue;
             if (t.status != "closed") continue;
 
             // R_t = PnL * rewardScale
@@ -139,9 +140,10 @@ void OnlineLearningLoop::pollTrades() {
             localBatch_.push_back(std::move(exp));
             samplesConsumed_.fetch_add(1, std::memory_order_relaxed);
 
-            if (t.exitTime > lastTradeTime_)
-                lastTradeTime_ = t.exitTime;
+            if (t.exitTime > lastTime)
+                lastTime = t.exitTime;
         }
+        lastTradeTime_.store(lastTime, std::memory_order_relaxed);
     } catch (const std::exception& e) {
         Logger::get()->warn("[OnlineLearning] pollTrades error: {}", e.what());
     }

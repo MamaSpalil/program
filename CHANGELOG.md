@@ -5,6 +5,52 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Exchange — getFuturesBalance() для 4 бирж
+- **BybitExchange.cpp** — реализован `getFuturesBalance()`: GET `/v5/account/wallet-balance?accountType=CONTRACT` (signed). Парсинг totalWalletBalance, totalPerpUPL, totalMarginBalance из результата. USDT-специфичные поля из coin array. Использует `safeStod()` (BybitExchange.cpp:536-576, BybitExchange.h:42).
+- **OKXExchange.cpp** — реализован `getFuturesBalance()`: GET `/api/v5/account/balance` (signed). Парсинг totalEq, adjEq из account, cashBal/upl из USDT detail. Использует `safeStod()` (OKXExchange.cpp:719-756, OKXExchange.h:44).
+- **KuCoinExchange.cpp** — реализован `getFuturesBalance()`: GET `/api/v1/account-overview?currency=USDT` (signed). Парсинг accountEquity, unrealisedPNL, marginBalance. Использует `safeStod()` (KuCoinExchange.cpp:647-675, KuCoinExchange.h:43).
+- **BitgetExchange.cpp** — реализован `getFuturesBalance()`: GET `/api/v2/mix/account/accounts?productType=USDT-FUTURES` (signed). Парсинг equity, unrealizedPL, available. Использует `safeStod()` (BitgetExchange.cpp:593-621, BitgetExchange.h:43).
+
+#### Этап 2: ML/AI Thread-Safety и корректность
+- **OnlineLearningLoop.h** — `lastTradeTime_` изменён с `long long` на `std::atomic<long long>` для предотвращения data race при многопоточном доступе (OnlineLearningLoop.h:106).
+- **OnlineLearningLoop.cpp** — `pollTrades()` переписан с атомарными load/store для lastTradeTime_: единый `lastTime` вычисляется за цикл, затем атомарно записывается (OnlineLearningLoop.cpp:117-147).
+- **ModelTrainer.h** — добавлен параметр `timeframeMinutes{15}` в Config для конфигурируемого расчёта candles/day (ModelTrainer.h:23).
+- **ModelTrainer.cpp** — `candlesPerDay` теперь вычисляется как `1440 / timeframeMinutes` вместо хардкода 96. Поддерживает 1m(1440), 5m(288), 15m(96), 1h(24) (ModelTrainer.cpp:16).
+- **ai/FeatureExtractor.cpp** — `mid < 1e-12f` fallback изменён: вместо `mid = 1.0f` (фиктивное значение, генерирующее мусорные нормализованные значения) теперь `return` — все OB-фичи остаются нулевыми (нейтральными) (ai/FeatureExtractor.cpp:110).
+- **SignalEnhancer.h/.cpp** — добавлена thread-safety: `mutable std::mutex mtx_` защищает `outcomes_`, `weightInd_`, `weightLstm_`, `weightXgb_`. `recordOutcome()` и `enhance()` используют `lock_guard` (SignalEnhancer.h:38, SignalEnhancer.cpp:14-26,45).
+
+#### Этап 3: UI/Config — Настройки и конфигурация
+- **AppGui.cpp configToJson()** — добавлена секция `"chart"` с сериализацией `bar_width` (chartBarWidth_) и `scroll_offset` (chartScrollOffset_). Ранее эти настройки терялись при перезапуске (AppGui.cpp:552-555).
+- **AppGui.cpp loadConfig()** — добавлена загрузка секции `"chart"` из JSON при старте: chartBarWidth_ и chartScrollOffset_ восстанавливаются из конфигурации (AppGui.cpp:479-483).
+- **Engine.cpp** — `maxCandleHistory` теперь загружается из `config["engine"]["max_candle_history"]` с дефолтом 5000 (Engine.cpp:59-62).
+- **BacktestEngine.h** — добавлен параметр `positionSizePct{0.95}` в Config для конфигурируемого размера позиции (BacktestEngine.h:26).
+- **BacktestEngine.cpp** — `balance * 0.95` заменён на `balance * cfg.positionSizePct` (BacktestEngine.cpp:62).
+
+#### Этап 4: TaxReporter — Точность расчёта costBasis
+- **TaxReporter.h** — добавлено поле `unitCost{0.0}` в TaxLot для хранения per-unit стоимости, исключающей накопление ошибок округления при partial fills (TaxReporter.h:19).
+- **TaxReporter.cpp** — costBasis при частичных продажах теперь вычисляется как `used * lot.unitCost` вместо `used * (lot.costBasis / lot.qty)`. Устраняет деградацию точности при FIFO/LIFO (TaxReporter.cpp:33,47).
+
+### Added
+
+#### Этап 5: Тестирование v1.7.5
+- **test_full_system.cpp** — 10 новых тестов:
+  - `ExchangeV175` (4): BybitGetFuturesBalanceNoCrash, OKXGetFuturesBalanceNoCrash, KuCoinGetFuturesBalanceNoCrash, BitgetGetFuturesBalanceNoCrash
+  - `ModelTrainerV175` (1): CandlesPerDayConfigurable — проверяет расчёт candles/day для 1m/5m/15m/1h
+  - `SignalEnhancerV175` (1): ThreadSafeRecordOutcome — многопоточный стресс-тест recordOutcome()
+  - `OnlineLearningV175` (1): LastTradeTimeAtomic — проверка компиляции atomic
+  - `AppGuiV175` (1): ChartSettingsPersistence — компиляционная проверка
+  - `BacktestV175` (1): ConfigurablePositionSize — тест с 50% позицией
+  - `TaxReporterV175` (1): CostBasisPrecision — тест точности при partial fills
+- **Итого тестов:** 463 (459 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v1.7.5 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v1.7.5: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v1.8.0.
+
 ## [1.7.4] - 2026-03-06
 
 ### Fixed

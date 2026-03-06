@@ -107,7 +107,7 @@ void AIFeatureExtractor::buildFastFeatures(std::vector<float>& out) const {
     float bestBid = bidPrices_[0];
     float bestAsk = askPrices_[0];
     float mid     = (bestBid + bestAsk) * 0.5f;
-    if (mid < 1e-12f) mid = 1.0f; // degenerate case
+    if (mid < 1e-12f) return; // degenerate case — leave features as zero (neutral)
 
     // Bid/ask prices normalised as (price - mid) / mid
     for (int i = 0; i < L && i < 20; ++i) {

@@ -103,7 +103,7 @@ private:
     std::atomic<uint64_t> samplesConsumed_{0};
 
     // Track the last processed trade timestamp to avoid re-processing
-    long long lastTradeTime_{0};
+    std::atomic<long long> lastTradeTime_{0};
 };
 
 }} // namespace crypto::ai
