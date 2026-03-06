@@ -5,6 +5,73 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-03-06
+
+### Analysis & Testing
+#### Полный анализ кода и глубокое тестирование всех модулей программы
+
+**Проведено:**
+- Полная сборка проекта (cmake + GCC 13.3, Debug) — **успешно, 0 ошибок**
+- Полный запуск тест-сьюта: **416 тестов, 412 пройдено, 4 пропущено** (LibTorch/XGBoost отсутствуют)
+- Глубокий анализ всех 5 бирж (Binance, Bybit, OKX, KuCoin, Bitget)
+- Глубокий анализ торговых модулей (PaperTrading, BacktestEngine, RiskManager, GridBot, Scheduler)
+- Глубокий анализ ML/AI модулей (LSTM, XGBoost, SignalEnhancer, RLTradingAgent, OnlineLearningLoop)
+- Полный анализ UI layout (все 8 окон, все разрешения)
+- Полный анализ настроек (settings.json, configToJson, loadConfig)
+- Проверка фьючерсного режима торговли (Leverage через API)
+- Верификация KuCoin API формата candles: подтверждено [time, open, close, high, low, volume] — код корректен
+
+### Verified — Ранее исправленные проблемы (подтверждено v1.7.2)
+
+**Биржи (6 исправлений подтверждены):**
+- ✅ **placeOrder() для Bybit** — полная реализация: POST `/v5/order/create`, JSON body, подпись, обработка ошибок (BybitExchange.cpp:148-196)
+- ✅ **placeOrder() для OKX** — полная реализация: POST `/api/v5/trade/order`, JSON body, подпись, парсинг ordId (OKXExchange.cpp:225-273)
+- ✅ **placeOrder() для KuCoin** — полная реализация: POST `/api/v1/orders`, clientOid, подпись (KuCoinExchange.cpp:207-258)
+- ✅ **placeOrder() для Bitget** — полная реализация: POST `/api/v2/spot/trade/place-order`, JSON body (BitgetExchange.cpp:214-260)
+- ✅ **subscribeKline() для всех 4 бирж** — полная реализация с корректными подписками: Bybit (`kline.{interval}.{symbol}`), OKX (`candle{interval}`), KuCoin (`/market/candles:{symbol}_{interval}`), Bitget (`candle{interval}`)
+- ✅ **KuCoin getKlines()** — формат [time, open, close, high, low, volume] подтверждён через официальную документацию KuCoin API; текущий код корректен (k[1]=open, k[2]=close, k[3]=high, k[4]=low)
+
+**Торговые модули (5 исправлений подтверждены):**
+- ✅ **PaperTrading equity** — исправлен: `posValue += p.quantity * p.currentPrice` (PaperTrading.cpp:124)
+- ✅ **BacktestEngine equity для SHORT** — исправлен: `equity = balance + posQty * (2.0 * entryPrice - price)` (BacktestEngine.cpp:108)
+- ✅ **GridBot profit** — исправлен: `realizedProfit_ += (lvl.price - lvl.buyPrice) * qty` с проверкой quantity (GridBot.cpp:64-70)
+- ✅ **GridLevel struct** — добавлены поля `buyPrice` и `quantity` (GridBot.h:21-22)
+- ✅ **Scheduler callback** — исправлен: `if (job.callback) { try { job.callback(); } ... }` (Scheduler.cpp:127-134)
+
+**ML/AI модули (4 исправления подтверждены):**
+- ✅ **ml/FeatureExtractor division by zero** — проверки: `ema > 0.0 ?`, `hl > 0.0 ?` (FeatureExtractor.cpp:82,87)
+- ✅ **SignalEnhancer нормализация весов** — веса нормализуются до суммы 1.0 (SignalEnhancer.cpp:71-78)
+- ✅ **RLTradingAgent GAE bootstrap** — исправлен: `nextVal = (t + 1 < T) ? values[t + 1] : 0.0f` (RLTradingAgent.cpp:303)
+- ✅ **Bybit rate limiting** — реализован скользящее окно с sleep логикой (BybitExchange.cpp:57-70)
+
+### Known Issues — Обнаруженные оставшиеся проблемы
+
+**Критические (влияют на торговлю):**
+- ❌ **Фьючерсное плечо (Leverage)** — отсутствуют методы `setLeverage()` / `getLeverage()` для установки плеча через API. Leverage отображается только из данных позиций (Binance, OKX). Bybit, KuCoin, Bitget не имеют `getPositionRisk()`. Невозможно задать плечо перед открытием фьючерсной позиции.
+- ❌ **cancelOrder()** — не реализован ни для одной биржи
+
+**Высокие (влияют на корректность):**
+- ❌ **XGBoost memory leak** — `XGBoosterFree(booster_)` не вызывается перед повторным `train()` (XGBoostModel.cpp:36)
+- ❌ **Engine::componentsInitialized_** — тип `bool` вместо `std::atomic<bool>` (Engine.h:95)
+- ❌ **TradeHistory::winRate() race condition** — три раздельных lock в одном вычислении (TradeHistory.cpp:97-100)
+- ❌ **LSTM loss** — `torch::log(out + 1e-9)` вместо `torch::log_softmax()` (LSTMModel.cpp:99)
+- ❌ **ai/FeatureExtractor FVG** — деление на `ma` без проверки > 0 (ai/FeatureExtractor.cpp:254,257)
+
+**Средние (функциональные дефекты):**
+- ❌ **AppGui configToJson()** — не сохраняет фильтры (filterMinVolume/Price/Change) и флаги индикаторов (indEmaEnabled и др.)
+- ❌ **Layout defaults mismatch** — LayoutManager.h: vdPct=0.15, indPct=0.20 vs AppGui.h: layoutVdPct=0.13, layoutIndPct=0.25
+- ❌ **OnlineLearningLoop** — использует текущий state вместо state на момент входа в сделку (OnlineLearningLoop.cpp:131)
+- ❌ **WebhookServer rateLimit_** — map растёт без ограничений (WebhookServer.cpp:33)
+- ❌ **CSVExporter** — нет экранирования запятых/кавычек в полях (CSVExporter.cpp:38-71)
+- ❌ **WebhookServer** — сравнение секрета не constant-time (timing attack)
+- ❌ **NewsFeed::fetch()** — заглушка, данные не получаются (NewsFeed.cpp:46-50)
+- ❌ **FearGreed::fetch()** — заглушка (FearGreed.cpp:32-36)
+- ❌ **TelegramBot::sendMessage()** — заглушка, сообщения не отправляются (TelegramBot.cpp:65-71)
+- ❌ **RiskManager trailing stop** — параметр `highSince` для SHORT конфузен (должен быть `lowestSince`)
+
+### Changed
+- **ANALYSIS_AND_PROMPT.md** — полностью обновлён на основе анализа v1.7.2: 15 ранее исправленных проблем отмечены как Done, обновлён промт для следующего этапа разработки, добавлен анализ фьючерсного плеча (Leverage API), обновлена статистика тестов и покрытия.
+
 ## [1.7.1] - 2026-03-06
 
 ### Fixed
