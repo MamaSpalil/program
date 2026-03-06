@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 1.8.0
+> **Версия:** 1.9.0
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 477 тестов, 473 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v1.8.0:** 7 проблем исправлены: OnlineLearningLoop state cache, NewsFeed API, FearGreed API, TelegramBot API, OrderManagement commission+validation, adaptive price format, RLTradingAgent PPO tuning. Добавлены 14 новых тестов.
+> **Результаты тестирования:** 492 теста, 488 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v1.9.0:** 7 новых проблем найдены и исправлены: Exchange JSON bounds checks (OKX/Bybit/Bitget), PaperTrading commission+validation, Scheduler deadlock fix, BacktestEngine div-by-zero protection, ModelTrainer silent failure fix. Добавлены 15 новых тестов.
 
 ---
 
@@ -41,6 +41,10 @@
 | **NEW** | Exchange | Все 5 бирж | cancelOrder() — отмена ордера через API | ✅ Done (v1.7.3) |
 | **v1.7.4** | Exchange | BinanceExchange.cpp:794 | cancelOrder() использует POST вместо DELETE | ✅ Done (v1.7.4) — httpDelete() добавлен |
 | **v1.7.4** | Exchange | KuCoinExchange.cpp:533 | cancelOrder() использует POST вместо DELETE | ✅ Done (v1.7.4) — httpDelete() добавлен |
+| **v1.9.0** | Exchange | OKXExchange.cpp:220 | getPrice() crash при пустом data array | ✅ Done (v1.9.0) — bounds check |
+| **v1.9.0** | Exchange | BybitExchange.cpp:143 | getPrice() crash при пустом result list | ✅ Done (v1.9.0) — bounds check |
+| **v1.9.0** | Exchange | BitgetExchange.cpp:209 | getPrice() crash при пустом data array | ✅ Done (v1.9.0) — bounds check |
+| **v1.9.0** | Exchange | OKXExchange.cpp:499 | getOrderBook() crash при пустом data array | ✅ Done (v1.9.0) — bounds check |
 
 ### 🟠 ВЫСОКИЕ (влияют на корректность)
 | # | Модуль | Файл:Строка | Проблема | Статус |
@@ -64,6 +68,11 @@
 | **v1.7.4** | Exchange | Bybit getPositionRisk() | std::stod вместо safeStod (crash) | ✅ Done (v1.7.4) |
 | **v1.7.4** | Integration | WebhookServer.cpp:36 | static requestCount не thread-safe | ✅ Done (v1.7.4) — cleanupCounter_ |
 | **v1.7.4** | Backtest | BacktestEngine.cpp:162 | Sharpe ratio: population вместо sample stddev | ✅ Done (v1.7.4) — (n-1) |
+| **v1.9.0** | Trading | PaperTrading.cpp:22-33 | Нет комиссии при open/close позиции | ✅ Done (v1.9.0) — commissionRate_ 0.1% |
+| **v1.9.0** | Trading | PaperTrading.cpp:22 | Нет валидации qty/price (0 или отрицательные) | ✅ Done (v1.9.0) — qty/price > 0 check |
+| **v1.9.0** | Scheduler | Scheduler.cpp:119-137 | Deadlock: callback выполняется внутри mutex | ✅ Done (v1.9.0) — callbacks вне lock |
+| **v1.9.0** | Backtest | BacktestEngine.cpp:156 | Division by zero при нулевой equity | ✅ Done (v1.9.0) — prev > 0 check |
+| **v1.9.0** | ML | ModelTrainer.cpp:59-63 | Обновление lastRetrainTime при пустых данных | ✅ Done (v1.9.0) — не обновляет при failure |
 
 ### 🟡 СРЕДНИЕ (функциональные дефекты)
 | # | Модуль | Файл:Строка | Проблема | Статус |
@@ -95,11 +104,11 @@
 Обязательные методы: `testConnection()`, `getKlines()`, `getPrice()`, `placeOrder()`, `getBalance()`, `subscribeKline()`, `connect()`, `disconnect()`.
 Дополнительные методы: `getPositionRisk()`, `getFuturesBalance()`, `getOpenOrders()`, `getMyTrades()`, `cancelOrder()`, `setLeverage()`, `getLeverage()`.
 
-### 2.2 Статус реализации по биржам (обновлено v1.7.5)
+### 2.2 Статус реализации по биржам (обновлено v1.9.0)
 
 | Функция | Binance | Bybit | OKX | KuCoin | Bitget |
 |---------|---------|-------|-----|--------|--------|
-| getPrice() | ✅ | ✅ | ✅ | ✅ | ✅ |
+| getPrice() | ✅ | ✅ **bounds** | ✅ **bounds** | ✅ | ✅ **bounds** |
 | getKlines() | ✅ | ✅ | ✅ | ✅ | ✅ |
 | getBalance() | ✅ | ✅ | ✅ cashBal | ✅ | ✅ |
 | placeOrder() | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -293,20 +302,20 @@ escapeCsvField() добавлена.
 
 ## 7. АНАЛИЗ ТЕСТОВОГО ПОКРЫТИЯ
 
-### 7.1 Статистика (v1.8.0)
-- **Всего тестов:** 477 (473 pass, 4 skip — LibTorch/XGBoost)
-- **Файлов тестов:** 17
-- **Новых тестов v1.8.0:** 14
-- **Оценка покрытия:** ~42% кода
-- **Время выполнения:** ~14 секунд
+### 7.1 Статистика (v1.9.0)
+- **Всего тестов:** 492 (488 pass, 4 skip — LibTorch/XGBoost)
+- **Файлов тестов:** 15
+- **Новых тестов v1.9.0:** 15
+- **Оценка покрытия:** ~45% кода
+- **Время выполнения:** ~13 секунд
 
 ### 7.2 Критически не протестировано
 | Модуль | Что не тестируется |
 |--------|--------------------|
 | Exchanges | Реальные API вызовы (только NoCrash) |
 | WebSocket | subscribeKline() с реальными данными |
-| PaperTrading | executeBuy/executeSell P&L логика |
-| BacktestEngine | Полный цикл бэктеста |
+| PaperTrading | ~~executeBuy/executeSell P&L логика~~ ✅ Done (v1.9.0) — комиссии и полный цикл |
+| BacktestEngine | ~~Полный цикл бэктеста~~ ✅ Done (v1.9.0) — LONG/SHORT бэктесты |
 | ML (LSTM/XGBoost) | Реальные predictions (4 skip) |
 | GridBot | executeBuy/executeSell уровни |
 | **Futures** | **getFuturesBalance() реальные API** (NoCrash тесты добавлены v1.7.5) |
@@ -317,15 +326,16 @@ escapeCsvField() добавлена.
 ## 8. АНАЛИЗ CHANGELOG
 
 ### Ключевые наблюдения:
-1. **v1.8.0** — 7 исправлений: OnlineLearningLoop state cache, NewsFeed CryptoPanic API, FearGreed alternative.me API, TelegramBot sendMessage+getUpdates, OrderManagement commission, adaptive price format, PPO tuning (entropy/value clip). 14 новых тестов.
-2. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
-3. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
-4. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
-5. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
-6. **v1.7.1** — Windows compilation fixes
-7. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
-8. **Прогресс:** между v1.7.0 и v1.8.0 исправлена 61 проблема
-9. **Остаётся:** 0 открытых критических проблем
+1. **v1.9.0** — 7 исправлений: Exchange JSON bounds checks (OKX/Bybit/Bitget getPrice+getOrderBook), PaperTrading commission+validation, Scheduler deadlock fix, BacktestEngine div-by-zero protection, ModelTrainer silent failure. 15 новых тестов.
+2. **v1.8.0** — 7 исправлений: OnlineLearningLoop state cache, NewsFeed CryptoPanic API, FearGreed alternative.me API, TelegramBot sendMessage+getUpdates, OrderManagement commission, adaptive price format, PPO tuning (entropy/value clip). 14 новых тестов.
+3. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
+4. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
+5. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
+6. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
+7. **v1.7.1** — Windows compilation fixes
+8. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
+9. **Прогресс:** между v1.7.0 и v1.9.0 исправлено 75 проблем
+10. **Остаётся:** 0 открытых критических проблем
 
 ---
 
@@ -333,65 +343,66 @@ escapeCsvField() добавлена.
 
 ---
 
-### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v1.9.0
+### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.0.0
 
 ```
-Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v1.8.0.
+Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v1.9.0.
 Это C++17 программа для алгоритмической торговли криптовалютами с ML (LSTM, XGBoost), RL (PPO),
-5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 477+ тестами на Google Test.
+5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 492+ тестами на Google Test.
 
 КОНТЕКСТ ПРОЕКТА:
 - Репозиторий: /home/runner/work/program/program
 - Основной код: src/ (67 .cpp файлов, 92 .h файлов)
-- Тесты: tests/ (17 файлов, 477 тестов, 473 pass, 4 skip)
+- Тесты: tests/ (15 файлов, 492 теста, 488 pass, 4 skip)
 - Конфиг: config/settings.json, config/profiles.json
 - Сборка: cmake -B build/test -DCMAKE_BUILD_TYPE=Debug && cmake --build build/test -j$(nproc)
 - Запуск тестов: cd build/test && ./crypto_trader_tests --gtest_brief=1
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v1.8.0) ===
+=== СТАТУС ПРОЕКТА (v1.9.0) ===
 
 ВСЕ КРИТИЧЕСКИЕ И ВЫСОКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ (✅ Done — НЕ ТРОГАТЬ):
 - Все 5 бирж: placeOrder, cancelOrder, setLeverage, getLeverage, getPositionRisk, getFuturesBalance
 - Все subscribeKline для всех 5 бирж с корректными подписками
+- Exchange JSON bounds checks: OKX/Bybit/Bitget getPrice() + OKX getOrderBook() — проверка массивов
 - OnlineLearningLoop: state cache + captureStateForTrade + nextState ≠ state + atomic lastTradeTime_
 - NewsFeed: CryptoPanic API, FearGreed: Alternative.me API, TelegramBot: Telegram Bot API
 - OrderManagement: estimateCost с комиссией 0.1%, adaptive price format (%.2f/%.4f/%.6f/%.8f)
 - RLTradingAgent: entropyCoeff=0.02, valueLossClipMax=10.0, PPOConfig::validate() bounds
-- BacktestEngine: equity SHORT, Sharpe ratio (n-1), positionSizePct
-- PaperTrading equity, GridBot profit, Scheduler callback, RiskManager trailing stop
+- BacktestEngine: equity SHORT, Sharpe ratio (n-1), positionSizePct, div-by-zero protection
+- PaperTrading: commission (0.1% open+close), qty/price validation, equity calc
+- Scheduler: callbacks outside mutex (deadlock fix), GridBot profit
+- ModelTrainer: no lastRetrainTime update on empty data, configurable candlesPerDay
 - All FeatureExtractor division-by-zero guards, SignalEnhancer thread-safety
 - WebhookServer: rate limit cleanup, constant-time HMAC comparison, cleanupCounter_
 - AppGui: configToJson/loadConfig (filters + indicators + chart settings), layout defaults
 - CSVExporter: escapeCsvField, TaxReporter: unitCost precision
 - Binance/KuCoin httpDelete, Engine atomic init, TradeHistory thread-safety
 
-=== ЗАДАЧА v1.9.0: УГЛУБЛЕНИЕ И ОПТИМИЗАЦИЯ ===
+=== ЗАДАЧА v2.0.0: РАСШИРЕНИЕ ФУНКЦИОНАЛЬНОСТИ И НАДЁЖНОСТЬ ===
 
-Программа находится в стабильном состоянии. Следующий этап — углубление функциональности,
-повышение тестового покрытия, оптимизация производительности и UX-улучшения.
+Программа стабильна (75 исправлений, 492 теста). Следующий этап — расширение
+функциональности, унификация, повышение тестового покрытия и UX-улучшения.
 
-=== ЭТАП 1: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~42% до ~60%) ===
+=== ЭТАП 1: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~45% до ~65%) ===
 
-1.1. Добавь интеграционные тесты для PaperTrading (executeBuy/executeSell P&L):
-   - Открытие LONG позиции → проверка equity и P&L
-   - Открытие SHORT позиции → проверка equity и P&L
-   - Закрытие позиции → проверка финального P&L
-   - Множественные позиции → проверка aggregate equity
-
-1.2. Добавь тесты для BacktestEngine полного цикла:
-   - Бэктест с LONG стратегией на восходящем тренде → profit > 0
-   - Бэктест с SHORT стратегией на нисходящем тренде → profit > 0
-   - Бэктест на флэтовом рынке → drawdown < threshold
-
-1.3. Добавь тесты для GridBot executeBuy/executeSell:
+1.1. Добавь тесты для GridBot executeBuy/executeSell:
    - Выполнение ордера → обновление уровня
    - Profit tracking → grid levels
 
-1.4. Добавь тесты для WebSocket subscribeKline с mock данными:
+1.2. Добавь тесты для WebSocket subscribeKline с mock данными:
    - Проверка парсинга JSON-сообщений от каждой биржи
    - Проверка callback вызова
+
+1.3. Добавь тесты для DatabaseManager Import/Export:
+   - Проверка записи и чтения данных через все Repository классы
+   - Проверка миграций БД
+   - Проверка целостности данных при Import/Export
+
+1.4. Добавь тесты для TelegramBot команд:
+   - Тестирование обработки реальных команд (/balance, /status, /positions)
+   - Тестирование авторизации (неавторизованный чат → отклонение)
 
 === ЭТАП 2: УНИФИКАЦИЯ ФОРМАТА СИМВОЛОВ ===
 
@@ -418,6 +429,10 @@ escapeCsvField() добавлена.
    - Последние 100 точек equity
    - Линия с градиентом profit/loss
 
+3.4. Добавь Layout Lock toggle в Settings panel:
+   - Чекбокс для блокировки/разблокировки расположения окон
+   - Кнопка Reset Layout в View menu
+
 === ЭТАП 4: ML/AI УЛУЧШЕНИЯ ===
 
 4.1. LSTMModel — добавь learning rate scheduler:
@@ -437,19 +452,35 @@ escapeCsvField() добавлена.
    - Объединение фичей с 1m, 5m, 15m, 1h таймфреймов
    - Взвешенная комбинация для RL agent
 
-=== ЭТАП 5: ПРОИЗВОДИТЕЛЬНОСТЬ ===
+4.5. TelegramBot — реализовать реальные команды:
+   - /balance → реальный баланс с биржи
+   - /status → текущие позиции и P&L
+   - /positions → список открытых позиций
+   - /pnl → сводка прибыли/убытков
+
+=== ЭТАП 5: ПРОИЗВОДИТЕЛЬНОСТЬ И НАДЁЖНОСТЬ ===
 
 5.1. Профилируй горячие пути с помощью perf/flamegraph
 5.2. Оптимизируй FeatureExtractor — pre-allocated буферы, SIMD
 5.3. Оптимизируй chart rendering — batched draw calls
 5.4. Добавь connection pooling для HTTP-запросов к биржам
+5.5. Добавь RAII wrapper для curl_slist* (предотвращение утечек при исключениях)
+5.6. Добавь exponential backoff для повторных попыток HTTP-запросов
+
+=== ЭТАП 6: БЕЗОПАСНОСТЬ ===
+
+6.1. Проверь все API ключи на предмет логирования (не должны логироваться)
+6.2. Добавь HMAC-SHA256 verification для webhook signatures
+6.3. Добавь rate limiting для TelegramBot команд
+6.4. Проверь SQL injection prevention во всех Repository классах
 
 === ПРИОРИТЕТЫ ===
 Приоритет 1 (ТЕСТЫ): Этап 1 — увеличение покрытия
 Приоритет 2 (СИМВОЛЫ): Этап 2 — унификация форматов
 Приоритет 3 (UX): Этап 3 — визуальные улучшения
 Приоритет 4 (ML): Этап 4 — расширение ML функциональности
-Приоритет 5 (PERF): Этап 5 — оптимизация
+Приоритет 5 (PERF): Этап 5 — оптимизация и надёжность
+Приоритет 6 (SECURITY): Этап 6 — безопасность
 
 === ОГРАНИЧЕНИЯ ===
 - НЕ меняй архитектуру проекта
@@ -465,29 +496,39 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v1.8.0)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v1.9.0)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v1.8.0) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v1.9.0) |
 |-----------|--------------|--------------|-----------|---------------|
-| Биржи | 17 | 17 | 0 | 0 |
-| Торговые модули | 11 | 11 | 0 | +1 (OrderManagement commission) |
-| ML/AI | 18 | 18 | 0 | +4 (state cache, PPO validate, entropy tuning, value clip) |
-| UI/Настройки | 12 | 12 | 0 | +1 (adaptive price format) |
-| Интеграции | 10 | 10 | 0 | +3 (NewsFeed, FearGreed, TelegramBot API) |
-| **ИТОГО** | **68** | **68** | **0** | **+7 новых исправлений (v1.8.0), +2 новых улучшений** |
+| Биржи | 21 | 21 | 0 | +4 (OKX/Bybit/Bitget getPrice+getOrderBook bounds) |
+| Торговые модули | 14 | 14 | 0 | +3 (PaperTrading commission, validation, Scheduler deadlock) |
+| ML/AI | 19 | 19 | 0 | +1 (ModelTrainer silent failure fix) |
+| UI/Настройки | 12 | 12 | 0 | 0 |
+| Интеграции | 10 | 10 | 0 | 0 |
+| Backtest | 4 | 4 | 0 | +1 (BacktestEngine Sharpe div-by-zero) |
+| **ИТОГО** | **75** | **75** | **0** | **+7 новых исправлений (v1.9.0)** |
 
 ### Прогресс исправлений:
-- **v1.7.5 → v1.8.0:** 7 новых исправлений (всего 54→61) + 7 новых улучшений
-- **Тесты:** 477 (473 pass, 4 skip) — +14 новых тестов
-- **Общий статус:** 61 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
+- **v1.8.0 → v1.9.0:** 7 новых исправлений (всего 68→75) + 15 новых тестов
+- **Тесты:** 492 (488 pass, 4 skip) — +15 новых тестов
+- **Общий статус:** 75 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
 
-### Направления развития (v1.9.0):
-1. Увеличение тестового покрытия (42% → 60%)
+### Направления развития (v2.0.0):
+1. Увеличение тестового покрытия (45% → 65%)
 2. Унификация формата символов (SymbolFormatter)
-3. UX: drag-and-drop ордеров, order book heatmap, equity curve
+3. UX: drag-and-drop ордеров, order book heatmap, equity curve, layout lock
 4. ML: LR scheduler, feature importance, multi-timeframe features
-5. Производительность: profiling, SIMD, connection pooling
+5. Производительность: profiling, SIMD, connection pooling, RAII curl
+6. Безопасность: HMAC webhook verification, SQL injection audit
+
+### Обнаруженные проблемы для будущего исправления:
+1. **TelegramBot** — команды (/balance, /status, /positions, /pnl) возвращают stub-ответы
+2. **XGBoostModel/LSTMModel** — нет RAII wrapper для DMatrix/booster (утечка при исключениях)
+3. **OnlineLearningLoop** — все сделки в batch получают одинаковый nextState (текущее состояние рынка)
+4. **BacktestEngine** — нет поддержки leverage и slippage в бэктесте
+5. **UI** — нет layout lock toggle и reset layout кнопки в интерфейсе
+6. **Curl headers** — нет RAII wrapper (утечка при исключениях в HTTP-запросах)
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v1.8.0, включая все 67 исходных файлов, 17 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 477 тестов подтверждены. Все 61 найденные проблемы исправлены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v1.9.0, включая все 67 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 492 тестов подтверждены. Все 75 найденных проблем исправлены.*

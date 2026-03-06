@@ -5,6 +5,64 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Exchange — Безопасность JSON-парсинга (3 биржи)
+- **OKXExchange.cpp getPrice()** — добавлена проверка `json["data"]` на наличие, тип array и непустоту перед доступом к `[0]`. Ранее при пустом ответе API происходил segfault/exception.
+- **OKXExchange.cpp getOrderBook()** — добавлена проверка `json["data"]` перед доступом к `[0]`. Логирование предупреждения при пустом массиве.
+- **BybitExchange.cpp getPrice()** — добавлена проверка `json["result"]["list"]` на наличие, тип array и непустоту. Предотвращён crash при пустом ответе API.
+- **BitgetExchange.cpp getPrice()** — добавлена проверка `json["data"]` перед доступом к `[0]`. Предотвращён crash при пустом ответе API.
+
+#### Этап 2: PaperTrading — Комиссии и валидация
+- **PaperTrading.h** — добавлены:
+  - `commissionRate_{0.001}` (0.1% default taker fee)
+  - `setCommissionRate(double)` / `getCommissionRate()` для настройки ставки комиссии
+- **PaperTrading.cpp openPosition()** — теперь:
+  - Валидация `qty > 0` и `price > 0` перед открытием позиции (отклоняет нулевые/отрицательные значения)
+  - Расчёт комиссии: `commission = cost * commissionRate_`
+  - Баланс уменьшается на `cost + commission` вместо только `cost`
+  - Проверка баланса включает комиссию: `cost + commission > balance`
+- **PaperTrading.cpp closePosition()** — теперь:
+  - Комиссия на закрытие: `commission = exitValue * commissionRate_`
+  - PnL уменьшается на комиссию закрытия: `pnl -= commission`
+  - Баланс увеличивается на `exitValue - commission`
+
+#### Этап 3: Scheduler — Устранение deadlock
+- **Scheduler.cpp loop()** — переработан для предотвращения deadlock:
+  - Callbacks собираются в вектор `pendingCallbacks` внутри блокировки мьютекса
+  - Выполнение callbacks происходит **после** освобождения мьютекса
+  - Ранее callback выполнялся внутри `lock_guard`, что приводило к deadlock при обращении к Scheduler из callback
+  - Try-catch для каждого callback сохранён
+
+#### Этап 4: BacktestEngine — Защита от деления на ноль
+- **BacktestEngine.cpp computeMetrics()** — добавлена проверка `prev > 0` в цикле расчёта returns для Sharpe ratio. Пропуск шагов с нулевой/отрицательной equity предотвращает деление на ноль.
+
+#### Этап 5: ModelTrainer — Корректная обработка пустых данных
+- **ModelTrainer.cpp retrain()** — при отсутствии данных для обучения:
+  - Больше **не обновляет** `lastRetrainTime_` (ранее обновлял, блокируя повторные попытки на 24 часа)
+  - Уровень логирования повышен с `debug` до `warn` для видимости проблемы
+- **ModelTrainer.h** — добавлен публичный метод `getLastRetrainTime()` для тестирования и мониторинга
+
+### Added
+
+#### Этап 6: Тестирование v1.9.0 (15 новых тестов)
+- **test_full_system.cpp** — 15 новых тестов:
+  - `PaperTradingV190` (7): CommissionDeductedOnOpen — проверка комиссии при открытии, CommissionDeductedOnClose — проверка комиссии при закрытии, CustomCommissionRate — настраиваемая ставка, ShortPositionPnLWithCommission — SHORT с комиссией, RejectInvalidQtyPrice — отклонение невалидных параметров, MultipleTradeCycle — полный цикл нескольких сделок, DrawdownCalculation — проверка расчёта drawdown
+  - `ExchangeSafetyV190` (3): OKXGetPriceEmptyData — OKX не падает при пустом ответе, BybitGetPriceEmptyData — Bybit не падает, BitgetGetPriceEmptyData — Bitget не падает
+  - `BacktestV190` (3): SharpeRatioZeroEquity — нет crash при нулевой equity, LongTradeProfitable — бэктест LONG на восходящем тренде, ShortTradeProfitable — бэктест SHORT на нисходящем тренде
+  - `SchedulerV190` (1): CallbackOutsideMutex — проверка что job добавляется и callback не вызывает deadlock
+  - `ModelTrainerV190` (1): RetrainNoDataDoesNotUpdateTime — lastRetrainTime_ не обновляется при пустых данных
+- **Обновлены тесты:**
+  - `PaperTrading.OpenPosition` — обновлён для комиссии 0.1%
+  - `PaperTrading.OpenClosePosition` — обновлён для комиссии 0.1%
+- **Итого тестов:** 492 (488 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v1.9.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v1.9.0: 7 новых проблем найдены и исправлены, обновлён промт для следующего этапа v2.0.0.
+
 ## [1.8.0] - 2026-03-06
 
 ### Fixed
