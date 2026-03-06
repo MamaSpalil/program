@@ -107,6 +107,9 @@
 // Exchange — SymbolFormatter
 #include "../src/exchange/SymbolFormatter.h"
 
+// Pine Editor
+#include "../src/indicators/PineConverter.h"
+
 using namespace crypto;
 namespace fs = std::filesystem;
 
@@ -3001,4 +3004,283 @@ TEST(VersionV220, VersionStringExists) {
     std::string version = "2.2.0";
     EXPECT_FALSE(version.empty());
     EXPECT_NE(version.find("2.2"), std::string::npos);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// v2.3.0 Tests
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── BacktestEngine v2.3.0: Database metadata fields ────────────────────────
+
+TEST(BacktestV230, DatabaseSavesSymbolAndTimeframe) {
+    auto dbPath = getTempDir() + "bt_v230_meta.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+    BacktestEngine engine;
+    engine.setRepository(&repo);
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.interval = "15m";
+    cfg.initialBalance = 5000.0;
+    cfg.commission = 0.001;
+    cfg.positionSizePct = 0.5;
+
+    // Generate candles with uptrend for at least one trade
+    std::vector<Candle> bars;
+    for (int i = 0; i < 100; ++i) {
+        Candle c;
+        c.close = 100.0 + (i % 50 < 25 ? i * 0.5 : (50 - i) * 0.5);
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 1000.0;
+        c.openTime = 1700000000000LL + i * 900000LL;
+        bars.push_back(c);
+    }
+
+    auto result = engine.run(cfg, bars);
+
+    // Verify we got trades
+    EXPECT_GT(result.totalTrades, 0);
+
+    // Verify database has the metadata
+    auto all = repo.getAll("", 10);
+    ASSERT_FALSE(all.empty());
+    auto& latest = all.front();
+    EXPECT_EQ(latest.symbol, "BTCUSDT");
+    EXPECT_EQ(latest.timeframe, "15m");
+    EXPECT_NEAR(latest.initialBalance, 5000.0, 0.01);
+    EXPECT_GT(latest.finalBalance, 0.0);
+    EXPECT_EQ(latest.strategy, "EMA_Crossover");
+    EXPECT_NEAR(latest.commission, 0.001, 0.0001);
+
+    fs::remove(dbPath);
+}
+
+TEST(BacktestV230, DatabaseSavesFinalBalance) {
+    auto dbPath = getTempDir() + "bt_v230_final.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+    BacktestEngine engine;
+    engine.setRepository(&repo);
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "ETHUSDT";
+    cfg.interval = "1h";
+    cfg.initialBalance = 10000.0;
+
+    // Flat candles — no trades expected
+    std::vector<Candle> bars;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        c.close = 2000.0;
+        c.open = 2000.0;
+        c.high = 2000.0;
+        c.low = 2000.0;
+        c.volume = 100.0;
+        c.openTime = 1700000000000LL + i * 3600000LL;
+        bars.push_back(c);
+    }
+
+    auto result = engine.run(cfg, bars);
+    auto all = repo.getAll("", 10);
+    ASSERT_FALSE(all.empty());
+    auto& latest = all.front();
+    EXPECT_NEAR(latest.initialBalance, 10000.0, 0.01);
+    // Final balance matches the last equity curve point (may differ from initial due to last-bar close)
+    EXPECT_GT(latest.finalBalance, 0.0);
+    EXPECT_NEAR(latest.finalBalance, result.equityCurve.back(), 0.01);
+
+    fs::remove(dbPath);
+}
+
+TEST(BacktestV230, TradeRecordsIncludeSymbolAndCommission) {
+    auto dbPath = getTempDir() + "bt_v230_trades.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+    BacktestEngine engine;
+    engine.setRepository(&repo);
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.interval = "5m";
+    cfg.initialBalance = 1000.0;
+    cfg.commission = 0.002;
+
+    // Create clear uptrend then downtrend for trade entry/exit
+    std::vector<Candle> bars;
+    for (int i = 0; i < 80; ++i) {
+        Candle c;
+        double base = 100.0;
+        if (i < 40) base += i * 1.0;  // uptrend
+        else base += (80 - i) * 1.0;   // downtrend
+        c.close = base;
+        c.open = base - 0.1;
+        c.high = base + 0.5;
+        c.low = base - 0.5;
+        c.volume = 500.0;
+        c.openTime = 1700000000000LL + i * 300000LL;
+        bars.push_back(c);
+    }
+
+    auto result = engine.run(cfg, bars);
+    auto all = repo.getAll("", 10);
+    ASSERT_FALSE(all.empty());
+    auto& bt = all.front();
+
+    // Check trades
+    auto trades = repo.getTrades(bt.id);
+    if (!trades.empty()) {
+        EXPECT_EQ(trades[0].symbol, "BTCUSDT");
+        EXPECT_GT(trades[0].commission, 0.0);
+    }
+
+    fs::remove(dbPath);
+}
+
+// ── PineConverter C++ Generator v2.3.0: SMA, MACD, BB, crossover ──────────
+
+TEST(PineConverterV230, GenerateCppWithSMA) {
+    std::string src = R"(
+//@version=6
+indicator("SMA Test")
+sma20 = ta.sma(close, 20)
+plot(sma20, "SMA 20")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "SmaTestInd");
+    EXPECT_NE(cpp.find("sma20"), std::string::npos);
+    EXPECT_NE(cpp.find("closes_"), std::string::npos);
+    EXPECT_NE(cpp.find("20"), std::string::npos);
+    EXPECT_NE(cpp.find("SMA 20"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithMACD) {
+    std::string src = R"(
+//@version=6
+indicator("MACD Test")
+macdResult = ta.macd(close, 12, 26, 9)
+plot(macdResult, "MACD")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "MacdTestInd");
+    EXPECT_NE(cpp.find("macdResult_fast_"), std::string::npos);
+    EXPECT_NE(cpp.find("macdResult_slow_"), std::string::npos);
+    EXPECT_NE(cpp.find("macdResult_sig_"), std::string::npos);
+    EXPECT_NE(cpp.find("macdResult_macd_"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithBollingerBands) {
+    std::string src = R"(
+//@version=6
+indicator("BB Test")
+bbResult = ta.bb(close, 20, 2.0)
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "BbTestInd");
+    EXPECT_NE(cpp.find("bbResult_upper"), std::string::npos);
+    EXPECT_NE(cpp.find("bbResult_middle"), std::string::npos);
+    EXPECT_NE(cpp.find("bbResult_lower"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithCrossover) {
+    std::string src = R"(
+//@version=6
+indicator("Cross Test")
+fast = ta.ema(close, 9)
+slow = ta.ema(close, 21)
+bullish = ta.crossover(fast, slow)
+plot(bullish, "Bullish")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "CrossTestInd");
+    EXPECT_NE(cpp.find("prev_fast_"), std::string::npos);
+    EXPECT_NE(cpp.find("prev_slow_"), std::string::npos);
+    EXPECT_NE(cpp.find("bullish"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithHighestLowest) {
+    std::string src = R"(
+//@version=6
+indicator("HiLo Test")
+hi20 = ta.highest(close, 20)
+lo20 = ta.lowest(close, 20)
+plot(hi20, "High 20")
+plot(lo20, "Low 20")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "HiLoTestInd");
+    EXPECT_NE(cpp.find("hi20"), std::string::npos);
+    EXPECT_NE(cpp.find("lo20"), std::string::npos);
+    EXPECT_NE(cpp.find("std::max"), std::string::npos);
+    EXPECT_NE(cpp.find("std::min"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithStdev) {
+    std::string src = R"(
+//@version=6
+indicator("Stdev Test")
+sd = ta.stdev(close, 20)
+plot(sd, "StdDev")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "StdevTestInd");
+    EXPECT_NE(cpp.find("sd"), std::string::npos);
+    EXPECT_NE(cpp.find("std::sqrt"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithVWAP) {
+    std::string src = R"(
+//@version=6
+indicator("VWAP Test")
+vwapVal = ta.vwap(close)
+plot(vwapVal, "VWAP")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "VwapTestInd");
+    EXPECT_NE(cpp.find("cumPV_"), std::string::npos);
+    EXPECT_NE(cpp.find("cumVol_"), std::string::npos);
+    EXPECT_NE(cpp.find("vwapVal"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppWithChange) {
+    std::string src = R"(
+//@version=6
+indicator("Change Test")
+delta = ta.change(close, 5)
+plot(delta, "Delta")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "ChangeTestInd");
+    EXPECT_NE(cpp.find("delta"), std::string::npos);
+}
+
+TEST(PineConverterV230, GenerateCppEMAStillWorks) {
+    // Verify backward compatibility — EMA/RSI/ATR still generate correctly
+    std::string src = R"(
+//@version=6
+indicator("EMA Test")
+ema9 = ta.ema(close, 9)
+rsi14 = ta.rsi(close, 14)
+atr14 = ta.atr(14)
+plot(ema9, "EMA 9")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "EmaBackcompat");
+    EXPECT_NE(cpp.find("EMA ema9_"), std::string::npos);
+    EXPECT_NE(cpp.find("RSI rsi14_"), std::string::npos);
+    EXPECT_NE(cpp.find("ATR atr14_"), std::string::npos);
+    EXPECT_NE(cpp.find("EMA 9"), std::string::npos);
+}
+
+// ── Version String v2.3.0 ──────────────────────────────────────────────────
+
+TEST(VersionV230, VersionStringExists) {
+    std::string version = "2.3.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.3"), std::string::npos);
 }

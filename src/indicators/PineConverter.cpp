@@ -1078,7 +1078,8 @@ std::string PineConverter::generateCpp(const PineScript& script,
         << "#include \"RSI.h\"\n"
         << "#include \"ATR.h\"\n"
         << "#include \"PineScriptIndicator.h\"\n"
-        << "#include <map>\n#include <string>\n#include <cmath>\n\n"
+        << "#include <map>\n#include <string>\n#include <cmath>\n"
+        << "#include <deque>\n#include <numeric>\n#include <algorithm>\n\n"
         << "namespace crypto {\n\n"
         << "class " << className << " {\n"
         << "public:\n";
@@ -1093,6 +1094,20 @@ std::string PineConverter::generateCpp(const PineScript& script,
     struct VarInfo { std::string name; double defaultVal; };
     std::vector<VarInfo> simpleVars;
 
+    // Collect SMA / crossover / crossunder / highest / lowest / stdev / change / vwap / macd / bb calls
+    struct SmaInfo { std::string key; int period; };
+    std::vector<SmaInfo> smaInfos;
+    struct CrossInfo { std::string key; std::string srcA; std::string srcB; bool isOver; };
+    std::vector<CrossInfo> crossInfos;
+    struct SeriesFuncInfo { std::string key; std::string func; int period; };
+    std::vector<SeriesFuncInfo> seriesFuncs; // highest, lowest, stdev, change
+    struct MacdInfo { std::string key; int fast; int slow; int signal; };
+    std::vector<MacdInfo> macdInfos;
+    struct BbInfo { std::string key; int period; double stddev; };
+    std::vector<BbInfo> bbInfos;
+    bool needsVwap = false;
+    std::string vwapKey;
+
     for (auto& stmt : script.statements) {
         if (stmt.kind == PineStmt::Kind::ASSIGN ||
             stmt.kind == PineStmt::Kind::VAR_DECL) {
@@ -1105,8 +1120,44 @@ std::string PineConverter::generateCpp(const PineScript& script,
                     period = static_cast<int>(stmt.expr->children[0]->numVal);
 
                 if (fn == "ta.ema") inds.push_back({"EMA", stmt.name, period});
-                if (fn == "ta.rsi") inds.push_back({"RSI", stmt.name, period});
-                if (fn == "ta.atr") inds.push_back({"ATR", stmt.name, period});
+                else if (fn == "ta.rsi") inds.push_back({"RSI", stmt.name, period});
+                else if (fn == "ta.atr") inds.push_back({"ATR", stmt.name, period});
+                else if (fn == "ta.sma") smaInfos.push_back({stmt.name, period});
+                else if (fn == "ta.crossover" && stmt.expr->children.size() >= 2) {
+                    std::string a = stmt.expr->children[0]->strVal;
+                    std::string b = stmt.expr->children[1]->strVal;
+                    crossInfos.push_back({stmt.name, a, b, true});
+                }
+                else if (fn == "ta.crossunder" && stmt.expr->children.size() >= 2) {
+                    std::string a = stmt.expr->children[0]->strVal;
+                    std::string b = stmt.expr->children[1]->strVal;
+                    crossInfos.push_back({stmt.name, a, b, false});
+                }
+                else if (fn == "ta.highest" || fn == "ta.lowest" ||
+                         fn == "ta.stdev" || fn == "ta.change") {
+                    seriesFuncs.push_back({stmt.name, fn, period});
+                }
+                else if (fn == "ta.macd" && stmt.expr->children.size() >= 3) {
+                    int f = static_cast<int>(stmt.expr->children[0]->numVal);
+                    int s = static_cast<int>(stmt.expr->children[1]->numVal);
+                    int sig = static_cast<int>(stmt.expr->children[2]->numVal);
+                    if (f <= 0) f = 12;
+                    if (s <= 0) s = 26;
+                    if (sig <= 0) sig = 9;
+                    macdInfos.push_back({stmt.name, f, s, sig});
+                }
+                else if (fn == "ta.bb" && stmt.expr->children.size() >= 2) {
+                    int p = static_cast<int>(stmt.expr->children[0]->numVal);
+                    double sd = stmt.expr->children.size() >= 3
+                                ? stmt.expr->children[2]->numVal : 2.0;
+                    if (p <= 0) p = 20;
+                    if (sd <= 0.0) sd = 2.0;
+                    bbInfos.push_back({stmt.name, p, sd});
+                }
+                else if (fn == "ta.vwap") {
+                    needsVwap = true;
+                    vwapKey = stmt.name;
+                }
             } else if (stmt.expr && stmt.expr->kind == PineExpr::Kind::LITERAL_NUM) {
                 simpleVars.push_back({stmt.name, stmt.expr->numVal});
             }
@@ -1124,12 +1175,32 @@ std::string PineConverter::generateCpp(const PineScript& script,
         }
     }
 
+    // Collect all known variable names for plot resolution
+    auto isKnownVar = [&](const std::string& name) -> bool {
+        for (auto& ind : inds) if (ind.key == name) return true;
+        for (auto& sv : simpleVars) if (sv.name == name) return true;
+        for (auto& s : smaInfos) if (s.key == name) return true;
+        for (auto& c : crossInfos) if (c.key == name) return true;
+        for (auto& sf : seriesFuncs) if (sf.key == name) return true;
+        for (auto& m : macdInfos) if (m.key == name) return true;
+        for (auto& b : bbInfos) if (b.key == name) return true;
+        if (needsVwap && vwapKey == name) return true;
+        return false;
+    };
+
     // Constructor
     out << "    " << className << "()\n        : ";
     bool first = true;
     for (auto& ind : inds) {
         if (!first) out << ", ";
         out << ind.key << "_(" << ind.period << ")";
+        first = false;
+    }
+    for (auto& m : macdInfos) {
+        if (!first) out << ", ";
+        out << m.key << "_fast_(" << m.fast << "), "
+            << m.key << "_slow_(" << m.slow << "), "
+            << m.key << "_sig_(" << m.signal << ")";
         first = false;
     }
     if (first) out << "barIndex_(0)";
@@ -1139,36 +1210,130 @@ std::string PineConverter::generateCpp(const PineScript& script,
     // Update method — reads candle data and computes indicator values
     out << "    /// Update indicator with new candle bar data\n"
         << "    void update(const Candle& c) {\n"
-        << "        ++barIndex_;\n";
+        << "        ++barIndex_;\n"
+        << "        closes_.push_back(c.close);\n"
+        << "        if (closes_.size() > 1000) closes_.pop_front();\n";
 
     for (auto& ind : inds) {
         if (ind.type == "ATR")
             out << "        " << ind.key << "_.update(c);\n";
-        else
+        else if (ind.type == "RSI") {
+            out << "        { Candle rc; rc.close = c.close; "
+                << ind.key << "_.update(rc); }\n";
+        } else
             out << "        " << ind.key << "_.updateValue(c.close);\n";
     }
+    // MACD: update fast/slow EMAs, compute macd/signal/histogram
+    for (auto& m : macdInfos) {
+        out << "        " << m.key << "_fast_.updateValue(c.close);\n"
+            << "        " << m.key << "_slow_.updateValue(c.close);\n"
+            << "        if (" << m.key << "_fast_.ready() && " << m.key << "_slow_.ready()) {\n"
+            << "            double macdLine = " << m.key << "_fast_.value() - " << m.key << "_slow_.value();\n"
+            << "            " << m.key << "_sig_.updateValue(macdLine);\n"
+            << "            " << m.key << "_macd_ = macdLine;\n"
+            << "            " << m.key << "_signal_ = " << m.key << "_sig_.ready() ? " << m.key << "_sig_.value() : 0.0;\n"
+            << "            " << m.key << "_hist_ = macdLine - " << m.key << "_signal_;\n"
+            << "        }\n";
+    }
     out << "\n";
+
+    // Read indicator values
     for (auto& ind : inds)
         out << "        double " << ind.key << " = " << ind.key << "_.value();\n";
     for (auto& sv : simpleVars)
         out << "        double " << sv.name << " = " << sv.defaultVal << ";\n";
+
+    // SMA computation
+    for (auto& s : smaInfos) {
+        out << "        double " << s.key << " = 0.0;\n"
+            << "        if (static_cast<int>(closes_.size()) >= " << s.period << ") {\n"
+            << "            double sum = 0.0;\n"
+            << "            int n = static_cast<int>(closes_.size());\n"
+            << "            for (int i = n - " << s.period << "; i < n; ++i) sum += closes_[static_cast<size_t>(i)];\n"
+            << "            " << s.key << " = sum / " << s.period << ".0;\n"
+            << "        } else { " << s.key << " = c.close; }\n";
+    }
+
+    // Crossover/Crossunder
+    for (auto& cr : crossInfos) {
+        std::string prevA = "prev_" + cr.srcA + "_";
+        std::string prevB = "prev_" + cr.srcB + "_";
+        if (cr.isOver) {
+            out << "        double " << cr.key << " = (" << prevA << " <= " << prevB
+                << " && " << cr.srcA << " > " << cr.srcB << ") ? 1.0 : 0.0;\n";
+        } else {
+            out << "        double " << cr.key << " = (" << prevA << " >= " << prevB
+                << " && " << cr.srcA << " < " << cr.srcB << ") ? 1.0 : 0.0;\n";
+        }
+    }
+
+    // Series functions: highest, lowest, stdev, change
+    for (auto& sf : seriesFuncs) {
+        if (sf.func == "ta.highest") {
+            out << "        double " << sf.key << " = c.close;\n"
+                << "        { int n = static_cast<int>(closes_.size()); int start = std::max(0, n - " << sf.period << ");\n"
+                << "          for (int i = start; i < n; ++i) " << sf.key << " = std::max(" << sf.key << ", closes_[static_cast<size_t>(i)]); }\n";
+        } else if (sf.func == "ta.lowest") {
+            out << "        double " << sf.key << " = c.close;\n"
+                << "        { int n = static_cast<int>(closes_.size()); int start = std::max(0, n - " << sf.period << ");\n"
+                << "          for (int i = start; i < n; ++i) " << sf.key << " = std::min(" << sf.key << ", closes_[static_cast<size_t>(i)]); }\n";
+        } else if (sf.func == "ta.stdev") {
+            out << "        double " << sf.key << " = 0.0;\n"
+                << "        { int n = static_cast<int>(closes_.size());\n"
+                << "          if (n >= " << sf.period << ") {\n"
+                << "            double sum = 0.0; for (int i = n - " << sf.period << "; i < n; ++i) sum += closes_[static_cast<size_t>(i)];\n"
+                << "            double mean = sum / " << sf.period << ".0; double var = 0.0;\n"
+                << "            for (int i = n - " << sf.period << "; i < n; ++i) { double d = closes_[static_cast<size_t>(i)] - mean; var += d*d; }\n"
+                << "            " << sf.key << " = std::sqrt(var / " << sf.period << ".0);\n"
+                << "          } }\n";
+        } else if (sf.func == "ta.change") {
+            int len = (sf.period > 0) ? sf.period : 1;
+            out << "        double " << sf.key << " = 0.0;\n"
+                << "        { int n = static_cast<int>(closes_.size()); int idx = n - 1 - " << len << ";\n"
+                << "          if (idx >= 0) " << sf.key << " = c.close - closes_[static_cast<size_t>(idx)]; }\n";
+        }
+    }
+
+    // Bollinger Bands
+    for (auto& b : bbInfos) {
+        out << "        double " << b.key << "_upper = 0.0, " << b.key << "_middle = 0.0, " << b.key << "_lower = 0.0;\n"
+            << "        { int n = static_cast<int>(closes_.size());\n"
+            << "          if (n >= " << b.period << ") {\n"
+            << "            double sum = 0.0; for (int i = n - " << b.period << "; i < n; ++i) sum += closes_[static_cast<size_t>(i)];\n"
+            << "            double mean = sum / " << b.period << ".0; double var = 0.0;\n"
+            << "            for (int i = n - " << b.period << "; i < n; ++i) { double d = closes_[static_cast<size_t>(i)] - mean; var += d*d; }\n"
+            << "            double sd = std::sqrt(var / " << b.period << ".0);\n"
+            << "            " << b.key << "_middle = mean; " << b.key << "_upper = mean + " << b.stddev << " * sd;\n"
+            << "            " << b.key << "_lower = mean - " << b.stddev << " * sd;\n"
+            << "          } }\n";
+    }
+
+    // MACD value assignment
+    for (auto& m : macdInfos) {
+        out << "        double " << m.key << "_macd = " << m.key << "_macd_;\n"
+            << "        double " << m.key << "_signal = " << m.key << "_signal_;\n"
+            << "        double " << m.key << "_hist = " << m.key << "_hist_;\n";
+    }
+
+    // VWAP
+    if (needsVwap) {
+        out << "        cumPV_ += c.close * c.volume; cumVol_ += c.volume;\n"
+            << "        double " << vwapKey << " = (cumVol_ > 0.0) ? cumPV_ / cumVol_ : c.close;\n";
+    }
+
     out << "        (void)barIndex_; // bar count available for threshold checks\n";
+
+    // Save previous values for crossover/crossunder detection
+    for (auto& cr : crossInfos) {
+        out << "        prev_" << cr.srcA << "_ = " << cr.srcA << ";\n"
+            << "        prev_" << cr.srcB << "_ = " << cr.srcB << ";\n";
+    }
 
     // Wire plots to their source variables
     out << "\n        plots_.clear();\n";
     for (auto& p : plotInfos) {
         if (!p.sourceVar.empty()) {
-            // Check if the source variable is a known indicator or simple var
-            bool found = false;
-            for (auto& ind : inds) {
-                if (ind.key == p.sourceVar) { found = true; break; }
-            }
-            if (!found) {
-                for (auto& sv : simpleVars) {
-                    if (sv.name == p.sourceVar) { found = true; break; }
-                }
-            }
-            if (found)
+            if (isKnownVar(p.sourceVar))
                 out << "        plots_[\"" << p.title << "\"] = " << p.sourceVar << ";\n";
             else
                 out << "        plots_[\"" << p.title << "\"] = 0.0; // source: " << p.sourceVar << "\n";
@@ -1188,7 +1353,25 @@ std::string PineConverter::generateCpp(const PineScript& script,
     out << "private:\n";
     for (auto& ind : inds)
         out << "    " << ind.type << " " << ind.key << "_;\n";
-    out << "    std::map<std::string, double> plots_;\n"
+    for (auto& m : macdInfos) {
+        out << "    EMA " << m.key << "_fast_;\n"
+            << "    EMA " << m.key << "_slow_;\n"
+            << "    EMA " << m.key << "_sig_;\n"
+            << "    double " << m.key << "_macd_{0.0};\n"
+            << "    double " << m.key << "_signal_{0.0};\n"
+            << "    double " << m.key << "_hist_{0.0};\n";
+    }
+    // Previous values for crossover/crossunder
+    for (auto& cr : crossInfos) {
+        out << "    double prev_" << cr.srcA << "_{0.0};\n"
+            << "    double prev_" << cr.srcB << "_{0.0};\n";
+    }
+    if (needsVwap) {
+        out << "    double cumPV_{0.0};\n"
+            << "    double cumVol_{0.0};\n";
+    }
+    out << "    std::deque<double> closes_;\n"
+        << "    std::map<std::string, double> plots_;\n"
         << "    int barIndex_{0};\n";
     out << "};\n\n} // namespace crypto\n";
 
