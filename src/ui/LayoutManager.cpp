@@ -26,29 +26,32 @@ void LayoutManager::recalculate(float screenW, float screenH,
     const bool  showLeft = showPairList || showVolumeDelta;
     const float Wleft  = showLeft      ? 200.0f : 0.0f;
     const float Wright = showUserPanel ? 290.0f : 0.0f;
-    // Logs height: percentage-based with minimum constraint (min 40px)
-    const float Hlogs  = showLogs
-        ? std::max(40.0f, std::floor(Hvp * logPct_))
-        : 0.0f;
 
-    // Gaps between columns and rows
-    const float gapLR  = (showLeft ? gap : 0.0f);    // gap between left column and center
-    const float gapRC  = (showUserPanel ? gap : 0.0f); // gap between center and right column
-    const float gapLog = (showLogs ? gap : 0.0f);     // gap above logs
+    // Gaps between columns
+    const float gapLR  = (showLeft ? gap : 0.0f);      // gap between left column and center
+    const float gapRC  = (showUserPanel ? gap : 0.0f);  // gap between center and right column
 
-    // Dynamic center column dimensions (account for gaps)
+    // Full content area height (below toolbar + filters)
+    const float Hcontent = std::max(0.0f, Hvp - Htop - Hfilters);
+
+    // Dynamic center column width (account for column gaps)
     const float Wcenter = std::max(0.0f, Wvp - Wleft - Wright - gapLR - gapRC);
-    const float Hcenter = std::max(0.0f, Hvp - Htop - Hfilters - Hlogs - gapLog);
 
     // Left column height distribution: Pair List (top) + Volume Delta (bottom)
+    // Left column spans full content height
     const float gapVD = (showVolumeDelta && showPairList && showLeft) ? gap : 0.0f;
-    const float Hvd = (showVolumeDelta && showLeft) ? std::floor(Hcenter * vdPct_) : 0.0f;
-    const float HpairList = std::max(0.0f, Hcenter - Hvd - gapVD);
+    const float Hvd = (showVolumeDelta && showLeft) ? std::floor(Hcontent * vdPct_) : 0.0f;
+    const float HpairList = std::max(0.0f, Hcontent - Hvd - gapVD);
 
-    // Center column height distribution: Market Data (top) + Indicators (bottom)
-    const float gapInd = showIndicators ? gap : 0.0f;
-    const float Hind = showIndicators ? std::floor(Hcenter * indPct_) : 0.0f;
-    const float Hmarket = std::max(0.0f, Hcenter - Hind - gapInd);
+    // Center column height distribution (v2.7.0 layout):
+    //   Indicators (top) → Market Data (middle) → Logs (bottom)
+    const float gapInd  = showIndicators ? gap : 0.0f;  // gap below indicators
+    const float gapLog  = showLogs       ? gap : 0.0f;  // gap above logs
+    const float Hind    = showIndicators ? std::floor(Hcontent * indPct_) : 0.0f;
+    const float Hlogs   = showLogs
+        ? std::max(40.0f, std::floor(Hcontent * logPct_))
+        : 0.0f;
+    const float Hmarket = std::max(0.0f, Hcontent - Hind - Hlogs - gapInd - gapLog);
 
     // Y-base for the content area (below toolbar + filters)
     const float Ybase   = Yvp + Htop + Hfilters;
@@ -71,7 +74,7 @@ void LayoutManager::recalculate(float screenW, float screenH,
         true   // always visible
     };
 
-    // 3. Pair List — left column, top
+    // 3. Pair List — left column, top (full left height minus VD)
     layouts_["Pair List"] = {
         "Pair List",
         Vec2(Xvp, Ybase),
@@ -87,36 +90,36 @@ void LayoutManager::recalculate(float screenW, float screenH,
         showVolumeDelta
     };
 
-    // 5. Market Data — center column, top (gets remaining height)
-    layouts_["Market Data"] = {
-        "Market Data",
-        Vec2(Xcenter, Ybase),
-        Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hmarket)),
-        true   // always visible
-    };
-
-    // 6. Indicators — center column, below Market Data (with gap)
+    // 5. Indicators — center column, top (v2.7.0: moved above Market Data)
     layouts_["Indicators"] = {
         "Indicators",
-        Vec2(Xcenter, Ybase + Hmarket + gapInd),
+        Vec2(Xcenter, Ybase),
         Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hind)),
         showIndicators
     };
 
-    // 7. User Panel — right sidebar (full center height)
+    // 6. Market Data — center column, below Indicators (gets remaining height)
+    layouts_["Market Data"] = {
+        "Market Data",
+        Vec2(Xcenter, Ybase + Hind + gapInd),
+        Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hmarket)),
+        true   // always visible
+    };
+
+    // 7. Logs — center column, below Market Data (v2.7.0: center width, not full)
+    layouts_["Logs"] = {
+        "Logs",
+        Vec2(Xcenter, Ybase + Hind + gapInd + Hmarket + gapLog),
+        Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hlogs)),
+        showLogs
+    };
+
+    // 8. User Panel — right sidebar (full content height)
     layouts_["User Panel"] = {
         "User Panel",
         Vec2(Xright, Ybase),
-        Vec2(std::max(0.0f, Wright), std::max(0.0f, Hcenter)),
+        Vec2(std::max(0.0f, Wright), std::max(0.0f, Hcontent)),
         showUserPanel
-    };
-
-    // 8. Logs — bottom, full width (with gap above)
-    layouts_["Logs"] = {
-        "Logs",
-        Vec2(Xvp, Yvp + Hvp - Hlogs),
-        Vec2(std::max(0.0f, Wvp), std::max(0.0f, Hlogs)),
-        showLogs
     };
 }
 

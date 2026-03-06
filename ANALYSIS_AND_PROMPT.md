@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 2.6.0
+> **Версия:** 2.7.0
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 599 тестов, 595 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v2.6.0:** Исправлено расположение окон (layoutLocked по умолчанию true). Добавлены 1px зазоры между окнами. PineConverter: добавлены DMI, highestbars, lowestbars, pivothigh, pivotlow C++ генерация. Исправлен парсинг направления strategy.entry. Version v2.6.0. 10 новых тестов. Все 100 проблем исправлены.
+> **Результаты тестирования:** 610 тестов, 606 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v2.7.0:** Полная переработка layout центральной колонки: Indicators (верх) → Market Data (середина) → Logs (низ, ширина центральной колонки). Левая и правая колонки теперь занимают полную высоту контентной области. 12 новых тестов. Все 101 проблема исправлена.
 
 ---
 
@@ -411,20 +411,23 @@ escapeCsvField() добавлена.
 ## 8. АНАЛИЗ CHANGELOG
 
 ### Ключевые наблюдения:
-1. **v2.3.0** — 3 исправления: BacktestEngine DB metadata (symbol/timeframe/balance/strategy/commission/dates), PineConverter C++ generator (10 новых Pine v6 функций), version update v2.3.0. 13 новых тестов.
-2. **v2.2.0** — 3 исправления: Layout Lock функциональный (lockWindow vs lockWindowOnce), Engine cache key fix (exchangeNameQualified), version update v2.2.0. 2 новых интеграции: TelegramBot → Engine callbacks, DB directory auto-creation. 18 новых тестов.
-3. **v2.1.0** — 3 исправления: TradingDatabase nullptr guard, LayoutManager logPct_ functional (logs height slider), Reset Layout defaults sync. 2 новых модуля: SymbolFormatter, TelegramBot command callbacks. 35 новых тестов.
-4. **v2.0.0** — 4 исправления: Layout перестройка (VD → left column), Bybit/KuCoin WebSocket bounds, KuCoin getPrice bounds, BacktestEngine Sharpe empty returns. 10 новых тестов.
-5. **v1.9.0** — 7 исправлений: Exchange JSON bounds checks (OKX/Bybit/Bitget getPrice+getOrderBook), PaperTrading commission+validation, Scheduler deadlock fix, BacktestEngine div-by-zero protection, ModelTrainer silent failure. 15 новых тестов.
-6. **v1.8.0** — 7 исправлений: OnlineLearningLoop state cache, NewsFeed CryptoPanic API, FearGreed alternative.me API, TelegramBot sendMessage+getUpdates, OrderManagement commission, adaptive price format, PPO tuning (entropy/value clip). 14 новых тестов.
-7. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
-8. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
-9. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
-10. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
-11. **v1.7.1** — Windows compilation fixes
-12. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
-13. **Прогресс:** между v1.7.0 и v2.3.0 исправлено 88 проблем
-14. **Остаётся:** 0 открытых критических проблем
+1. **v2.7.0** — 1 исправление: LayoutManager layout refactor (Indicators top, Market Data middle, Logs center-width bottom). Левая/правая колонки на полную высоту. 12 новых тестов, 17 обновлённых.
+2. **v2.6.0** — 4 исправления + 2 новых функции: layoutLocked default=true, 1px gaps, DMI/highestbars/lowestbars/pivothigh/pivotlow C++ gen, strategy.entry direction. 10 новых тестов.
+3. **v2.5.0** — 9 исправлений: layoutNeedsReset_ в draw-функциях, visibility flags persistence, imgui.ini SaveIniSettings removal. 10 новых тестов.
+4. **v2.4.0** — 4 исправления: BacktestEngine leverage/slippage/liquidation, PineConverter strategy.entry parser. 10 новых тестов.
+5. **v2.3.0** — 3 исправления: BacktestEngine DB metadata, PineConverter C++ generator extensions. 13 новых тестов.
+6. **v2.2.0** — 3 исправления: Layout Lock, Engine cache key, version update + TelegramBot/Engine integration. 18 новых тестов.
+7. **v2.1.0** — 3 исправления + 2 новых модуля: TradingDatabase nullptr, logPct_ functional, SymbolFormatter, TelegramBot. 35 новых тестов.
+8. **v2.0.0** — 4 исправления: Layout rebuild, Bybit/KuCoin WS bounds, Sharpe empty fix. 10 новых тестов.
+9. **v1.9.0** — 7 исправлений: Exchange JSON bounds, PaperTrading, Scheduler, BacktestEngine, ModelTrainer. 15 новых тестов.
+10. **v1.8.0** — 7 исправлений: OnlineLearning, NewsFeed/FearGreed API, TelegramBot, OrderManagement, PPO tuning. 14 новых тестов.
+11. **v1.7.5** — 9 исправлений: getFuturesBalance, OnlineLearning atomic, FeatureExtractor, SignalEnhancer. 10 новых тестов.
+12. **v1.7.4** — 10 исправлений: HTTP DELETE, signed requests, WebhookServer, Sharpe ratio, UI improvements.
+13. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
+14. **v1.7.2** — полный анализ: 15 проблем подтверждены
+15. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
+16. **Прогресс:** между v1.7.0 и v2.7.0 исправлено 101 проблема
+17. **Остаётся:** 0 открытых критических проблем
 
 ---
 
@@ -432,31 +435,32 @@ escapeCsvField() добавлена.
 
 ---
 
-### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.7.0
+### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.8.0
 
 ```
-Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.6.0.
+Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.7.0.
 Это C++17 программа для алгоритмической торговли криптовалютами с ML (LSTM, XGBoost), RL (PPO),
-5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 599+ тестами на Google Test.
+5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 610+ тестами на Google Test.
 
 КОНТЕКСТ ПРОЕКТА:
 - Репозиторий: /home/runner/work/program/program
 - Основной код: src/ (69 .cpp файлов, 94 .h файлов)
-- Тесты: tests/ (15 файлов, 599 тестов, 595 pass, 4 skip)
+- Тесты: tests/ (16 файлов, 610 тестов, 606 pass, 4 skip)
 - Конфиг: config/settings.json, config/profiles.json
 - Сборка: cmake -B build/test -DCMAKE_BUILD_TYPE=Debug && cmake --build build/test -j$(nproc)
 - Запуск тестов: cd build/test && ./crypto_trader_tests --gtest_brief=1
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v2.6.0) ===
+=== СТАТУС ПРОЕКТА (v2.7.0) ===
 
 ВСЕ КРИТИЧЕСКИЕ И ВЫСОКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ (✅ Done — НЕ ТРОГАТЬ):
 - Все 5 бирж: placeOrder, cancelOrder, setLeverage, getLeverage, getPositionRisk, getFuturesBalance
 - Exchange JSON bounds checks, WebSocket bounds checks
 - TradingDatabase: nullptr guard, DB directory auto-creation
-- LayoutManager: logPct_ функциональный, Layout Lock (lockWindow/lockWindowOnce), 1px gaps между окнами
+- LayoutManager: Indicators (top) → Market Data (middle) → Logs (bottom, center width). 1px gaps.
 - layoutLocked по умолчанию true — окна ВСЕГДА в корректных позициях
+- Левая колонка (PairList + VolumeDelta) и правая колонка (UserPanel) на полную высоту контентной области
 - SymbolFormatter: toSpot/toFutures/toUnified/extractBase/extractQuote + Engine integration
 - TelegramBot: command callbacks + Engine integration (/balance, /status, /positions, /pnl)
 - OnlineLearningLoop: state cache + atomic lastTradeTime_
@@ -473,10 +477,11 @@ escapeCsvField() добавлена.
 - AppGui: layoutNeedsReset_ теперь корректно принуждает lockWindow() в draw-функциях (fix window disappear)
 - AppGui: visibility flags (showPairList_, showUserPanel_, etc.) persist в конфигурационный файл
 - AppGui: Apply/Reset Layout больше не делают преждевременный SaveIniSettingsToDisk
+- AppGui renderFrame(): порядок отрисовки Indicators → Market Data → Logs (v2.7.0)
 
-=== ЗАДАЧА v2.7.0: UX + ML/AI IMPROVEMENTS + PINE EDITOR + PERFORMANCE ===
+=== ЗАДАЧА v2.8.0: UX + ML/AI IMPROVEMENTS + PINE EDITOR + PERFORMANCE ===
 
-Программа стабильна (100 исправлений, 599 тестов). Следующий этап — углубление функциональности.
+Программа стабильна (101 исправление, 610 тестов). Следующий этап — углубление функциональности.
 
 === ЭТАП 1: SymbolFormatter — Полная интеграция в PairList ===
 
@@ -607,27 +612,27 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.6.0)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.7.0)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.6.0) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.7.0) |
 |-----------|--------------|--------------|-----------|---------------|
 | Биржи | 24 | 24 | 0 | 0 |
 | Торговые модули | 14 | 14 | 0 | 0 |
 | ML/AI | 19 | 19 | 0 | 0 |
-| UI/Настройки | 29 | 29 | 0 | +4 (layoutLocked default, window gaps, Reset Layout locked, loadConfig locked default) |
+| UI/Настройки | 30 | 30 | 0 | +1 (layout refactor: Indicators top, MD middle, Logs center-width bottom) |
 | Интеграции | 12 | 12 | 0 | 0 |
 | Backtest | 7 | 7 | 0 | 0 |
 | Data | 2 | 2 | 0 | 0 |
-| Indicators | 5 | 5 | 0 | +2 (DMI C++ gen, pivot/highestbars/lowestbars C++ gen) |
-| **ИТОГО** | **100** | **100** | **0** | **+4 исправления, +2 новых функции (v2.6.0)** |
+| Indicators | 5 | 5 | 0 | 0 |
+| **ИТОГО** | **101** | **101** | **0** | **+1 исправление (v2.7.0)** |
 
 ### Прогресс исправлений:
-- **v2.5.0 → v2.6.0:** 4 новых исправления + 2 новых функции (всего 96→100) + 10 новых тестов
-- **Тесты:** 599 (595 pass, 4 skip) — +10 новых тестов
-- **Новые улучшения:** layoutLocked default=true, 1px window gaps, DMI/pivothigh/pivotlow/highestbars/lowestbars C++ gen, strategy.entry direction parsing
-- **Общий статус:** 100 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
+- **v2.6.0 → v2.7.0:** 1 новое исправление (layout refactor) + 12 новых тестов (всего 100→101)
+- **Тесты:** 610 (606 pass, 4 skip) — +12 новых тестов (v2.7.0) + обновлены 17 существующих
+- **Новые улучшения:** Indicators вверху центральной колонки, Market Data в середине, Logs внизу (ширина центральной колонки), левая/правая колонки на полную высоту
+- **Общий статус:** 101 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
 
-### Направления развития (v2.7.0):
+### Направления развития (v2.8.0):
 1. SymbolFormatter полная интеграция в PairList для автоматического отображения унифицированных символов
 2. UX: equity curve мини-график, order book heatmap, drag-and-drop ордеров, keyboard shortcuts
 3. BacktestEngine: backtest history comparison UI, multi-symbol backtesting, R:R analysis dashboard
@@ -636,7 +641,7 @@ escapeCsvField() добавлена.
 6. Тестовое покрытие (59% → 70%): GridBot execute, WebSocket mock, PineConverter if/else
 7. Производительность: RAII curl wrapper, connection pooling, exponential backoff
 8. Безопасность: API key audit, SQL injection check, TelegramBot rate limiting + input validation
-9. UI/UX: Улучшение отступов между окнами (configurable gap), dark/light theme toggle
+9. UI/UX: configurable window gap size, dark/light theme toggle, keyboard shortcuts for layout
 10. Database: автоматическая миграция схемы при обновлении версии
 
 ### Обнаруженные проблемы для будущего исправления:
@@ -646,14 +651,15 @@ escapeCsvField() добавлена.
 4. **TelegramBot** — нет rate limiting для команд (потенциальный спам)
 5. **TelegramBot** — нет input validation для /buy и /sell (потенциально опасные ордера без валидации)
 6. **OnlineLearningLoop** — batch сделки могут получать одинаковый nextState
-7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.7.0)
-8. ~~**PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции~~ ✅ Done (v2.4.0: strategy.*; v2.6.0: DMI, pivothigh/pivotlow, highestbars/lowestbars; if/else → v2.7.0)
+7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.8.0)
+8. ~~**PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции~~ ✅ Done (v2.4.0: strategy.*; v2.6.0: DMI, pivothigh/pivotlow, highestbars/lowestbars; if/else → v2.8.0)
 9. ~~**AppGui layoutNeedsReset_** — флаг не использовался в draw-функциях окон~~ ✅ Done (v2.5.0)
 10. ~~**AppGui visibility flags** — не сохранялись в конфигурационный файл~~ ✅ Done (v2.5.0)
 11. ~~**AppGui layoutLocked** — по умолчанию false, окна могут уплывать из-за imgui.ini~~ ✅ Done (v2.6.0)
 12. ~~**LayoutManager** — нет зазоров между соседними окнами~~ ✅ Done (v2.6.0)
 13. ~~**PineConverter strategy.entry** — направление определялось только по эвристике ID~~ ✅ Done (v2.6.0)
+14. ~~**LayoutManager** — неправильный порядок окон в центральной колонке (MD вверху, Ind внизу, Logs полной ширины)~~ ✅ Done (v2.7.0)
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.6.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 599 тестов подтверждены. Все 100 найденных проблемы исправлены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.7.0, включая все 69 исходных файлов, 16 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 610 тестов подтверждены. Все 101 найденная проблема исправлена.*

@@ -5,6 +5,63 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Layout Refactor — Переработка расположения центральной колонки (ГЛАВНОЕ)
+- **LayoutManager.cpp recalculate()** — полная переработка вертикальной компоновки центральной колонки:
+  - ✅ **Indicators** перемещён на ВЕРХ центральной колонки (был под Market Data)
+  - ✅ **Market Data** перемещён в СЕРЕДИНУ центральной колонки (был наверху, теперь занимает основное пространство)
+  - ✅ **Logs** перемещён в НИЗ центральной колонки (был на полную ширину viewport)
+  - ✅ Logs теперь имеет ширину центральной колонки (не полную ширину viewport)
+  - ✅ Левая колонка (Pair List + Volume Delta) теперь занимает ПОЛНУЮ высоту контентной области (Hvp - Htop - Hfilters), а не усечённую на высоту Logs
+  - ✅ Правая колонка (User Panel) теперь занимает полную высоту контентной области
+  - ✅ Расчёт высоты Logs изменён: base = Hcontent (не Hvp), height = floor(Hcontent * logPct)
+  - ✅ Порядок окон в центре: Indicators (indPct_) → gap → Market Data (остаток) → gap → Logs (logPct_)
+  - ✅ Все зазоры (gap = 1px) сохранены между соседними окнами
+- **AppGui.cpp renderFrame()** — порядок отрисовки обновлён: `drawIndicatorsPanel()` → `drawMarketDataWindow()` → `drawLogWindow()` → `drawUserPanel()` (ранее: Market Data → Indicators → UserPanel → Logs)
+
+#### Этап 2: Расположение окон соответствует целевому макету (Image)
+- **Pair List** — В левой части, верх (без изменений)
+- **Volume Delta** — Ниже под Pair List (без изменений)
+- **Indicators** — Верх центральной колонки (перемещён с низа)
+- **Market Data** — Середина центральной колонки (перемещён с верха)
+- **Logs** — Низ центральной колонки, ширина = центральная колонка (было: полная ширина viewport)
+- **User Panel** — В правой части, полная высота контентной области
+- **TopBar / Filters Bar** — Без изменений
+
+### Added
+
+#### Этап 3: Тестирование v2.7.0 (12 новых тестов)
+- **test_full_system.cpp** — 12 новых тестов:
+  - `LayoutV270` (10): IndicatorsAboveMarketData — проверка нового расположения Indicators; LogsBelowMarketData — Logs под Market Data; LogsCenterColumnWidth — ширина Logs = центральная колонка; CenterColumnOrder — полный порядок центральной колонки; LeftColumnFullContentHeight — левая колонка на полную высоту; UserPanelFullContentHeight — правая колонка на полную высоту; GapsBetweenCenterWindows — зазоры 1px между центральными окнами; MultipleResolutions — проверка на 5 разрешениях; HideIndicatorsExpandsMarketData — скрытие Indicators расширяет Market Data; HideLogsExpandsMarketData — скрытие Logs расширяет Market Data
+  - `VersionV270` (1): VersionStringExists — проверка наличия строки "2.7.0"
+  - Дополнительно: VersionV260 (1) — сохранена проверка строки v2.6.0
+- **Обновлены существующие тесты для нового layout:**
+  - `LayoutStress.LogWindowHeightPercentage` — width = center (было full), height base = Hcontent (было Hvp)
+  - `LayoutStress.NoOverlapCenterVertical` — порядок: Ind → MD → Logs (было: MD → Ind → Logs → VD)
+  - `LayoutStress.NoOverlapLogsAndSidebars` — Logs в центральной колонке, не пересекается с боковыми панелями
+  - `LayoutStress.MultipleResolutionsNoOverlap` — Ind выше MD (было: MD выше Ind)
+  - `LayoutStress.HideLogsExpandsCenter` — скрытие Logs расширяет Market Data (было: Pair List)
+  - `LayoutStress.LayoutConsistencyAcrossRecalculations` — проверка горизонтального непересечения Logs и UserPanel
+  - `LayoutV200.MarketDataStartsAtTopOfCenter` — MD начинается после Indicators (было: после Filters)
+  - `LayoutV210.LogsHeightUsesPercentage` — base = Hcontent
+  - `LayoutV210.LogsHeightDefault10Percent` — base = Hcontent
+  - `LayoutV210.WindowsNoOverlapAfterLogPctChange` — порядок Ind → MD → Logs
+  - `LayoutV220.AllWindowsStrictlyOrdered` — центральная колонка Ind → MD → Logs
+  - `LayoutResetV250.IndicatorsBelowMarketData` — переименован: Ind ВЫШЕ MD
+  - `LayoutResetV250.LogsBelowIndicators` — Logs ниже MD (не Ind)
+  - `LayoutResetV250.NoWindowOverlap` — Ind → MD
+  - `LayoutV260.VerticalGapBetweenMarketDataAndIndicators` — зазор Ind → MD (было: MD → Ind)
+  - `LayoutManager.WindowsDoNotOverlap` — Ind выше MD
+  - `LayoutManager.WindowsAreFullWidth` — Logs = center width
+- **Итого тестов:** 610 (606 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.7.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.7.0: все исправления отмечены ✅ Done, обновлён промт для следующего этапа v2.8.0.
+
 ## [2.6.0] - 2026-03-06
 
 ### Fixed

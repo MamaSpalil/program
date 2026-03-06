@@ -655,15 +655,13 @@ void AppGui::renderFrame() {
     // Volume Delta — left column, below Pair List
     if (showVolumeDelta_) drawVolumeDeltaPanel();
 
-    // Center column: Market Data → Indicators
-    drawMarketDataWindow();
+    // Center column: Indicators (top) → Market Data (middle) → Logs (bottom)
     if (showIndicators_) drawIndicatorsPanel();
+    drawMarketDataWindow();
+    if (showLogs_) drawLogWindow();
 
     // User Panel — right sidebar
     if (showUserPanel_) drawUserPanel();
-
-    // Logs — bottom
-    if (showLogs_) drawLogWindow();
 
     // Reset flag consumed after one frame
     if (layoutNeedsReset_) layoutNeedsReset_ = false;

@@ -101,12 +101,13 @@ TEST(LayoutStress, LogWindowHeightPercentage) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
-    // logPct default=0.10, so height = floor(1080 * 0.10) = 108
-    float expectedH = std::floor(1080.0f * 0.10f);
+    // v2.7.0: Logs height based on content height (Hvp - toolbar - filters)
+    float Hcontent = 1080.0f - 32.0f - 28.0f;
+    float expectedH = std::floor(Hcontent * 0.10f);
     EXPECT_FLOAT_EQ(log.size.y, expectedH);
-    EXPECT_FLOAT_EQ(log.size.x, 1920.0f);
-    // Logs at bottom of viewport
-    EXPECT_FLOAT_EQ(log.pos.y + log.size.y, 1080.0f);
+    // v2.7.0: Logs width = center column width (not full viewport)
+    float expectedW = 1920.0f - 200.0f - 290.0f - 2.0f; // Wvp - Wleft - Wright - 2*gap
+    EXPECT_FLOAT_EQ(log.size.x, expectedW);
 }
 
 // ── No overlapping between adjacent windows ─────────────────────────────────
@@ -150,12 +151,10 @@ TEST(LayoutStress, NoOverlapCenterVertical) {
 
     // Left column: PairList → VD: no vertical overlap
     EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + 0.5f);
-    // Center column: MD → Indicators: no vertical overlap
-    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f);
-    // Indicators → Logs: no vertical overlap
-    EXPECT_LE(ind.pos.y + ind.size.y, log.pos.y + 0.5f);
-    // VD → Logs: no vertical overlap
-    EXPECT_LE(vd.pos.y + vd.size.y, log.pos.y + 0.5f);
+    // Center column (v2.7.0): Indicators → MD: no vertical overlap
+    EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + 0.5f);
+    // MD → Logs: no vertical overlap
+    EXPECT_LE(md.pos.y + md.size.y, log.pos.y + 0.5f);
 }
 
 TEST(LayoutStress, NoOverlapLogsAndSidebars) {
@@ -166,10 +165,13 @@ TEST(LayoutStress, NoOverlapLogsAndSidebars) {
     auto up  = mgr.get("User Panel");
     auto log = mgr.get("Logs");
 
-    // Left column (Pair List + VD) must not overlap logs area
-    EXPECT_LE(vd.pos.y + vd.size.y, log.pos.y + 0.5f);
-    // Right column (User Panel) must not overlap logs area
-    EXPECT_LE(up.pos.y + up.size.y, log.pos.y + 0.5f);
+    // v2.7.0: Logs is in center column, not full width.
+    // Left column (PairList + VD) spans full content height independently.
+    // User Panel spans full content height on right.
+    // Verify Logs X starts at center column, not at viewport left edge
+    auto md = mgr.get("Market Data");
+    EXPECT_NEAR(log.pos.x, md.pos.x, 0.5f);
+    EXPECT_NEAR(log.size.x, md.size.x, 0.5f);
 }
 
 // ── Full coverage test: no pixel gaps and total area = viewport ─────────────
@@ -227,10 +229,10 @@ TEST(LayoutStress, MultipleResolutionsNoOverlap) {
         auto pl = mgr.get("Pair List");
         auto vd = mgr.get("Volume Delta");
         EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + 0.5f) << "@" << r.w << "x" << r.h;
-        // Center column: MD above Indicators
+        // Center column (v2.7.0): Indicators above MD
         auto md = mgr.get("Market Data");
         auto ind = mgr.get("Indicators");
-        EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f) << "@" << r.w << "x" << r.h;
+        EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + 0.5f) << "@" << r.w << "x" << r.h;
     }
 }
 
@@ -282,12 +284,11 @@ TEST(LayoutStress, HideLogsExpandsCenter) {
     mgrAll.recalculate(1920, 1080, 0, 0, true, true, true, true, true);
     mgrNo.recalculate(1920, 1080, 0, 0, true, true, true, true, false);
 
-    auto plAll = mgrAll.get("Pair List");
-    auto plNo  = mgrNo.get("Pair List");
-    // Hiding Logs (logPct*Hvp ≈ 108px) should increase sidebar height
-    // PairList gets ~85% of freed space (rest goes to VD)
-    float logsH = std::floor(1080.0f * 0.10f);
-    EXPECT_GT(plNo.size.y, plAll.size.y + logsH * 0.7f);
+    // v2.7.0: Logs is in center column, hiding it should expand Market Data height
+    auto mdAll = mgrAll.get("Market Data");
+    auto mdNo  = mgrNo.get("Market Data");
+    float logsH = std::floor((1080.0f - 32.0f - 28.0f) * 0.10f);
+    EXPECT_GT(mdNo.size.y, mdAll.size.y + logsH * 0.7f);
 }
 
 TEST(LayoutStress, HideAllOptionalPanels) {
@@ -954,7 +955,9 @@ TEST(IntegrationStress, LayoutConsistencyAcrossRecalculations) {
         // No overlap assertions
         EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 0.5f);
         EXPECT_LE(md.pos.x + md.size.x, up.pos.x + 0.5f);
-        EXPECT_LE(up.pos.y + up.size.y, log.pos.y + 0.5f);
+        // v2.7.0: Logs is in center column, User Panel is in right column
+        // They don't overlap horizontally (different columns)
+        EXPECT_LE(log.pos.x + log.size.x, up.pos.x + 0.5f);
 
         // No negative dimensions
         EXPECT_GE(md.size.x, 0.0f);
