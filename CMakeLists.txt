@@ -302,15 +302,26 @@ target_compile_options(crypto_trader PRIVATE ${COMMON_FLAGS})
 target_link_libraries(crypto_trader PRIVATE crypto_lib)
 
 # ── Копирование LibTorch DLL рядом с .exe ─────────────────────────────────────
-# $<TARGET_RUNTIME_DLLS> требует CMake >= 3.21, поэтому используем xcopy напрямую.
-# VS2019 поставляется с CMake 3.20 — используем ручное копирование.
+# $<TARGET_RUNTIME_DLLS> требует CMake >= 3.21, а VS2019 — CMake 3.20.
+# xcopy через CMake VS-генератор вызывает ошибку «Недопустимое число параметров»
+# из-за некорректного экранирования путей и подстановочных знаков.
+# Решение: file(GLOB) на этапе configure + cmake -E copy_if_different.
 if(Torch_FOUND AND WIN32)
-    add_custom_command(TARGET crypto_trader POST_BUILD
-        COMMAND xcopy /Y /D
-            "C:\\libs\\libtorch\\lib\\*.dll"
-            "$<TARGET_FILE_DIR:crypto_trader>"
-        COMMENT "Copying LibTorch DLLs to output directory"
-    )
+    # Определяем каталог DLL из Torch_DIR (share/cmake/Torch → lib)
+    get_filename_component(_TORCH_ROOT "${Torch_DIR}/../../.." ABSOLUTE)
+    set(_TORCH_DLL_DIR "${_TORCH_ROOT}/lib")
+
+    file(GLOB _TORCH_DLLS "${_TORCH_DLL_DIR}/*.dll")
+    if(_TORCH_DLLS)
+        add_custom_command(TARGET crypto_trader POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${_TORCH_DLLS}
+                $<TARGET_FILE_DIR:crypto_trader>
+            COMMENT "Copying LibTorch DLLs to output directory"
+        )
+    else()
+        message(WARNING "No LibTorch DLLs found in ${_TORCH_DLL_DIR} — runtime DLLs not copied")
+    endif()
 endif()
 
 # ── Embed application icon on Windows (.rc resource) ──────────────────────────
