@@ -102,12 +102,10 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
 
         // Update equity
         if (inPosition) {
-            double unrealized = 0;
             if (positionSide == "BUY")
-                unrealized = (price - entryPrice) * posQty;
+                equity = balance + price * posQty;
             else
-                unrealized = (entryPrice - price) * posQty;
-            equity = balance + entryPrice * posQty + unrealized;
+                equity = balance + posQty * (2.0 * entryPrice - price);
         } else {
             equity = balance;
         }

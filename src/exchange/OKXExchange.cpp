@@ -74,6 +74,20 @@ std::string OKXExchange::sign(const std::string& timestamp,
     return base64Encode(digest, digestLen);
 }
 
+std::string OKXExchange::sign(const std::string& timestamp,
+                               const std::string& method,
+                               const std::string& path,
+                               const std::string& body) const {
+    std::string prehash = timestamp + method + path + body;
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digestLen = 0;
+    HMAC(EVP_sha256(),
+         apiSecret_.c_str(), static_cast<int>(apiSecret_.size()),
+         reinterpret_cast<const unsigned char*>(prehash.c_str()),
+         prehash.size(), digest, &digestLen);
+    return base64Encode(digest, digestLen);
+}
+
 void OKXExchange::rateLimit() const {
     std::lock_guard<std::mutex> lock(rateMutex_);
     auto now = std::chrono::steady_clock::now();
@@ -209,9 +223,111 @@ double OKXExchange::getPrice(const std::string& symbol) {
 }
 
 OrderResponse OKXExchange::placeOrder(const OrderRequest& req) {
-    // Simplified — real implementation would POST to /api/v5/trade/order
+#ifndef USE_CURL
     (void)req;
     return {};
+#else
+    try {
+        std::string side = (req.side == OrderRequest::Side::BUY) ? "buy" : "sell";
+        std::string ordType;
+        switch (req.type) {
+            case OrderRequest::Type::MARKET:    ordType = "market"; break;
+            case OrderRequest::Type::LIMIT:     ordType = "limit"; break;
+            case OrderRequest::Type::STOP_LOSS: ordType = "market"; break;
+        }
+
+        nlohmann::json body;
+        body["instId"] = req.symbol;
+        body["tdMode"] = "cash";
+        body["side"] = side;
+        body["ordType"] = ordType;
+        body["sz"] = std::to_string(req.qty);
+        if (req.type == OrderRequest::Type::LIMIT && req.price > 0)
+            body["px"] = std::to_string(req.price);
+
+        auto resp = httpPost("/api/v5/trade/order", body.dump());
+        auto j = nlohmann::json::parse(resp);
+
+        OrderResponse result;
+        if (j.value("code", "1") != "0") {
+            Logger::get()->warn("[OKX] placeOrder error: code={} msg={}",
+                                j.value("code", ""), j.value("msg", ""));
+            result.status = "ERROR";
+            return result;
+        }
+        if (j.contains("data") && j["data"].is_array() && !j["data"].empty()) {
+            result.orderId = j["data"][0].value("ordId", "");
+            std::string sCode = j["data"][0].value("sCode", "1");
+            result.status = (sCode == "0") ? "NEW" : "ERROR";
+        }
+        result.executedQty = req.qty;
+        result.executedPrice = req.price;
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] placeOrder failed: {}", e.what());
+        OrderResponse result;
+        result.status = "ERROR";
+        return result;
+    }
+#endif
+}
+
+std::string OKXExchange::httpPost(const std::string& path,
+                                   const std::string& body) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)path; (void)body;
+#else
+    rateLimit();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::time_t secs = static_cast<std::time_t>(ts / 1000);
+    int millis = static_cast<int>(ts % 1000);
+    std::tm tm{};
+#ifdef _WIN32
+    gmtime_s(&tm, &secs);
+#else
+    gmtime_r(&secs, &tm);
+#endif
+    char tsBuf[32];
+    std::strftime(tsBuf, sizeof(tsBuf), "%Y-%m-%dT%H:%M:%S", &tm);
+    std::string timestamp = std::string(tsBuf) + "." +
+        std::to_string(millis) + "Z";
+
+    std::string sig = sign(timestamp, "POST", path, body);
+
+    std::string url = baseUrl_ + path;
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("OK-ACCESS-KEY: " + apiKey_).c_str());
+    headers = curl_slist_append(headers, ("OK-ACCESS-SIGN: " + sig).c_str());
+    headers = curl_slist_append(headers, ("OK-ACCESS-TIMESTAMP: " + timestamp).c_str());
+    headers = curl_slist_append(headers, ("OK-ACCESS-PASSPHRASE: " + passphrase_).c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, okxWriteCb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+        throw std::runtime_error(std::string("curl: ") + curl_easy_strerror(res));
+    if (httpCode >= 400)
+        throw std::runtime_error("HTTP POST " + std::to_string(httpCode) + ": " + response);
+    return response;
+#endif
 }
 
 AccountBalance OKXExchange::getBalance() {
@@ -273,7 +389,16 @@ void OKXExchange::subscribeKline(const std::string& symbol,
     klineCb_ = std::move(cb);
     ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/ws/v5/public");
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
-    (void)symbol; (void)interval;
+    ws_->connect();
+    // Send subscription message
+    nlohmann::json sub;
+    sub["op"] = "subscribe";
+    sub["args"] = nlohmann::json::array();
+    nlohmann::json arg;
+    arg["channel"] = "candle" + interval;
+    arg["instId"] = symbol;
+    sub["args"].push_back(arg);
+    ws_->send(sub.dump());
 }
 
 void OKXExchange::connect() {

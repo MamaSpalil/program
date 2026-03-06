@@ -56,6 +56,7 @@ private:
                      const std::string& method,
                      const std::string& path) const;
     std::string httpGet(const std::string& path, bool signed_ = false) const;
+    std::string httpPost(const std::string& path, const std::string& body) const;
     void rateLimit() const;
     void onWsMessage(const std::string& msg);
 };

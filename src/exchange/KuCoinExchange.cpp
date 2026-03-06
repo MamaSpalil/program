@@ -205,9 +205,113 @@ double KuCoinExchange::getPrice(const std::string& symbol) {
 }
 
 OrderResponse KuCoinExchange::placeOrder(const OrderRequest& req) {
-    // Simplified — real implementation would POST to /api/v1/orders
+#ifndef USE_CURL
     (void)req;
     return {};
+#else
+    try {
+        std::string side = (req.side == OrderRequest::Side::BUY) ? "buy" : "sell";
+        std::string type;
+        switch (req.type) {
+            case OrderRequest::Type::MARKET:    type = "market"; break;
+            case OrderRequest::Type::LIMIT:     type = "limit"; break;
+            case OrderRequest::Type::STOP_LOSS: type = "market"; break;
+        }
+
+        // Generate a unique clientOid
+        auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        nlohmann::json body;
+        body["clientOid"] = std::to_string(ts);
+        body["side"] = side;
+        body["symbol"] = req.symbol;
+        body["type"] = type;
+        body["size"] = std::to_string(req.qty);
+        if (req.type == OrderRequest::Type::LIMIT && req.price > 0)
+            body["price"] = std::to_string(req.price);
+
+        auto resp = httpPost("/api/v1/orders", body.dump());
+        auto j = nlohmann::json::parse(resp);
+
+        OrderResponse result;
+        if (j.value("code", "") != "200000") {
+            Logger::get()->warn("[KuCoin] placeOrder error: code={} msg={}",
+                                j.value("code", ""), j.value("msg", ""));
+            result.status = "ERROR";
+            return result;
+        }
+        if (j.contains("data")) {
+            result.orderId = j["data"].value("orderId", "");
+        }
+        result.status = "NEW";
+        result.executedQty = req.qty;
+        result.executedPrice = req.price;
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] placeOrder failed: {}", e.what());
+        OrderResponse result;
+        result.status = "ERROR";
+        return result;
+    }
+#endif
+}
+
+std::string KuCoinExchange::httpPost(const std::string& path,
+                                      const std::string& body) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)path; (void)body;
+#else
+    rateLimit();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::string timestamp = std::to_string(ts);
+
+    std::string sig = sign(timestamp, "POST", path + body);
+
+    // Sign the passphrase
+    unsigned char ppDigest[EVP_MAX_MD_SIZE];
+    unsigned int ppDigestLen = 0;
+    HMAC(EVP_sha256(),
+         apiSecret_.c_str(), static_cast<int>(apiSecret_.size()),
+         reinterpret_cast<const unsigned char*>(passphrase_.c_str()),
+         passphrase_.size(), ppDigest, &ppDigestLen);
+    std::string signedPassphrase = base64EncodeKc(ppDigest, ppDigestLen);
+
+    std::string url = baseUrl_ + path;
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("KC-API-KEY: " + apiKey_).c_str());
+    headers = curl_slist_append(headers, ("KC-API-SIGN: " + sig).c_str());
+    headers = curl_slist_append(headers, ("KC-API-TIMESTAMP: " + timestamp).c_str());
+    headers = curl_slist_append(headers, ("KC-API-PASSPHRASE: " + signedPassphrase).c_str());
+    headers = curl_slist_append(headers, "KC-API-KEY-VERSION: 2");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, kucoinWriteCb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+        throw std::runtime_error(std::string("curl: ") + curl_easy_strerror(res));
+    if (httpCode >= 400)
+        throw std::runtime_error("HTTP POST " + std::to_string(httpCode) + ": " + response);
+    return response;
+#endif
 }
 
 AccountBalance KuCoinExchange::getBalance() {
@@ -266,7 +370,12 @@ void KuCoinExchange::subscribeKline(const std::string& symbol,
     klineCb_ = std::move(cb);
     ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/endpoint");
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
-    (void)symbol; (void)interval;
+    ws_->connect();
+    // Send subscription message
+    nlohmann::json sub;
+    sub["type"] = "subscribe";
+    sub["topic"] = "/market/candles:" + symbol + "_" + interval;
+    ws_->send(sub.dump());
 }
 
 void KuCoinExchange::connect() {
