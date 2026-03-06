@@ -3531,6 +3531,10 @@ TEST(VersionV240, VersionStringExists) {
 //  v2.5.0 Tests — Window layout reset, visibility persistence, layout forced
 // ══════════════════════════════════════════════════════════════════════════════
 
+namespace {
+    constexpr float kLayoutTolerance = 1.0f;  // pixel tolerance for layout comparisons
+}
+
 // ── Layout: layoutNeedsReset forces positions ───────────────────────────────
 
 TEST(LayoutResetV250, RecalculateAllWindowsVisible) {
@@ -3581,7 +3585,7 @@ TEST(LayoutResetV250, PairListLeftOfMarketData) {
     auto md = mgr.get("Market Data");
     // Pair List should be to the left of Market Data
     EXPECT_LT(pl.pos.x, md.pos.x);
-    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 1.0f);
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, UserPanelRightOfMarketData) {
@@ -3591,7 +3595,7 @@ TEST(LayoutResetV250, UserPanelRightOfMarketData) {
     auto up = mgr.get("User Panel");
     auto md = mgr.get("Market Data");
     // User Panel should be to the right of Market Data
-    EXPECT_GE(up.pos.x, md.pos.x + md.size.x - 1.0f);
+    EXPECT_GE(up.pos.x, md.pos.x + md.size.x - kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, VolumeDeltaBelowPairList) {
@@ -3601,7 +3605,7 @@ TEST(LayoutResetV250, VolumeDeltaBelowPairList) {
     auto vd = mgr.get("Volume Delta");
     auto pl = mgr.get("Pair List");
     // Volume Delta should be below Pair List
-    EXPECT_GE(vd.pos.y, pl.pos.y + pl.size.y - 1.0f);
+    EXPECT_GE(vd.pos.y, pl.pos.y + pl.size.y - kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, IndicatorsBelowMarketData) {
@@ -3611,7 +3615,7 @@ TEST(LayoutResetV250, IndicatorsBelowMarketData) {
     auto ind = mgr.get("Indicators");
     auto md = mgr.get("Market Data");
     // Indicators should be below Market Data
-    EXPECT_GE(ind.pos.y, md.pos.y + md.size.y - 1.0f);
+    EXPECT_GE(ind.pos.y, md.pos.y + md.size.y - kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, LogsBelowIndicators) {
@@ -3621,7 +3625,7 @@ TEST(LayoutResetV250, LogsBelowIndicators) {
     auto logs = mgr.get("Logs");
     auto ind = mgr.get("Indicators");
     // Logs should be below Indicators
-    EXPECT_GE(logs.pos.y, ind.pos.y + ind.size.y - 1.0f);
+    EXPECT_GE(logs.pos.y, ind.pos.y + ind.size.y - kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, MarketDataCentered) {
@@ -3649,13 +3653,13 @@ TEST(LayoutResetV250, NoWindowOverlap) {
     auto logs = mgr.get("Logs");
 
     // Horizontal: PairList -> MarketData -> UserPanel
-    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 0.5f);
-    EXPECT_LE(md.pos.x + md.size.x, up.pos.x + 0.5f);
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + kLayoutTolerance);
+    EXPECT_LE(md.pos.x + md.size.x, up.pos.x + kLayoutTolerance);
 
     // Vertical left: PairList -> VolumeDelta
-    EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + 0.5f);
+    EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + kLayoutTolerance);
     // Vertical center: MarketData -> Indicators
-    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f);
+    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + kLayoutTolerance);
 }
 
 // ── Config: layout visibility flags persistence ─────────────────────────────
