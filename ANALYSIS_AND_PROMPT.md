@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 2.4.0
+> **Версия:** 2.5.0
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 578 тестов, 574 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v2.4.0:** BacktestEngine поддерживает leverage (1-125x) и slippage (configurable %). PineConverter C++ генератор поддерживает strategy.entry/exit/close. Исправлен парсер strategy.* вызовов. Version v2.4.0. 10 новых тестов. Все 89 проблем исправлены.
+> **Результаты тестирования:** 589 тестов, 585 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v2.5.0:** Исправлена критическая проблема исчезновения окон (layoutNeedsReset_ не использовался в draw функциях). Добавлена персистентность флагов видимости окон. Исправлены кнопки Apply/Reset Layout. Удалены orphaned SetNextWindowPos/Size. Version v2.5.0. 11 новых тестов. Все 96 проблем исправлены.
 
 ---
 
@@ -310,6 +310,15 @@ vdPct=0.15f, indPct=0.20f — синхронизировано.
   - При выключении (layoutLocked=false): окна свободно перемещаемы (lockWindowOnce + только NoCollapse)
   - Main Toolbar и Filters Bar всегда зафиксированы (структурные элементы)
 
+### 5.3.2 Окна исчезают при запуске — ✅ Done (v2.5.0)
+- **Проблема:** `layoutNeedsReset_` устанавливался в `true` при инициализации и при Reset Layout, но НИКОГДА не проверялся в draw-функциях окон. При `layoutLocked=false`, `lockWindowOnce()` использует `ImGuiCond_FirstUseEver`, что передаёт управление позициями в imgui.ini. Если imgui.ini содержит некорректные данные — окна исчезают.
+- **Исправление:** Все 6 content windows (Market Data, Indicators, Logs, Volume Delta, Pair List, User Panel) теперь проверяют `layoutNeedsReset_ || config_.layoutLocked` для выбора между `lockWindow()` и `lockWindowOnce()`.
+- **Дополнительно:** Удалены orphaned `SetNextWindowPos`/`SetNextWindowSize` в `renderFrame()`. Исправлены кнопки Apply/Reset Layout — убрано преждевременное сохранение imgui.ini.
+
+### 5.3.3 Персистентность видимости окон — ✅ Done (v2.5.0)
+- **Проблема:** Флаги видимости окон (showPairList_, showUserPanel_, showVolumeDelta_, showIndicators_, showLogs_) НЕ сохранялись в конфигурационный файл и НЕ загружались из него. При перезапуске все окна всегда показывались (по умолчанию true), а если пользователь скрыл окно — при перезапуске оно снова появлялось.
+- **Исправление:** Все 5 флагов видимости теперь сохраняются в секцию `layout` JSON (`show_pair_list`, `show_user_panel`, `show_volume_delta`, `show_indicators`, `show_logs`) и загружаются при запуске. При Reset Layout все флаги сбрасываются в true.
+
 ### 5.4 Контекстное меню графика — ✅ Done (v1.7.4)
 Правый клик мыши на графике в зоне цен открывает контекстное меню:
 - Buy Limit / Sell Limit / Buy Stop-Limit / Sell Stop-Limit
@@ -432,7 +441,7 @@ escapeCsvField() добавлена.
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v2.4.0) ===
+=== СТАТУС ПРОЕКТА (v2.5.0) ===
 
 ВСЕ КРИТИЧЕСКИЕ И ВЫСОКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ (✅ Done — НЕ ТРОГАТЬ):
 - Все 5 бирж: placeOrder, cancelOrder, setLeverage, getLeverage, getPositionRisk, getFuturesBalance
@@ -448,14 +457,17 @@ escapeCsvField() добавлена.
 - PaperTrading: commission, validation, equity calc
 - Scheduler: deadlock fix, GridBot: profit tracking
 - Все FeatureExtractor, SignalEnhancer, WebhookServer, CSVExporter, TaxReporter fixes
-- Version strings updated to v2.4.0
+- Version strings updated to v2.5.0
 - BacktestEngine: все метаданные сохраняются в БД + leverage/slippage/liquidation поддержка
 - PineConverter: C++ генератор поддерживает SMA, MACD, BB, crossover, crossunder, highest, lowest, stdev, change, VWAP + strategy.entry/exit/close
 - PineConverter parser: исправлен для strategy.* вызовов (не путает с strategy() declaration)
+- AppGui: layoutNeedsReset_ теперь корректно принуждает lockWindow() в draw-функциях (fix window disappear)
+- AppGui: visibility flags (showPairList_, showUserPanel_, etc.) persist в конфигурационный файл
+- AppGui: Apply/Reset Layout больше не делают преждевременный SaveIniSettingsToDisk
 
-=== ЗАДАЧА v2.5.0: UX + ML/AI IMPROVEMENTS + PERFORMANCE ===
+=== ЗАДАЧА v2.6.0: UX + ML/AI IMPROVEMENTS + PERFORMANCE ===
 
-Программа стабильна (89 исправлений, 578 тестов). Следующий этап — углубление функциональности.
+Программа стабильна (96 исправлений, 589 тестов). Следующий этап — углубление функциональности.
 
 === ЭТАП 1: SymbolFormatter — Полная интеграция в PairList ===
 
@@ -556,9 +568,9 @@ escapeCsvField() добавлена.
 
 === ПРИОРИТЕТЫ ===
 Приоритет 1 (UX): Этап 1+2 — SymbolFormatter в PairList + визуальные улучшения
-Приоритет 2 (BACKTEST): Этап 4 — leverage, slippage, history UI
+Приоритет 2 (BACKTEST): Этап 4 — history UI, multi-symbol backtesting
 Приоритет 3 (ML): Этап 3 — расширение ML функциональности
-Приоритет 4 (PINE): Этап 5 — расширение C++ генератора (DMI, pivots, strategy)
+Приоритет 4 (PINE): Этап 5 — расширение C++ генератора (DMI, pivots, if/else)
 Приоритет 5 (ТЕСТЫ): Этап 6 — увеличение покрытия
 Приоритет 6 (PERF): Этап 7 — оптимизация и надёжность
 Приоритет 7 (SECURITY): Этап 8 — безопасность
@@ -577,35 +589,36 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.4.0)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.5.0)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.4.0) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.5.0) |
 |-----------|--------------|--------------|-----------|---------------|
 | Биржи | 24 | 24 | 0 | 0 |
 | Торговые модули | 14 | 14 | 0 | 0 |
 | ML/AI | 19 | 19 | 0 | 0 |
-| UI/Настройки | 21 | 21 | 0 | +1 (version update v2.4.0) |
+| UI/Настройки | 25 | 25 | 0 | +4 (window disappear fix, visibility persistence, Apply Layout fix, Reset Layout fix) |
 | Интеграции | 12 | 12 | 0 | 0 |
-| Backtest | 7 | 7 | 0 | +1 (leverage/slippage/liquidation) |
+| Backtest | 7 | 7 | 0 | 0 |
 | Data | 2 | 2 | 0 | 0 |
-| Indicators | 3 | 3 | 0 | +2 (parser fix + strategy.entry/exit/close C++ generation) |
-| **ИТОГО** | **92** | **92** | **0** | **+4 исправления (v2.4.0)** |
+| Indicators | 3 | 3 | 0 | 0 |
+| **ИТОГО** | **96** | **96** | **0** | **+4 исправления (v2.5.0)** |
 
 ### Прогресс исправлений:
-- **v2.3.0 → v2.4.0:** 4 новых исправления (всего 88→92) + 10 новых тестов
-- **Тесты:** 578 (574 pass, 4 skip) — +10 новых тестов
-- **Новые улучшения:** BacktestEngine leverage/slippage, PineConverter strategy.* support, parser fix
-- **Общий статус:** 92 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
+- **v2.4.0 → v2.5.0:** 4 новых исправления (всего 92→96) + 11 новых тестов
+- **Тесты:** 589 (585 pass, 4 skip) — +11 новых тестов
+- **Новые улучшения:** layoutNeedsReset_ fix, visibility persistence, Apply/Reset Layout fix, orphaned SetNext* removal
+- **Общий статус:** 96 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
 
-### Направления развития (v2.5.0):
+### Направления развития (v2.6.0):
 1. SymbolFormatter полная интеграция в PairList для автоматического отображения унифицированных символов
 2. UX: equity curve мини-график, order book heatmap, drag-and-drop ордеров, keyboard shortcuts
-3. BacktestEngine: backtest history comparison UI
+3. BacktestEngine: backtest history comparison UI, multi-symbol backtesting
 4. PineConverter: DMI, pivothigh/pivotlow, highestbars/lowestbars, if/else C++ generation
 5. ML: LR scheduler, feature importance, RAII wrappers, multi-timeframe features
 6. Тестовое покрытие (57% → 65%): GridBot execute, WebSocket mock, PineConverter DMI/pivots
 7. Производительность: RAII curl wrapper, connection pooling, exponential backoff
 8. Безопасность: API key audit, SQL injection check, TelegramBot rate limiting + input validation
+9. UI/UX: Сохранение позиций окон после `layoutNeedsReset_` через отложенный SaveIniSettingsToDisk
 
 ### Обнаруженные проблемы для будущего исправления:
 1. **XGBoostModel** — нет RAII wrapper для DMatrix/booster (утечка при исключениях)
@@ -614,9 +627,11 @@ escapeCsvField() добавлена.
 4. **TelegramBot** — нет rate limiting для команд (потенциальный спам)
 5. **TelegramBot** — нет input validation для /buy и /sell (потенциально опасные ордера без валидации)
 6. **OnlineLearningLoop** — batch сделки могут получать одинаковый nextState
-7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.5.0)
-8. ~~**PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции~~ ✅ Частично Done (v2.4.0: strategy.* done; DMI, pivots, if/else → v2.5.0)
+7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.6.0)
+8. ~~**PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции~~ ✅ Частично Done (v2.4.0: strategy.* done; DMI, pivots, if/else → v2.6.0)
+9. ~~**AppGui layoutNeedsReset_** — флаг не использовался в draw-функциях окон~~ ✅ Done (v2.5.0)
+10. ~~**AppGui visibility flags** — не сохранялись в конфигурационный файл~~ ✅ Done (v2.5.0)
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.4.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 578 тестов подтверждены. Все 92 найденных проблемы исправлены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.5.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 589 тестов подтверждены. Все 96 найденных проблемы исправлены.*

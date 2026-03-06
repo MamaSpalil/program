@@ -5,6 +5,47 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Визуал окон программы — Исправлена критическая проблема исчезновения окон
+- **AppGui.cpp drawMarketDataWindow()** — `layoutNeedsReset_` теперь проверяется и принудительно применяет `lockWindow()` (ImGuiCond_Always) вместо `lockWindowOnce()` (ImGuiCond_FirstUseEver). Ранее флаг устанавливался при инициализации (true) и при Reset Layout, но НИКОГДА не использовался в функциях рисования окон, что приводило к тому, что ImGui использовал позиции из imgui.ini (которые могли быть некорректными), и окна исчезали.
+- **AppGui.cpp drawIndicatorsPanel()** — аналогичное исправление: `layoutNeedsReset_ || config_.layoutLocked` → `lockWindow()`.
+- **AppGui.cpp drawLogWindow()** — аналогичное исправление.
+- **AppGui.cpp drawVolumeDeltaPanel()** — аналогичное исправление.
+- **AppGui.cpp drawPairListPanel()** — аналогичное исправление.
+- **AppGui.cpp drawUserPanel()** — аналогичное исправление.
+- **AppGui.cpp renderFrame()** — удалены неиспользуемые (orphaned) вызовы `SetNextWindowPos(vp->WorkPos)` и `SetNextWindowSize(vp->WorkSize)`, которые не потреблялись ни одним `Begin()` в renderFrame() и перезаписывались в `lockWindow()` внутри `drawMainToolbarWindow()`.
+- **AppGui.cpp drawSettingsPanel() "Apply Layout"** — удалено преждевременное сохранение imgui.ini (вызывалось ДО применения новых позиций, что сохраняло старые позиции).
+- **AppGui.cpp drawSettingsPanel() "Reset Layout to Defaults"** — удалено преждевременное сохранение imgui.ini; добавлен сброс всех флагов видимости окон в значения по умолчанию (showPairList_ = showUserPanel_ = showVolumeDelta_ = showIndicators_ = showLogs_ = true).
+
+### Added
+
+#### Этап 2: Персистентность флагов видимости окон
+- **AppGui.cpp loadConfig()** — добавлена загрузка флагов видимости окон из секции `layout` в JSON:
+  - ✅ `show_pair_list` → showPairList_ (default: true)
+  - ✅ `show_user_panel` → showUserPanel_ (default: true)
+  - ✅ `show_volume_delta` → showVolumeDelta_ (default: true)
+  - ✅ `show_indicators` → showIndicators_ (default: true)
+  - ✅ `show_logs` → showLogs_ (default: true)
+- **AppGui.cpp configToJson()** — добавлено сохранение флагов видимости окон в секцию `layout` JSON.
+
+#### Этап 3: Версия приложения обновлена
+- **AppGui.cpp** — версия обновлена с "v2.4.0" на "v2.5.0" в welcome log и About menu.
+- **main.cpp** — версия обновлена с "v2.4.0" на "v2.5.0" в startup log.
+
+#### Этап 4: Тестирование v2.5.0 (11 новых тестов)
+- **test_full_system.cpp** — 11 новых тестов:
+  - `LayoutResetV250` (8): RecalculateAllWindowsVisible — проверка что все 8 окон видимы и имеют ненулевые размеры; PairListLeftOfMarketData — Pair List слева от Market Data; UserPanelRightOfMarketData — User Panel справа от Market Data; VolumeDeltaBelowPairList — Volume Delta ниже Pair List; IndicatorsBelowMarketData — Indicators ниже Market Data; LogsBelowIndicators — Logs ниже Indicators; MarketDataCentered — Market Data между Pair List и User Panel; NoWindowOverlap — окна не перекрывают друг друга
+  - `ConfigPersistenceV250` (2): LayoutVisibilityFlags — проверка сохранения флагов видимости в JSON; LayoutVisibilityFalse — проверка сохранения false значений
+  - `VersionV250` (1): VersionStringExists — проверка наличия строки "2.5.0"
+- **Итого тестов:** 589 (585 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.5.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.5.0: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v2.6.0.
+
 ## [2.4.0] - 2026-03-06
 
 ### Fixed
