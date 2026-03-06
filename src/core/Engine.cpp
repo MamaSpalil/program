@@ -28,7 +28,8 @@ struct Engine::Impl {
     std::unique_ptr<UserIndicatorManager>   userIndicators;
     std::unique_ptr<ExchangeDB>             tradeDB;
     std::unique_ptr<CandleCache>            candleCache;
-    std::string                             exchangeName;
+    std::string                             exchangeName;    // raw name: binance/bybit/okx/etc.
+    std::string                             exchangeNameQualified; // name_mode for cache isolation
     std::deque<Candle>                      candleHistory;
     OnUpdateCallback                        onUpdateCb;
     int                                     maxCandleHistory{5000}; // configurable via engine.max_candle_history
@@ -153,7 +154,8 @@ void Engine::initComponents() {
     // Local candle cache (SQLite3) — use mode-qualified exchange name
     // so LIVE and Paper data are stored independently
     impl_->candleCache = std::make_unique<CandleCache>("config/candles.db");
-    impl_->exchangeName = name + "_" + mode;
+    impl_->exchangeName = name;
+    impl_->exchangeNameQualified = name + "_" + mode;
 
     // Load user Pine Script indicators
     std::string indicatorDir = config_.value("user_indicator_dir", "user_indicator");
@@ -208,7 +210,7 @@ void Engine::run() {
 
         // 1. Load cached candles from local SQLite DB
         if (impl_->candleCache) {
-            hist = impl_->candleCache->load(impl_->exchangeName, symbol, interval);
+            hist = impl_->candleCache->load(impl_->exchangeNameQualified, symbol, interval);
             if (!hist.empty()) {
                 Logger::get()->info("Loaded {} cached candles from local DB", hist.size());
             }
@@ -241,7 +243,7 @@ void Engine::run() {
 
             // 4. Persist all candles (fresh + merged) to local cache
             if (impl_->candleCache) {
-                impl_->candleCache->store(impl_->exchangeName, symbol, interval, hist);
+                impl_->candleCache->store(impl_->exchangeNameQualified, symbol, interval, hist);
             }
             if (newCount > 0) {
                 Logger::get()->info("Added {} new candles to local cache", newCount);
@@ -405,6 +407,11 @@ void Engine::setMarketType(const std::string& marketType) {
         impl_->exchange->setMarketType(marketType);
 }
 
+std::string Engine::getExchangeName() const {
+    if (impl_) return impl_->exchangeName;
+    return "";
+}
+
 void Engine::reloadCandles(const std::string& symbol, const std::string& interval) {
     if (!impl_ || !impl_->exchange) return;
 
@@ -420,7 +427,7 @@ void Engine::reloadCandles(const std::string& symbol, const std::string& interva
 
         // 1. Load cached candles from local SQLite DB
         if (impl_->candleCache) {
-            hist = impl_->candleCache->load(impl_->exchangeName, symbol, interval);
+            hist = impl_->candleCache->load(impl_->exchangeNameQualified, symbol, interval);
             if (!hist.empty()) {
                 Logger::get()->info("[Engine] Loaded {} cached candles for {}", hist.size(), symbol);
             }
@@ -447,7 +454,7 @@ void Engine::reloadCandles(const std::string& symbol, const std::string& interva
                       [](const Candle& a, const Candle& b) { return a.openTime < b.openTime; });
 
             if (impl_->candleCache) {
-                impl_->candleCache->store(impl_->exchangeName, symbol, interval, hist);
+                impl_->candleCache->store(impl_->exchangeNameQualified, symbol, interval, hist);
             }
         }
 

@@ -8,6 +8,7 @@
 #include <locale>
 #include <clocale>
 #include <chrono>
+#include <nlohmann/json.hpp>
 
 #include "data/TradingDatabase.h"
 #include "data/TradeRepository.h"
@@ -20,6 +21,8 @@
 #include "data/AuxRepository.h"
 #include "data/DatabaseMigrator.h"
 #include "data/DatabaseMaintenance.h"
+#include "integration/TelegramBot.h"
+#include "exchange/SymbolFormatter.h"
 #include <future>
 
 #ifdef USE_IMGUI
@@ -98,7 +101,14 @@ int main(int argc, char* argv[]) {
         crypto::Logger::get()->info("CryptoTrader GUI starting...");
 
         // ── Initialize Trading Database ──────────────────────────────
-        std::string dbPath = (std::filesystem::path(configPath).parent_path() / "trading.db").string();
+        // Ensure config directory exists for first-launch DB creation
+        auto dbDir = std::filesystem::path(configPath).parent_path();
+        if (!dbDir.empty() && !std::filesystem::exists(dbDir)) {
+            std::filesystem::create_directories(dbDir);
+            crypto::Logger::get()->info("Created config directory: {}", dbDir.string());
+        }
+
+        std::string dbPath = (dbDir / "trading.db").string();
         auto tradingDb = std::make_shared<crypto::TradingDatabase>(dbPath);
         if (!tradingDb->init()) {
             crypto::Logger::get()->error("Failed to initialize trading database");
@@ -139,6 +149,7 @@ int main(int argc, char* argv[]) {
             equityRepo.get());
 
         std::unique_ptr<crypto::Engine> engine;
+        auto telegramBot = std::make_shared<crypto::TelegramBot>();
 
         // Wire up GUI callbacks to engine
         gui->setConnectCallback([&](const crypto::GuiConfig& cfg) {
@@ -190,6 +201,80 @@ int main(int argc, char* argv[]) {
 
                 // Set market type on exchange
                 engine->setMarketType(cfg.marketType);
+
+                // ── Wire TelegramBot commands to Engine ──────────────
+                {
+                    // Read telegram config from settings
+                    std::ifstream tgf(configPath);
+                    if (tgf.is_open()) {
+                        try {
+                            nlohmann::json tgCfg;
+                            tgf >> tgCfg;
+                            if (tgCfg.contains("telegram")) {
+                                auto& tg = tgCfg["telegram"];
+                                std::string token = tg.value("token", "");
+                                std::string chatId = tg.value("chat_id", "");
+                                if (!token.empty()) {
+                                    telegramBot->setToken(token);
+                                    if (!chatId.empty()) telegramBot->setAuthorizedChat(chatId);
+
+                                    // Register real command callbacks
+                                    telegramBot->setCommandCallback("/balance", [&engine]() -> std::string {
+                                        if (!engine) return "Engine not running";
+                                        try {
+                                            auto bal = engine->getFuturesBalance();
+                                            return "Balance: " + std::to_string(bal.totalWalletBalance) +
+                                                   " USDT\nMargin: " + std::to_string(bal.totalMarginBalance) +
+                                                   "\nUnrealized PnL: " + std::to_string(bal.totalUnrealizedProfit);
+                                        } catch (...) {
+                                            return "Balance fetch failed";
+                                        }
+                                    });
+
+                                    telegramBot->setCommandCallback("/status", [&engine, &cfg]() -> std::string {
+                                        if (!engine) return "Engine not running";
+                                        return "Connected to " + cfg.exchangeName +
+                                               "\nSymbol: " + cfg.symbol +
+                                               "\nInterval: " + cfg.interval +
+                                               "\nMode: " + cfg.mode +
+                                               "\nMarket: " + cfg.marketType;
+                                    });
+
+                                    telegramBot->setCommandCallback("/positions", [&engine, &cfg]() -> std::string {
+                                        if (!engine) return "Engine not running";
+                                        try {
+                                            auto positions = engine->getPositionRisk(cfg.symbol);
+                                            if (positions.empty()) return "No open positions";
+                                            std::string result;
+                                            for (auto& p : positions) {
+                                                result += p.symbol +
+                                                          " qty=" + std::to_string(p.positionAmt) +
+                                                          " entry=" + std::to_string(p.entryPrice) +
+                                                          " pnl=" + std::to_string(p.unrealizedProfit) + "\n";
+                                            }
+                                            return result;
+                                        } catch (...) {
+                                            return "Positions fetch failed";
+                                        }
+                                    });
+
+                                    telegramBot->setCommandCallback("/pnl", [&engine]() -> std::string {
+                                        if (!engine) return "Engine not running";
+                                        double pnl = engine->totalPnl();
+                                        double wr = engine->winRate();
+                                        return "Total P&L: " + std::to_string(pnl) +
+                                               " USDT\nWin Rate: " + std::to_string(wr * 100.0) + "%";
+                                    });
+
+                                    telegramBot->startPolling();
+                                    gui->addLog("[OK] TelegramBot started (chat: " + chatId + ")");
+                                }
+                            }
+                        } catch (...) {
+                            // Telegram config parsing failed — non-critical
+                        }
+                    }
+                }
 
                 // Show User Panel automatically after successful connection
                 // (the panel visibility flag is set from within the GUI)
@@ -295,6 +380,7 @@ int main(int argc, char* argv[]) {
 
         gui->setDisconnectCallback([&]() {
             gui->addLog("[Info] Disconnecting...");
+            telegramBot->stopPolling();
             if (engine) {
                 engine->stop();
                 engine.reset();
@@ -425,13 +511,14 @@ int main(int argc, char* argv[]) {
             }).detach();
         });
 
-        gui->addLog("[Info] Crypto ML Trader v1.0.0 ready");
+        gui->addLog("[Info] Crypto ML Trader v2.2.0 ready");
         gui->addLog("[Info] Configure exchange settings and press Connect");
 
         // Run the GUI event loop (blocks until window close)
         gui->run();
 
         // Cleanup
+        telegramBot->stopPolling();
         if (engine) {
             engine->stop();
             engine.reset();
@@ -475,7 +562,14 @@ int main(int argc, char* argv[]) {
         crypto::Logger::get()->info("CryptoTrader starting (console mode)...");
 
         // ── Initialize Trading Database ──────────────────────────────
-        std::string dbPath = (std::filesystem::path(configPath).parent_path() / "trading.db").string();
+        // Ensure config directory exists for first-launch DB creation
+        auto dbDir = std::filesystem::path(configPath).parent_path();
+        if (!dbDir.empty() && !std::filesystem::exists(dbDir)) {
+            std::filesystem::create_directories(dbDir);
+            crypto::Logger::get()->info("Created config directory: {}", dbDir.string());
+        }
+
+        std::string dbPath = (dbDir / "trading.db").string();
         auto tradingDb = std::make_shared<crypto::TradingDatabase>(dbPath);
         if (!tradingDb->init()) {
             crypto::Logger::get()->error("Failed to initialize trading database");

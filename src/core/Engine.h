@@ -1,5 +1,6 @@
 #pragma once
 #include "../exchange/IExchange.h"
+#include "../exchange/SymbolFormatter.h"
 #include "../data/ExchangeDB.h"
 #include "../indicators/PineScriptIndicator.h"
 #include <atomic>
@@ -50,6 +51,9 @@ public:
 
     // Set market type on the exchange (spot/futures)
     void setMarketType(const std::string& marketType);
+
+    // Get the raw exchange name (e.g. "binance", "bybit", "okx", "kucoin", "bitget")
+    std::string getExchangeName() const;
 
     // Reload historical candles for a new symbol/interval pair
     void reloadCandles(const std::string& symbol, const std::string& interval);
