@@ -5,6 +5,85 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: ML/AI — OnlineLearningLoop Stale State Fix
+- **OnlineLearningLoop.h/.cpp** — исправлен главный RL-баг: стейт-кэш для корректного обучения. Добавлены:
+  - `captureStateForTrade(tradeId)` — сохраняет текущий вектор признаков на момент открытия позиции
+  - `getCachedState(tradeId)` — извлекает кэшированный стейт для использования в `pollTrades()`
+  - `stateCache_` (unordered_map) с мьютексом и автоматической очисткой (max 500 записей)
+  - Поле `stateCacheMtx_` для thread-safe доступа к кэшу
+- **OnlineLearningLoop.cpp pollTrades()** — полностью переписан:
+  - `exp.state` берётся из кэша (состояние на момент входа), а не из текущего feat_.extract()
+  - `exp.nextState` = текущее состояние рынка (после закрытия сделки) — `state ≠ nextState` (bootstrap корректен)
+  - `exp.logProb/value` вычисляются через `agent_.forward_pass(exp.state)` вместо нулей
+  - Сделки без кэшированного стейта пропускаются с debug-логом вместо обучения на некорректных данных
+  - Использованные кэш-записи удаляются после обработки
+
+#### Этап 2: Реализация заглушек (3 модуля)
+- **NewsFeed.cpp** — реализован `fetchAndParse()` через CryptoPanic API:
+  - HTTP GET с API-ключом и JSON-парсингом (title, source, url, sentiment из votes)
+  - Graceful fallback при отсутствии API-ключа или libcurl
+  - Rate limit: 5 минут между запросами (loop)
+  - Добавлен `setApiKey()` метод в NewsFeed.h
+- **FearGreed.cpp** — реализован `fetch()` через Alternative.me API:
+  - GET `https://api.alternative.me/fng/?limit=1`
+  - Парсинг value (0-100), value_classification, timestamp из JSON
+  - Thread-safe обновление через `setData()`
+  - Rate limit: 1 час между запросами
+- **TelegramBot.cpp** — реализованы `sendMessage()` и `getUpdates()`:
+  - `sendMessage()`: POST `https://api.telegram.org/bot{token}/sendMessage` с JSON body (chat_id, text, parse_mode=HTML)
+  - `getUpdates()`: GET с long-polling (timeout=30s), парсинг update_id, text, chat_id
+  - Graceful fallback при отсутствии токена (логирование без HTTP-вызова)
+
+#### Этап 3: OrderManagement & UI — Валидация и формат цен
+- **OrderManagement.cpp estimateCost()** — теперь включает оценку комиссии тейкера (0.1%): `notional + notional * 0.001`. Более точная оценка стоимости ордера.
+- **OrderManagement.h/.cpp** — добавлены методы адаптивного формата цен:
+  - `priceFormat(double)` — возвращает строку формата: `%.2f` для ≥1000, `%.4f` для ≥1, `%.6f` для ≥0.01, `%.8f` для <0.01
+  - `formatPrice(buf, size, price)` — форматирует цену в буфер с адаптивным количеством десятичных знаков
+- **AppGui.cpp** — заменены хардкоды `%.8f` на `OrderManagement::formatPrice()` в:
+  - Шкала цен графика (price scale)
+  - Текущая цена (current price line)
+  - Кроссхэйр (crosshair price label)
+  - Правый клик → контекстное меню (ChartOrderMenu)
+  - Текущая цена символа (main panel)
+  - Подтверждение ордера (Confirm Order popup)
+  - Est. Cost и Balance используют `%.2f` для USD-значений
+
+#### Этап 4: RLTradingAgent — PPO Hyper-parameter Tuning
+- **RLTradingAgent.h PPOConfig** — улучшены гиперпараметры PPO:
+  - `entropyCoeff` увеличен с 0.01 до 0.02 (лучше exploration для финансовых данных)
+  - Добавлено поле `valueLossClipMax{10.0f}` для ограничения value loss
+  - Добавлен метод `validate()` с clamping всех гиперпараметров:
+    - entropyCoeff: [0.001, 0.1], valueLossCoeff: [0.1, 1.0]
+    - epsilon: [0.05, 0.3], gamma: [0.9, 0.999], lambda: [0.8, 0.99]
+    - maxGradNorm: [0.1, 5.0], valueLossClipMax: [1.0, 100.0]
+- **RLTradingAgent.cpp** — конструктор вызывает `cfg_.validate()` для безопасной инициализации
+- **RLTradingAgent.cpp train_step()** — value loss теперь клипается: `torch::clamp(valueLoss, 0.0f, cfg_.valueLossClipMax)` для предотвращения взрывных градиентов от outlier value predictions
+
+### Added
+
+#### Этап 5: Тестирование v1.8.0
+- **test_full_system.cpp** — 14 новых тестов:
+  - `OnlineLearningV180` (2): CaptureAndRetrieveState — кэширование стейта, NextStateDiffersFromState — иммутабельность кэша
+  - `NewsFeedV180` (2): AddAndRetrieveItems — CRUD, HasApiKeySetter — наличие метода setApiKey
+  - `FearGreedV180` (2): SetAndGetData — установка/чтение данных, DefaultIsNeutral — дефолтные значения
+  - `TelegramBotV180` (3): ProcessCommandHelp — команда /help, SendMessageNoToken — graceful без токена, UnauthorizedChat — отклонение неавторизованного чата
+  - `OrderManagementV180` (3): EstimateCostWithCommission — проверка 0.1% комиссии, AdaptivePriceFormat — проверка формата для разных цен, FormatPriceBuf — форматирование в буфер
+  - `RLAgentV180` (2): PPOConfigValidation — clamping гиперпараметров, PPOConfigValueLossClip — проверка valueLossClipMax
+- **Обновлены тесты:**
+  - `OrderManagement.EstimateCost` — обновлён для 0.1% комиссии
+  - `OrderManagement.CostEstimation` — обновлён для 0.1% комиссии
+  - `SystemTest.OrderManagementEdgeCases` — обновлён для 0.1% комиссии
+  - `RLTradingAgentAI.PPOConfigDefaults` — обновлён для entropyCoeff=0.02 и valueLossClipMax
+- **Итого тестов:** 477 (473 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v1.8.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v1.8.0: все 7 открытых проблем отмечены ✅ Done, обновлён промт для следующего этапа v1.9.0.
+
 ## [1.7.5] - 2026-03-06
 
 ### Fixed
