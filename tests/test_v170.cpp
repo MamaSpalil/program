@@ -126,37 +126,47 @@ TEST(LayoutStress, NoOverlapCenterColumns) {
     mgr.recalculate(1920, 1080);
     auto pl = mgr.get("Pair List");
     auto vd = mgr.get("Volume Delta");
+    auto md = mgr.get("Market Data");
     auto up = mgr.get("User Panel");
 
-    // PairList right edge ≤ center column left edge
-    EXPECT_LE(pl.pos.x + pl.size.x, vd.pos.x + 0.5f);
+    // PairList and VD are in the left column (same X)
+    EXPECT_FLOAT_EQ(pl.pos.x, vd.pos.x);
+    // Left column right edge ≤ center column left edge
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 0.5f);
     // Center column right edge ≤ UserPanel left edge
-    EXPECT_LE(vd.pos.x + vd.size.x, up.pos.x + 0.5f);
+    EXPECT_LE(md.pos.x + md.size.x, up.pos.x + 0.5f);
 }
 
 TEST(LayoutStress, NoOverlapCenterVertical) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
+    auto pl  = mgr.get("Pair List");
     auto vd  = mgr.get("Volume Delta");
     auto md  = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
     auto log = mgr.get("Logs");
 
-    // VD → MD → Indicators → Logs: no vertical overlap
-    EXPECT_LE(vd.pos.y + vd.size.y, md.pos.y + 0.5f);
+    // Left column: PairList → VD: no vertical overlap
+    EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + 0.5f);
+    // Center column: MD → Indicators: no vertical overlap
     EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f);
+    // Indicators → Logs: no vertical overlap
     EXPECT_LE(ind.pos.y + ind.size.y, log.pos.y + 0.5f);
+    // VD → Logs: no vertical overlap
+    EXPECT_LE(vd.pos.y + vd.size.y, log.pos.y + 0.5f);
 }
 
 TEST(LayoutStress, NoOverlapLogsAndSidebars) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto pl  = mgr.get("Pair List");
+    auto vd  = mgr.get("Volume Delta");
     auto up  = mgr.get("User Panel");
     auto log = mgr.get("Logs");
 
-    // Sidebars must not overlap logs area
-    EXPECT_LE(pl.pos.y + pl.size.y, log.pos.y + 0.5f);
+    // Left column (Pair List + VD) must not overlap logs area
+    EXPECT_LE(vd.pos.y + vd.size.y, log.pos.y + 0.5f);
+    // Right column (User Panel) must not overlap logs area
     EXPECT_LE(up.pos.y + up.size.y, log.pos.y + 0.5f);
 }
 
@@ -211,11 +221,13 @@ TEST(LayoutStress, MultipleResolutionsNoOverlap) {
             EXPECT_LE(l.pos.y + l.size.y, r.h + 0.5f) << n << " @" << r.w << "x" << r.h;
         }
 
-        // Center column: VD above MD above Indicators
+        // Left column: PairList above VD
+        auto pl = mgr.get("Pair List");
         auto vd = mgr.get("Volume Delta");
+        EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + 0.5f) << "@" << r.w << "x" << r.h;
+        // Center column: MD above Indicators
         auto md = mgr.get("Market Data");
         auto ind = mgr.get("Indicators");
-        EXPECT_LE(vd.pos.y + vd.size.y, md.pos.y + 0.5f) << "@" << r.w << "x" << r.h;
         EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f) << "@" << r.w << "x" << r.h;
     }
 }
@@ -243,11 +255,12 @@ TEST(LayoutStress, ViewportOffsetShiftsAllWindows) {
 TEST(LayoutStress, HidePairListExpandsCenter) {
     LayoutManager mgrAll, mgrNo;
     mgrAll.recalculate(1920, 1080, 0, 0, true, true, true, true, true);
-    mgrNo.recalculate(1920, 1080, 0, 0, false, true, true, true, true);
+    // Hiding both PairList and VD removes the left column (200px)
+    mgrNo.recalculate(1920, 1080, 0, 0, false, true, false, true, true);
 
     auto mdAll = mgrAll.get("Market Data");
     auto mdNo  = mgrNo.get("Market Data");
-    // Hiding PairList(200px) should expand center by 200
+    // Hiding left column (200px) should expand center by 200
     EXPECT_GT(mdNo.size.x, mdAll.size.x + 190.0f);
 }
 
@@ -270,7 +283,8 @@ TEST(LayoutStress, HideLogsExpandsCenter) {
     auto plAll = mgrAll.get("Pair List");
     auto plNo  = mgrNo.get("Pair List");
     // Hiding Logs(120px) should increase sidebar height
-    EXPECT_GT(plNo.size.y, plAll.size.y + 110.0f);
+    // PairList gets ~85% of freed space (rest goes to VD)
+    EXPECT_GT(plNo.size.y, plAll.size.y + 90.0f);
 }
 
 TEST(LayoutStress, HideAllOptionalPanels) {
@@ -286,20 +300,24 @@ TEST(LayoutStress, HideAllOptionalPanels) {
 
 // ── Custom proportions ──────────────────────────────────────────────────────
 
-TEST(LayoutStress, CustomProportionsAffectCenterColumnHeights) {
+TEST(LayoutStress, CustomProportionsAffectColumnHeights) {
     LayoutManager mgr;
     mgr.setVdPct(0.25f);
     mgr.setIndPct(0.25f);
     mgr.recalculate(1920, 1080);
 
     auto vd  = mgr.get("Volume Delta");
+    auto pl  = mgr.get("Pair List");
     auto md  = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
 
-    // VD and Indicators should have same height (both 25%)
+    // VD height = 25% of left column, Indicators height = 25% of center column
+    // Both columns have same Hcenter so VD and Indicators should be similar height
     EXPECT_NEAR(vd.size.y, ind.size.y, 2.0f);
-    // Market Data gets remainder (50%)
-    EXPECT_GT(md.size.y, vd.size.y - 5.0f);
+    // PairList gets remainder of left column (75%)
+    EXPECT_GT(pl.size.y, vd.size.y);
+    // Market Data gets remainder of center column (75%)
+    EXPECT_GT(md.size.y, ind.size.y);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

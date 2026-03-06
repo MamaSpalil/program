@@ -199,6 +199,10 @@ double KuCoinExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[KuCoin] getPrice API error: code={}", json["code"].get<std::string>());
         return 0.0;
     }
+    if (!json.contains("data") || !json["data"].is_object() || !json["data"].contains("price")) {
+        Logger::get()->warn("[KuCoin] getPrice: missing data or price field");
+        return 0.0;
+    }
     double price = safeStod(json["data"]["price"].get<std::string>());
     Logger::get()->debug("[KuCoin] getPrice result={}", price);
     return price;
@@ -403,6 +407,7 @@ void KuCoinExchange::onWsMessage(const std::string& msg) {
         auto j = nlohmann::json::parse(msg);
         if (!j.contains("data")) return;
         if (klineCb_) {
+            if (!j["data"].contains("candles") || !j["data"]["candles"].is_array() || j["data"]["candles"].empty()) return;
             auto& d = j["data"]["candles"];
             Candle c;
             c.openTime = std::stoll(d[0].get<std::string>());

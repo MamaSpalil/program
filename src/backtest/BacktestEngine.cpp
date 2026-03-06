@@ -158,13 +158,15 @@ void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
             double r = (result.equityCurve[i] - prev) / prev;
             returns.push_back(r);
         }
-        double avgRet = std::accumulate(returns.begin(), returns.end(), 0.0) / returns.size();
-        double sq_sum = 0;
-        for (double r : returns) sq_sum += (r - avgRet) * (r - avgRet);
-        double stdRet = (returns.size() > 1)
-            ? std::sqrt(sq_sum / (returns.size() - 1))
-            : 0.0;
-        result.sharpeRatio = (stdRet > 0) ? (avgRet / stdRet) * std::sqrt(252.0) : 0.0;
+        if (!returns.empty()) {
+            double avgRet = std::accumulate(returns.begin(), returns.end(), 0.0) / returns.size();
+            double sq_sum = 0;
+            for (double r : returns) sq_sum += (r - avgRet) * (r - avgRet);
+            double stdRet = (returns.size() > 1)
+                ? std::sqrt(sq_sum / (returns.size() - 1))
+                : 0.0;
+            result.sharpeRatio = (stdRet > 0) ? (avgRet / stdRet) * std::sqrt(252.0) : 0.0;
+        }
     }
 
     // Persist results to database if repository is set

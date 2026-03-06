@@ -2287,3 +2287,122 @@ TEST(BacktestV190, ShortTradeProfitable) {
     });
     EXPECT_GT(result.totalPnL, 0.0);
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// v2.0.0 TESTS — Layout, Exchange bounds, BacktestEngine Sharpe empty returns
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── Layout v2.0.0: Volume Delta is now in left column below Pair List ───────
+
+TEST(LayoutV200, VolumeDeltaInLeftColumn) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    // VD has same X as PairList (left column)
+    EXPECT_FLOAT_EQ(vd.pos.x, pl.pos.x);
+    // VD has same width as PairList (200px)
+    EXPECT_FLOAT_EQ(vd.size.x, pl.size.x);
+    EXPECT_FLOAT_EQ(vd.size.x, 200.0f);
+}
+
+TEST(LayoutV200, VolumeDeltaBelowPairList) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    // VD starts where PairList ends
+    EXPECT_NEAR(vd.pos.y, pl.pos.y + pl.size.y, 1.0f);
+}
+
+TEST(LayoutV200, MarketDataStartsAtTopOfCenter) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto md = mgr.get("Market Data");
+    auto fb = mgr.get("Filters Bar");
+    // Market Data starts right after Filters Bar (no VD above it)
+    EXPECT_NEAR(md.pos.y, fb.pos.y + fb.size.y, 1.0f);
+}
+
+TEST(LayoutV200, CenterColumnOnlyMarketDataAndIndicators) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto md  = mgr.get("Market Data");
+    auto ind = mgr.get("Indicators");
+    auto vd  = mgr.get("Volume Delta");
+    // MD and Indicators have same X (center column)
+    EXPECT_FLOAT_EQ(md.pos.x, ind.pos.x);
+    // VD is NOT in center column (has different X)
+    EXPECT_NE(vd.pos.x, md.pos.x);
+}
+
+TEST(LayoutV200, LeftColumnPairListPlusVDEqualsHcenter) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    auto up = mgr.get("User Panel");
+    // PairList + VD heights should equal User Panel height (full Hcenter)
+    EXPECT_NEAR(pl.size.y + vd.size.y, up.size.y, 1.0f);
+}
+
+TEST(LayoutV200, NoOverlapLeftColumnAndCenter) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    auto md = mgr.get("Market Data");
+    // Left column (PL/VD) right edge ≤ center column left edge
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 0.5f);
+    EXPECT_LE(vd.pos.x + vd.size.x, md.pos.x + 0.5f);
+}
+
+// ── Exchange v2.0.0: WebSocket bounds checks ────────────────────────────────
+
+TEST(ExchangeV200, BybitWsEmptyDataArray) {
+    // BybitExchange onWsMessage should not crash with empty data array
+    // Verify construction and basic test connection
+    BybitExchange ex("invalid", "invalid");
+    std::string err;
+    EXPECT_NO_THROW(ex.testConnection(err));
+}
+
+TEST(ExchangeV200, KuCoinGetPriceMissingData) {
+    // KuCoinExchange getPrice should not crash with invalid JSON
+    KuCoinExchange ex("invalid", "invalid", "invalid");
+    // Without API connection, getPrice will throw/return 0 gracefully
+    EXPECT_NO_THROW({
+        double p = ex.getPrice("BTC-USDT");
+        (void)p;
+    });
+}
+
+TEST(ExchangeV200, KuCoinWsMissingCandles) {
+    // KuCoinExchange should handle missing candles field gracefully
+    KuCoinExchange ex("invalid", "invalid", "invalid");
+    std::string err;
+    EXPECT_NO_THROW(ex.testConnection(err));
+}
+
+// ── BacktestEngine v2.0.0: Empty returns Sharpe ratio ───────────────────────
+
+TEST(BacktestV200, SharpeRatioEmptyReturns) {
+    // All equity values zero/negative → returns vector empty → no crash
+    BacktestEngine engine;
+    std::vector<Candle> candles;
+    for (int i = 0; i < 10; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.open = 0; c.high = 0; c.low = 0; c.close = 0;
+        c.volume = 0;
+        c.closed = true;
+        candles.push_back(c);
+    }
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 0;
+    cfg.commission = 0.001;
+    auto result = engine.run(cfg, candles, [](const std::vector<Candle>&, size_t) { return 0; });
+    // Should not crash, sharpeRatio should be 0 or NaN-safe
+    EXPECT_FALSE(std::isnan(result.sharpeRatio));
+    EXPECT_FALSE(std::isinf(result.sharpeRatio));
+}

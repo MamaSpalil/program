@@ -117,25 +117,28 @@ TEST(LayoutManager, WindowsDoNotOverlap) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
 
-    auto vd = mgr.get("Volume Delta");
-    auto md = mgr.get("Market Data");
+    auto pl  = mgr.get("Pair List");
+    auto vd  = mgr.get("Volume Delta");
+    auto md  = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
 
-    // Center column: Volume Delta above Market Data above Indicators
-    EXPECT_LT(vd.pos.y + vd.size.y, md.pos.y + 1);
+    // Left column: Pair List above Volume Delta
+    EXPECT_LT(pl.pos.y + pl.size.y, vd.pos.y + 1);
+
+    // Center column: Market Data above Indicators
     EXPECT_LT(md.pos.y + md.size.y, ind.pos.y + 1);
 
     // Logs is at bottom, below the center column
     auto log = mgr.get("Logs");
     EXPECT_GT(log.pos.y, ind.pos.y);
 
-    // Pair List is left of center column
-    auto pl = mgr.get("Pair List");
-    EXPECT_LE(pl.pos.x + pl.size.x, vd.pos.x + 1);
+    // Pair List / VD is left of center column
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 1);
+    EXPECT_LE(vd.pos.x + vd.size.x, md.pos.x + 1);
 
     // User Panel is right of center column
     auto up = mgr.get("User Panel");
-    EXPECT_GE(up.pos.x, vd.pos.x + vd.size.x - 1);
+    EXPECT_GE(up.pos.x, md.pos.x + md.size.x - 1);
 }
 
 TEST(LayoutManager, DifferentScreenSizesProduceDifferentLayouts) {
@@ -177,20 +180,24 @@ TEST(LayoutManager, WindowsAreFullWidth) {
 
     auto log = mgr.get("Logs");
     auto vd  = mgr.get("Volume Delta");
+    auto pl  = mgr.get("Pair List");
     auto md  = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
     auto tb  = mgr.get("Main Toolbar");
 
     // Center column windows should have the same width
-    EXPECT_FLOAT_EQ(vd.size.x, md.size.x);
     EXPECT_FLOAT_EQ(md.size.x, ind.size.x);
+
+    // Volume Delta is in left column (same width as Pair List)
+    EXPECT_FLOAT_EQ(vd.size.x, pl.size.x);
+    EXPECT_FLOAT_EQ(vd.size.x, 200.0f);
 
     // Logs and Main Toolbar are full screen width
     EXPECT_GT(log.size.x, 1900.0f);
     EXPECT_GT(tb.size.x, 1900.0f);
 
     // Center column width = screenW - pairListW(200) - userPanelW(290)
-    EXPECT_FLOAT_EQ(vd.size.x, 1920.0f - 200.0f - 290.0f);
+    EXPECT_FLOAT_EQ(md.size.x, 1920.0f - 200.0f - 290.0f);
 }
 
 TEST(LayoutManager, CustomProportions) {

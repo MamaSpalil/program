@@ -292,6 +292,7 @@ void BybitExchange::onWsMessage(const std::string& msg) {
         auto j = nlohmann::json::parse(msg);
         if (!j.contains("data")) return;
         if (klineCb_) {
+            if (!j["data"].is_array() || j["data"].empty()) return;
             auto& d = j["data"][0];
             Candle c;
             c.openTime = std::stoll(d["start"].get<std::string>());

@@ -641,11 +641,13 @@ void AppGui::renderFrame() {
     // Filters Bar — below toolbar
     drawFiltersBarWindow();
 
-    // Pair List — left sidebar
+    // Pair List — left column, top
     if (showPairList_) drawPairListPanel();
 
-    // Center column: Volume Delta → Market Data → Indicators
+    // Volume Delta — left column, below Pair List
     if (showVolumeDelta_) drawVolumeDeltaPanel();
+
+    // Center column: Market Data → Indicators
     drawMarketDataWindow();
     if (showIndicators_) drawIndicatorsPanel();
 

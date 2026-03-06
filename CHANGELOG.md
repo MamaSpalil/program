@@ -5,6 +5,52 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: UI Layout — Volume Delta перемещён в левую колонку
+- **LayoutManager.cpp** — полностью переработана структура расположения окон:
+  - **Volume Delta** перемещён из центральной колонки в **левую колонку**, ниже Pair List
+  - Левая колонка теперь содержит: Pair List (верх) → Volume Delta (низ)
+  - Центральная колонка упрощена: Market Data (верх) → Indicators (низ)
+  - Volume Delta теперь имеет ширину 200px (как Pair List) вместо полной ширины центральной колонки
+  - Pair List высота уменьшена до `Hcenter - Hvd` (оставляя место для VD)
+  - Market Data получает больше вертикального пространства (нет VD сверху): `Hcenter - Hind`
+  - Параметр `showLeft` = `showPairList || showVolumeDelta` — левая колонка видна при любом из двух
+- **AppGui.cpp** — обновлены комментарии рендеринга для нового порядка окон
+
+#### Этап 2: Exchange — WebSocket bounds checking (Bybit, KuCoin)
+- **BybitExchange.cpp onWsMessage()** — добавлена проверка `j["data"].is_array()` и `j["data"].empty()` перед доступом к `[0]`. Ранее при пустом массиве data происходил crash/exception.
+- **KuCoinExchange.cpp onWsMessage()** — добавлена проверка `j["data"].contains("candles")`, `is_array()` и `empty()` перед доступом к `j["data"]["candles"]`. Ранее при отсутствии поля candles происходил crash.
+- **KuCoinExchange.cpp getPrice()** — добавлена проверка `json.contains("data")`, `is_object()` и `contains("price")` перед доступом к `json["data"]["price"]`. Ранее при пустом ответе API происходил crash.
+
+#### Этап 3: BacktestEngine — Sharpe Ratio empty returns guard
+- **BacktestEngine.cpp computeMetrics()** — добавлена проверка `!returns.empty()` перед вычислением `avgRet` и `stdRet`. Ранее при всех нулевых/отрицательных значениях equity вектор returns оставался пустым, вызывая деление на ноль в `accumulate / returns.size()`.
+
+### Added
+
+#### Этап 4: Тестирование v2.0.0 (10 новых тестов)
+- **test_full_system.cpp** — 10 новых тестов:
+  - `LayoutV200` (6): VolumeDeltaInLeftColumn — VD X == PairList X, VolumeDeltaBelowPairList — VD Y == PL bottom, MarketDataStartsAtTopOfCenter — MD Y == FiltersBar bottom, CenterColumnOnlyMarketDataAndIndicators — VD X ≠ MD X, LeftColumnPairListPlusVDEqualsHcenter — PL+VD height == UserPanel height, NoOverlapLeftColumnAndCenter — PL/VD right ≤ MD left
+  - `ExchangeV200` (3): BybitWsEmptyDataArray, KuCoinGetPriceMissingData, KuCoinWsMissingCandles
+  - `BacktestV200` (1): SharpeRatioEmptyReturns — нет crash при пустом returns вектора
+- **Обновлены тесты:**
+  - `LayoutStress.NoOverlapCenterColumns` — проверяет VD в левой колонке
+  - `LayoutStress.NoOverlapCenterVertical` — проверяет PL → VD и MD → IND
+  - `LayoutStress.NoOverlapLogsAndSidebars` — проверяет VD + logs
+  - `LayoutStress.MultipleResolutionsNoOverlap` — проверяет PL → VD для всех разрешений
+  - `LayoutStress.HidePairListExpandsCenter` — скрывает PL+VD для расширения центра
+  - `LayoutStress.HideLogsExpandsCenter` — обновлён порог для VD-split
+  - `LayoutStress.CustomProportionsAffectColumnHeights` — VD/IND в разных колонках
+  - `LayoutManager.WindowsDoNotOverlap` — PL → VD, MD → IND
+  - `LayoutManager.WindowsAreFullWidth` — VD 200px (left), MD 1430px (center)
+- **Итого тестов:** 502 (498 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.0.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.0.0: новые исправления, обновлённый промт для v2.1.0.
+
 ## [1.9.0] - 2026-03-06
 
 ### Fixed
