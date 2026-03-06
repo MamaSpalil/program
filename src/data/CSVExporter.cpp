@@ -3,8 +3,25 @@
 #include <ctime>
 #include <cstring>
 #include <filesystem>
+#include <algorithm>
 
 namespace crypto {
+
+// Escape a CSV field: wrap in quotes if it contains comma, quote, or newline
+static std::string escapeCsvField(const std::string& field) {
+    if (field.find_first_of(",\"\n\r") != std::string::npos) {
+        std::string escaped;
+        escaped.reserve(field.size() + 4);
+        escaped += '"';
+        for (char c : field) {
+            if (c == '"') escaped += '"';
+            escaped += c;
+        }
+        escaped += '"';
+        return escaped;
+    }
+    return field;
+}
 
 // Validate filename to prevent path traversal
 static bool isValidFilename(const std::string& filename) {
@@ -59,10 +76,10 @@ bool CSVExporter::exportTrades(const std::vector<HistoricalTrade>& trades,
     if (!f.is_open()) return false;
     f << "id,datetime_entry,datetime_exit,symbol,side,type,qty,entry_price,exit_price,pnl,commission,is_paper\n";
     for (auto& t : trades) {
-        f << t.id << ","
-          << formatTime(t.entryTime) << ","
-          << formatTime(t.exitTime) << ","
-          << t.symbol << "," << t.side << "," << t.type << ","
+        f << escapeCsvField(t.id) << ","
+          << escapeCsvField(formatTime(t.entryTime)) << ","
+          << escapeCsvField(formatTime(t.exitTime)) << ","
+          << escapeCsvField(t.symbol) << "," << escapeCsvField(t.side) << "," << escapeCsvField(t.type) << ","
           << t.qty << "," << t.entryPrice << "," << t.exitPrice << ","
           << t.pnl << "," << t.commission << ","
           << (t.isPaper ? "paper" : "live") << "\n";

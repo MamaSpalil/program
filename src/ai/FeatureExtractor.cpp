@@ -251,10 +251,10 @@ void AIFeatureExtractor::buildSwingFeatures(std::vector<float>& out) const {
         double bearGap = candles_[i - 2].low - candles_[i].high;
 
         if (bullGap > 0.0) {
-            set(83 + fvgCount, static_cast<float>(bullGap / ma));
+            set(83 + fvgCount, (ma > 0.0) ? static_cast<float>(bullGap / ma) : 0.0f);
             ++fvgCount;
         } else if (bearGap > 0.0) {
-            set(83 + fvgCount, static_cast<float>(-bearGap / ma));
+            set(83 + fvgCount, (ma > 0.0) ? static_cast<float>(-bearGap / ma) : 0.0f);
             ++fvgCount;
         }
     }
@@ -263,7 +263,7 @@ void AIFeatureExtractor::buildSwingFeatures(std::vector<float>& out) const {
     auto obs = calc_OrderBlocks();
     for (int i = 0; i < static_cast<int>(obs.size()) && i < 10; ++i) {
         double mid = (obs[i].zoneHigh + obs[i].zoneLow) * 0.5;
-        set(93 + i, static_cast<float>((mid - ma) / ma));
+        set(93 + i, (ma > 0.0) ? static_cast<float>((mid - ma) / ma) : 0.0f);
     }
 }
 

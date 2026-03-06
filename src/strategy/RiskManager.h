@@ -26,7 +26,9 @@ public:
     bool canTrade() const;
 
     // Calculate trailing stop
-    double trailingStop(double entryPrice, double highSince,
+    // priceSinceEntry: for LONG, pass highest price since entry;
+    //                  for SHORT, pass lowest price since entry.
+    double trailingStop(double entryPrice, double priceSinceEntry,
                          double atr, bool isLong) const;
 
     void onTradeOpen(const Position& pos);

@@ -46,6 +46,9 @@ public:
     std::vector<UserTradeInfo> getMyTrades(const std::string& symbol, int limit = 20) override;
     std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
     FuturesBalanceInfo getFuturesBalance() override;
+    bool cancelOrder(const std::string& symbol, const std::string& orderId) override;
+    bool setLeverage(const std::string& symbol, int leverage) override;
+    int getLeverage(const std::string& symbol) override;
 
     // ── Rate limit constants (Binance API, updated March 2026) ─────────────
     // IP rate limits: 6000 weight/min (spot), 2400 weight/min (futures)

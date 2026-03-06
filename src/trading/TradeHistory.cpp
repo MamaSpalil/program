@@ -95,9 +95,13 @@ double TradeHistory::totalPnl() const {
 }
 
 double TradeHistory::winRate() const {
-    int total = totalTrades();
-    if (total == 0) return 0.0;
-    return static_cast<double>(winCount()) / total;
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (trades_.empty()) return 0.0;
+    int wins = 0;
+    for (auto& t : trades_) {
+        if (t.pnl > 0) ++wins;
+    }
+    return static_cast<double>(wins) / static_cast<double>(trades_.size());
 }
 
 double TradeHistory::avgWin() const {
@@ -125,7 +129,7 @@ double TradeHistory::profitFactor() const {
     double totalWins = 0, totalLosses = 0;
     for (auto& t : trades_) {
         if (t.pnl > 0) totalWins += t.pnl;
-        else totalLosses += std::abs(t.pnl);
+        else if (t.pnl < 0) totalLosses += std::abs(t.pnl);
     }
     return totalLosses > 0 ? totalWins / totalLosses : 0.0;
 }

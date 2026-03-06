@@ -96,7 +96,8 @@ void LSTMModel::train(const std::vector<std::vector<double>>& X,
             auto target = torch::tensor({y[i + seqLen]}, torch::kLong).to(device_);
             opt.zero_grad();
             auto out = net_->forward(inp);
-            auto loss = torch::nll_loss(torch::log(out + 1e-9), target);
+            auto logProbs = torch::log_softmax(out, 1);
+            auto loss = torch::nll_loss(logProbs, target);
             loss.backward();
             opt.step();
             totalLoss += loss.item<double>();

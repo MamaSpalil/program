@@ -348,7 +348,7 @@ AccountBalance OKXExchange::getBalance() {
                         bal.availableUSDT = safeStod(d.value("availBal", "0"));
                     }
                     if (ccy == "BTC") {
-                        bal.btcBalance = safeStod(d.value("availBal", "0"));
+                        bal.btcBalance = safeStod(d.value("cashBal", "0"));
                     }
                 }
             }
@@ -643,6 +643,73 @@ std::vector<AccountBalanceDetail> OKXExchange::getAccountBalanceDetails() {
     } catch (const std::exception& e) {
         Logger::get()->warn("[OKX] getAccountBalanceDetails failed: {}", e.what());
         return {};
+    }
+#endif
+}
+
+bool OKXExchange::cancelOrder(const std::string& symbol, const std::string& orderId) {
+#ifndef USE_CURL
+    (void)symbol; (void)orderId;
+    return false;
+#else
+    try {
+        nlohmann::json body;
+        body["instId"] = symbol;
+        body["ordId"]  = orderId;
+        auto resp = httpPost("/api/v5/trade/cancel-order", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("code", "1") != "0") {
+            Logger::get()->warn("[OKX] cancelOrder error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[OKX] cancelOrder success: {} {}", symbol, orderId);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] cancelOrder failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+bool OKXExchange::setLeverage(const std::string& symbol, int leverage) {
+#ifndef USE_CURL
+    (void)symbol; (void)leverage;
+    return false;
+#else
+    try {
+        nlohmann::json body;
+        body["instId"]  = symbol;
+        body["lever"]   = std::to_string(leverage);
+        body["mgnMode"] = "cross";
+        auto resp = httpPost("/api/v5/account/set-leverage", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("code", "1") != "0") {
+            Logger::get()->warn("[OKX] setLeverage error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[OKX] setLeverage: {} = {}x", symbol, leverage);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[OKX] setLeverage failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+int OKXExchange::getLeverage(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return 1;
+#else
+    try {
+        auto positions = getPositionRisk(symbol);
+        for (auto& p : positions) {
+            if (p.symbol == symbol && p.leverage > 0)
+                return static_cast<int>(p.leverage);
+        }
+        return 1;
+    } catch (...) {
+        return 1;
     }
 #endif
 }

@@ -35,6 +35,10 @@ public:
     bool testConnection(std::string& outError) override;
     std::vector<SymbolInfo> getSymbols(const std::string& marketType = "") override;
     OrderBook getOrderBook(const std::string& symbol, int depth = 20) override;
+    std::vector<PositionInfo> getPositionRisk(const std::string& symbol = "") override;
+    bool cancelOrder(const std::string& symbol, const std::string& orderId) override;
+    bool setLeverage(const std::string& symbol, int leverage) override;
+    int getLeverage(const std::string& symbol) override;
 
 private:
     std::string apiKey_;

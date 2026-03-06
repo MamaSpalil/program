@@ -92,7 +92,7 @@ private:
 
     nlohmann::json config_;
     std::atomic<bool> running_{false};
-    bool componentsInitialized_{false};
+    std::atomic<bool> componentsInitialized_{false};
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

@@ -184,6 +184,18 @@ public:
         (void)symbol; (void)orderId;
         return false;
     }
+
+    // Set leverage for a futures symbol
+    virtual bool setLeverage(const std::string& symbol, int leverage) {
+        (void)symbol; (void)leverage;
+        return false;
+    }
+
+    // Get current leverage for a futures symbol (default = 1x)
+    virtual int getLeverage(const std::string& symbol) {
+        (void)symbol;
+        return 1;
+    }
 };
 
 } // namespace crypto
