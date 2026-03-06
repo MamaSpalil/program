@@ -1,4 +1,5 @@
 #include "GridBot.h"
+#include "../core/Logger.h"
 #include <algorithm>
 
 namespace crypto {
@@ -61,7 +62,11 @@ void GridBot::onOrderFilled(const std::string& orderId) {
             ++filledOrders_;
             // Realized profit = sell price - buy price * quantity
             if (lvl.hasBuy && lvl.buyPrice > 0.0) {
-                double qty = lvl.quantity > 0.0 ? lvl.quantity : 1.0;
+                double qty = lvl.quantity;
+                if (qty <= 0.0) {
+                    Logger::get()->warn("[GridBot] Level quantity not set, defaulting to 1.0");
+                    qty = 1.0;
+                }
                 realizedProfit_ += (lvl.price - lvl.buyPrice) * qty;
             }
             return;
