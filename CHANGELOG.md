@@ -5,6 +5,79 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Thread-Safety Fixes
+- **Engine.h** — `componentsInitialized_` изменён с `bool` на `std::atomic<bool>` для предотвращения race condition при многопоточном доступе (Engine.h:95).
+- **TradeHistory.cpp** — `winRate()` переписан с единым `lock_guard` на весь расчёт вместо двух раздельных вызовов `totalTrades()` + `winCount()`, каждый из которых отдельно захватывал мьютекс (TradeHistory.cpp:97-101). Устраняет TOCTOU race condition.
+- **TradeHistory.cpp** — `profitFactor()` теперь корректно игнорирует breakeven-сделки (pnl==0): условие `else` заменено на `else if (t.pnl < 0)` (TradeHistory.cpp:128). Ранее pnl==0 ошибочно добавлял 0 в losses.
+
+#### Этап 2: ML/AI Fixes
+- **XGBoostModel.cpp** — устранена утечка памяти при повторном обучении: `XGBoosterFree(booster_)` вызывается перед созданием нового booster в `train()` (XGBoostModel.cpp:36). Ранее при каждом `train()` создавался новый booster без освобождения предыдущего.
+- **LSTMModel.cpp** — исправлена числовая нестабильность loss-функции: `torch::log(out + 1e-9)` заменён на `torch::log_softmax(out, 1)` (LSTMModel.cpp:99). log_softmax численно стабильнее и математически корректнее для NLL loss.
+- **ai/FeatureExtractor.cpp** — устранено деление на ноль в FVG detection и Order Block mid-points: добавлена проверка `ma > 0.0` перед делением на `ma` (ai/FeatureExtractor.cpp:254,257,266).
+
+#### Этап 3: Settings & UI Fixes
+- **AppGui.cpp configToJson()** — добавлено сохранение фильтров (`filterMinVolume`, `filterMinPrice`, `filterMaxPrice`, `filterMinChange`, `filterMaxChange`) и флагов индикаторов (`indEmaEnabled`, `indRsiEnabled`, `indAtrEnabled`, `indMacdEnabled`, `indBbEnabled`) в JSON. Ранее эти настройки терялись при перезапуске (AppGui.cpp:517-531).
+- **AppGui.cpp loadConfig()** — добавлена загрузка секций `"filters"` и `"indicators_enabled"` из JSON при старте (AppGui.cpp:461-477).
+- **AppGui.h** — синхронизированы дефолтные значения layout: `layoutVdPct{0.15f}` (было 0.13f), `layoutIndPct{0.20f}` (было 0.25f) — приведены в соответствие с LayoutManager.h (AppGui.h:196-197).
+- **AppGui.cpp loadConfig()** — дефолтные значения при загрузке layout обновлены: `vd_pct` = 0.15f, `ind_pct` = 0.20f (AppGui.cpp:454-456).
+
+#### Этап 4: Security & Utility Fixes
+- **WebhookServer.cpp** — устранена утечка памяти в `rateLimit_` map: добавлен периодический cleanup (каждые 100 запросов удаляются записи старше 1 часа). Ранее map рос без ограничений (WebhookServer.cpp:29-39).
+- **WebhookServer.cpp** — сравнение секрета заменено на constant-time: `CRYPTO_memcmp()` из OpenSSL вместо прямого `!=`. Устраняет уязвимость timing attack (WebhookServer.cpp:57-65).
+- **CSVExporter.cpp** — добавлено экранирование CSV полей: поля содержащие запятые, кавычки или переводы строк оборачиваются в двойные кавычки, внутренние кавычки экранируются удвоением. Функция `escapeCsvField()` применяется ко всем строковым полям в `exportTrades()` (CSVExporter.cpp:10-22, 68-77).
+- **OKXExchange.cpp getBalance()** — BTC баланс теперь использует `cashBal` вместо `availBal` для полного баланса (OKXExchange.cpp:351). `availBal` не учитывает замороженные средства.
+- **RiskManager.h/.cpp** — параметр `highSince` переименован в `priceSinceEntry` для ясности: для LONG передаётся highest price, для SHORT — lowest price since entry. Устранена путаница в именовании (RiskManager.h:29-30, RiskManager.cpp:41).
+
+### Added
+
+#### Этап 5: Exchange Futures Support (Leverage API)
+- **IExchange.h** — добавлены виртуальные методы `setLeverage(symbol, leverage)` → `bool` и `getLeverage(symbol)` → `int` с дефолтными реализациями (IExchange.h:188-198).
+- **BinanceExchange** — реализованы:
+  - `setLeverage()`: POST `/fapi/v1/leverage` с HMAC-SHA256 подписью (BinanceExchange.cpp:813-831)
+  - `getLeverage()`: через `getPositionRisk()` → `leverage` (BinanceExchange.cpp:833-845)
+  - `cancelOrder()`: POST/DELETE `/api/v3/order` (spot) или `/fapi/v1/order` (futures) (BinanceExchange.cpp:780-811)
+- **BybitExchange** — реализованы:
+  - `setLeverage()`: POST `/v5/position/set-leverage`, JSON body с buyLeverage/sellLeverage (BybitExchange.cpp:483-506)
+  - `getLeverage()`: через `getPositionRisk()` → `leverage` (BybitExchange.cpp:508-520)
+  - `cancelOrder()`: POST `/v5/order/cancel` (BybitExchange.cpp:462-481)
+  - `getPositionRisk()`: GET `/v5/position/list?category=linear` (BybitExchange.cpp:430-460)
+- **OKXExchange** — реализованы:
+  - `setLeverage()`: POST `/api/v5/account/set-leverage`, JSON body (OKXExchange.cpp:672-694)
+  - `getLeverage()`: через `getPositionRisk()` → `lever` (OKXExchange.cpp:696-708)
+  - `cancelOrder()`: POST `/api/v5/trade/cancel-order` (OKXExchange.cpp:650-670)
+- **KuCoinExchange** — реализованы:
+  - `setLeverage()`: POST `/api/v2/changeLeverage` (KuCoinExchange.cpp:541-563)
+  - `getLeverage()`: через `getPositionRisk()` → `realLeverage` (KuCoinExchange.cpp:565-577)
+  - `cancelOrder()`: POST `/api/v1/orders/{orderId}` (KuCoinExchange.cpp:520-539)
+  - `getPositionRisk()`: GET `/api/v1/positions` (KuCoinExchange.cpp:492-518)
+- **BitgetExchange** — реализованы:
+  - `setLeverage()`: POST `/api/v2/mix/account/set-leverage`, JSON body (BitgetExchange.cpp:551-576)
+  - `getLeverage()`: через `getPositionRisk()` → `leverage` (BitgetExchange.cpp:578-590)
+  - `cancelOrder()`: POST `/api/v2/spot/trade/cancel-order` (BitgetExchange.cpp:524-549)
+  - `getPositionRisk()`: GET `/api/v2/mix/position/all-position` (BitgetExchange.cpp:490-522)
+
+#### Этап 6: Тестирование v1.7.3
+- **test_exchanges.cpp** — 29 новых тестов:
+  - `ExchangeInterface` (2): SetLeverageDefaultReturnsFalse, GetLeverageDefaultReturns1
+  - `ExchangeLeverage` (10): Set/GetLeverage NoCrash для всех 5 бирж
+  - `ExchangeCancelOrder` (5): CancelOrder NoCrash для всех 5 бирж
+  - `ExchangePositionRisk` (3): GetPositionRisk NoCrash для Bybit/KuCoin/Bitget
+  - `GuiConfig` (3): ConfigSavesFilters, ConfigSavesIndicatorFlags, LayoutDefaultsMatchLayoutManager
+- **test_full_system.cpp** — 6 новых тестов:
+  - `TradeHistoryV173` (2): WinRateSingleLock, ProfitFactorIgnoresBreakeven
+  - `CSVExporterV173` (1): EscapesCommasInFields
+  - `WebhookV173` (1): SecretComparisonWorks
+  - `RiskManagerV173` (2): TrailingStopLong, TrailingStopShort
+- **Итого тестов:** 445 (441 пройден, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v1.7.3 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v1.7.3: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v1.8.0.
+
 ## [1.7.2] - 2026-03-06
 
 ### Analysis & Testing
