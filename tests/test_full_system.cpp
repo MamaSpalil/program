@@ -3383,7 +3383,7 @@ TEST(BacktestV240, LiquidationTriggered) {
     for (int i = 0; i < 50; ++i) {
         Candle c;
         if (i < 25) c.close = 100.0;
-        else c.close = 100.0 - (i - 25) * 5.0; // sharp drop
+        else c.close = 100.0 - (i - 25) * 5.0; // 5.0/bar drop → crosses 10% threshold for 10x leverage liquidation
         c.open = c.close;
         c.high = c.close + 0.1;
         c.low = c.close - 0.1;

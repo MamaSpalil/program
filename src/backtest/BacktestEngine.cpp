@@ -78,7 +78,10 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
                     (positionSide == "SELL" && signal > 0))
                     shouldClose = true;
             }
-            // Liquidation check for leveraged positions
+            // Simplified liquidation check for leveraged positions:
+            // Triggers when price moves more than 1/leverage from entry.
+            // Real exchanges use maintenance margin and liquidation fees;
+            // this is a conservative approximation for backtesting.
             if (cfg.leverage > 1.0) {
                 double liqDist = 1.0 / cfg.leverage;
                 if (positionSide == "BUY" && price <= entryPrice * (1.0 - liqDist))
@@ -103,7 +106,7 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
                 trade.exitPrice = exitFillPrice;
                 trade.qty = posQty;
                 trade.pnl = pnl;
-                trade.pnlPct = (margin > 0) ? (pnl / margin) * 100.0 : 0.0;
+                trade.pnlPct = (margin > 0) ? (pnl / margin) * 100.0 : 0.0; // ROI on margin (leveraged return)
                 trade.entryTime = entryTime;
                 trade.exitTime = bars[i].openTime;
                 result.trades.push_back(trade);

@@ -1372,7 +1372,10 @@ std::string PineConverter::generateCpp(const PineScript& script,
         for (size_t si = 0; si < strategyCalls.size(); ++si) {
             const auto& sc = strategyCalls[si];
             if (sc.action == "entry") {
-                // Determine direction from id string
+                // Heuristic: determine direction from id string keywords
+                // (Long/long/Buy/buy → long, otherwise → short).
+                // This may not cover all naming conventions; future versions
+                // could parse the Pine Script direction parameter explicitly.
                 bool isLong = (sc.id.find("Long") != std::string::npos ||
                                sc.id.find("long") != std::string::npos ||
                                sc.id.find("Buy") != std::string::npos ||
