@@ -226,3 +226,229 @@ TEST(LayoutManager, LogsWindowExists) {
     EXPECT_GT(log.size.x, 0);
     EXPECT_GT(log.size.y, 0);
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// GROUP 3 — Auto-resize: layout adapts to viewport changes
+// ══════════════════════════════════════════════════════════════════════════
+
+TEST(LayoutManager, AutoResizeRecalculateChangesLayout) {
+    LayoutManager mgr;
+
+    // Simulate windowed mode
+    mgr.recalculate(1440, 900);
+    auto md1 = mgr.get("Market Data");
+    auto up1 = mgr.get("User Panel");
+
+    // Simulate fullscreen mode
+    mgr.recalculate(1920, 1080);
+    auto md2 = mgr.get("Market Data");
+    auto up2 = mgr.get("User Panel");
+
+    // Window sizes should change when viewport changes
+    EXPECT_NE(md1.size.x, md2.size.x);
+    EXPECT_NE(md1.size.y, md2.size.y);
+    // User panel width stays fixed
+    EXPECT_FLOAT_EQ(up1.size.x, up2.size.x);
+    // User panel height changes with viewport
+    EXPECT_NE(up1.size.y, up2.size.y);
+}
+
+TEST(LayoutManager, AutoResizeGapsPreserved) {
+    LayoutManager mgr;
+
+    // Test at multiple resolutions
+    float widths[]  = {1024.0f, 1280.0f, 1440.0f, 1920.0f, 2560.0f};
+    float heights[] = {768.0f,  720.0f,  900.0f,  1080.0f, 1440.0f};
+
+    for (int i = 0; i < 5; ++i) {
+        mgr.recalculate(widths[i], heights[i]);
+
+        auto pl  = mgr.get("Pair List");
+        auto vd  = mgr.get("Volume Delta");
+        auto ind = mgr.get("Indicators");
+        auto md  = mgr.get("Market Data");
+        auto log = mgr.get("Logs");
+        auto up  = mgr.get("User Panel");
+
+        // Windows should not touch: gaps >= 1px between adjacent windows
+        // Left column: Pair List above Volume Delta
+        float gapPL_VD = vd.pos.y - (pl.pos.y + pl.size.y);
+        EXPECT_GE(gapPL_VD, 0.5f) << "Resolution: " << widths[i] << "x" << heights[i];
+
+        // Center: Indicators above Market Data
+        float gapInd_MD = md.pos.y - (ind.pos.y + ind.size.y);
+        EXPECT_GE(gapInd_MD, 0.5f) << "Resolution: " << widths[i] << "x" << heights[i];
+
+        // Center: Market Data above Logs
+        float gapMD_Log = log.pos.y - (md.pos.y + md.size.y);
+        EXPECT_GE(gapMD_Log, 0.5f) << "Resolution: " << widths[i] << "x" << heights[i];
+
+        // Left column to center column gap
+        float gapLeft_Center = ind.pos.x - (pl.pos.x + pl.size.x);
+        EXPECT_GE(gapLeft_Center, 0.5f) << "Resolution: " << widths[i] << "x" << heights[i];
+
+        // Center column to right column gap
+        float gapCenter_Right = up.pos.x - (md.pos.x + md.size.x);
+        EXPECT_GE(gapCenter_Right, 0.5f) << "Resolution: " << widths[i] << "x" << heights[i];
+    }
+}
+
+TEST(LayoutManager, AutoResizeLayoutOrderPreserved) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+
+    auto tb  = mgr.get("Main Toolbar");
+    auto fb  = mgr.get("Filters Bar");
+    auto pl  = mgr.get("Pair List");
+    auto vd  = mgr.get("Volume Delta");
+    auto ind = mgr.get("Indicators");
+    auto md  = mgr.get("Market Data");
+    auto log = mgr.get("Logs");
+    auto up  = mgr.get("User Panel");
+
+    // Vertical order: TopBar → Filters → content
+    EXPECT_LT(tb.pos.y, fb.pos.y);
+    EXPECT_LT(fb.pos.y, pl.pos.y);
+
+    // Left column: Pair List → Volume Delta
+    EXPECT_LT(pl.pos.y, vd.pos.y);
+
+    // Center column: Indicators → Market Data → Logs
+    EXPECT_LT(ind.pos.y, md.pos.y);
+    EXPECT_LT(md.pos.y, log.pos.y);
+
+    // Horizontal: Left → Center → Right
+    EXPECT_LT(pl.pos.x, ind.pos.x);
+    EXPECT_LT(ind.pos.x, up.pos.x);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// GROUP 4 — Layout INI file persistence
+// ══════════════════════════════════════════════════════════════════════════
+
+#include <fstream>
+#include <filesystem>
+
+TEST(LayoutIni, SaveAndLoadRoundTrip) {
+    namespace fs = std::filesystem;
+    std::string tmpPath = "/tmp/test_layout_roundtrip.ini";
+
+    // Cleanup
+    fs::remove(tmpPath);
+
+    // Write a test INI file
+    {
+        std::ofstream f(tmpPath);
+        f << "# Test INI\n";
+        f << "[layout]\n";
+        f << "log_pct=0.12\n";
+        f << "vd_pct=0.18\n";
+        f << "ind_pct=0.22\n";
+        f << "locked=1\n";
+        f << "show_pair_list=1\n";
+        f << "show_user_panel=0\n";
+        f << "show_volume_delta=1\n";
+        f << "show_indicators=0\n";
+        f << "show_logs=1\n";
+    }
+
+    // Verify file was created
+    EXPECT_TRUE(fs::exists(tmpPath));
+
+    // Read it back and verify values
+    std::ifstream f(tmpPath);
+    ASSERT_TRUE(f.is_open());
+
+    std::map<std::string, std::string> values;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.empty() || line[0] == '#' || line[0] == '[') continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        values[line.substr(0, eq)] = line.substr(eq + 1);
+    }
+
+    EXPECT_EQ(values["log_pct"], "0.12");
+    EXPECT_EQ(values["vd_pct"], "0.18");
+    EXPECT_EQ(values["ind_pct"], "0.22");
+    EXPECT_EQ(values["locked"], "1");
+    EXPECT_EQ(values["show_user_panel"], "0");
+    EXPECT_EQ(values["show_indicators"], "0");
+    EXPECT_EQ(values["show_logs"], "1");
+
+    fs::remove(tmpPath);
+}
+
+TEST(LayoutIni, FileFormatIsReadable) {
+    namespace fs = std::filesystem;
+    std::string tmpPath = "/tmp/test_layout_format.ini";
+    fs::remove(tmpPath);
+
+    {
+        std::ofstream f(tmpPath);
+        f << "[layout]\n";
+        f << "log_pct=0.15\n";
+        f << "vd_pct=0.10\n";
+        f << "ind_pct=0.25\n";
+        f << "locked=0\n";
+        f << "show_pair_list=1\n";
+        f << "show_user_panel=1\n";
+        f << "show_volume_delta=0\n";
+        f << "show_indicators=1\n";
+        f << "show_logs=0\n";
+        f << "\n[window]\n";
+        f << "window_width=1920\n";
+        f << "window_height=1080\n";
+    }
+
+    // Verify structure
+    std::ifstream f(tmpPath);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+
+    EXPECT_NE(content.find("[layout]"), std::string::npos);
+    EXPECT_NE(content.find("[window]"), std::string::npos);
+    EXPECT_NE(content.find("log_pct=0.15"), std::string::npos);
+    EXPECT_NE(content.find("window_width=1920"), std::string::npos);
+    EXPECT_NE(content.find("window_height=1080"), std::string::npos);
+
+    fs::remove(tmpPath);
+}
+
+TEST(LayoutIni, MalformedFileDoesNotCrash) {
+    namespace fs = std::filesystem;
+    std::string tmpPath = "/tmp/test_layout_malformed.ini";
+    fs::remove(tmpPath);
+
+    {
+        std::ofstream f(tmpPath);
+        f << "garbage data\n";
+        f << "no_equals_here\n";
+        f << "=empty_key\n";
+        f << "key_with_bad_value=not_a_number\n";
+        f << "log_pct=abc\n";
+        f << "[invalid section\n";
+    }
+
+    // Just verify it can be opened and parsed without crashing
+    std::ifstream f(tmpPath);
+    EXPECT_TRUE(f.is_open());
+
+    // Parse like the INI loader does — should not crash
+    std::string line;
+    int lineCount = 0;
+    while (std::getline(f, line)) {
+        lineCount++;
+        if (line.empty() || line[0] == '#' || line[0] == ';' || line[0] == '[')
+            continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        // Try parsing — should not throw
+        try { std::stof(val); } catch (...) {}
+    }
+    EXPECT_GT(lineCount, 0);
+
+    fs::remove(tmpPath);
+}

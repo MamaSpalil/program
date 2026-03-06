@@ -248,6 +248,22 @@ bool AppGui::init(const std::string& configPath) {
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 130");
 
+    // Layout .ini persistence: load if exists, create with defaults if not
+    {
+        namespace fs = std::filesystem;
+        fs::path cfgDir = fs::path(configPath_).parent_path();
+        if (cfgDir.empty()) cfgDir = ".";
+        layoutIniPath_ = (cfgDir / "layout.ini").string();
+
+        if (fs::exists(layoutIniPath_)) {
+            loadLayoutIni(layoutIniPath_);
+        } else {
+            // First launch — create layout.ini with default settings
+            saveLayoutIni(layoutIniPath_);
+        }
+        layoutNeedsReset_ = true;
+    }
+
     return true;
 }
 
@@ -266,6 +282,11 @@ void AppGui::run() {
 // shutdown
 // ---------------------------------------------------------------------------
 void AppGui::shutdown() {
+    // Save layout.ini before destroying the window
+    if (!layoutIniPath_.empty() && window_) {
+        try { saveLayoutIni(layoutIniPath_); } catch (...) {}
+    }
+
     if (!window_) return;
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -620,6 +641,86 @@ void AppGui::saveConfigToFile(const std::string& path) {
 }
 
 // ---------------------------------------------------------------------------
+// Layout INI persistence — simple key=value format for window sizes
+// ---------------------------------------------------------------------------
+void AppGui::loadLayoutIni(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return;
+
+    std::string line;
+    while (std::getline(f, line)) {
+        // Skip comments and section headers
+        if (line.empty() || line[0] == '#' || line[0] == ';' || line[0] == '[')
+            continue;
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        // trim whitespace
+        while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.pop_back();
+        while (!val.empty() && (val.front() == ' ' || val.front() == '\t')) val.erase(val.begin());
+
+        try {
+            if      (key == "log_pct")           config_.layoutLogPct  = std::stof(val);
+            else if (key == "vd_pct")            config_.layoutVdPct   = std::stof(val);
+            else if (key == "ind_pct")           config_.layoutIndPct  = std::stof(val);
+            else if (key == "locked")            config_.layoutLocked  = (std::stoi(val) != 0);
+            else if (key == "show_pair_list")    showPairList_         = (std::stoi(val) != 0);
+            else if (key == "show_user_panel")   showUserPanel_        = (std::stoi(val) != 0);
+            else if (key == "show_volume_delta") showVolumeDelta_      = (std::stoi(val) != 0);
+            else if (key == "show_indicators")   showIndicators_       = (std::stoi(val) != 0);
+            else if (key == "show_logs")         showLogs_             = (std::stoi(val) != 0);
+            else if (key == "window_width") {
+                int w = std::stoi(val);
+                if (window_ && w > 100) {
+                    int cw, ch;
+                    glfwGetWindowSize(window_, &cw, &ch);
+                    glfwSetWindowSize(window_, w, ch);
+                }
+            }
+            else if (key == "window_height") {
+                int h = std::stoi(val);
+                if (window_ && h > 100) {
+                    int cw, ch;
+                    glfwGetWindowSize(window_, &cw, &ch);
+                    glfwSetWindowSize(window_, cw, h);
+                }
+            }
+        } catch (...) {
+            // Skip malformed values
+        }
+    }
+}
+
+void AppGui::saveLayoutIni(const std::string& path) const {
+    std::ofstream f(path);
+    if (!f.is_open()) return;
+
+    f << "# VT Layout Configuration\n";
+    f << "# Auto-generated — saved window layout settings\n\n";
+
+    f << "[layout]\n";
+    f << "log_pct=" << config_.layoutLogPct << "\n";
+    f << "vd_pct=" << config_.layoutVdPct << "\n";
+    f << "ind_pct=" << config_.layoutIndPct << "\n";
+    f << "locked=" << (config_.layoutLocked ? 1 : 0) << "\n";
+    f << "show_pair_list=" << (showPairList_ ? 1 : 0) << "\n";
+    f << "show_user_panel=" << (showUserPanel_ ? 1 : 0) << "\n";
+    f << "show_volume_delta=" << (showVolumeDelta_ ? 1 : 0) << "\n";
+    f << "show_indicators=" << (showIndicators_ ? 1 : 0) << "\n";
+    f << "show_logs=" << (showLogs_ ? 1 : 0) << "\n";
+
+    if (window_) {
+        int w, h;
+        glfwGetWindowSize(window_, &w, &h);
+        f << "\n[window]\n";
+        f << "window_width=" << w << "\n";
+        f << "window_height=" << h << "\n";
+    }
+}
+
+// ---------------------------------------------------------------------------
 // renderFrame
 // ---------------------------------------------------------------------------
 void AppGui::renderFrame() {
@@ -629,6 +730,22 @@ void AppGui::renderFrame() {
 
     // Viewport dimensions for layout calculation
     ImGuiViewport* vp = ImGui::GetMainViewport();
+
+    // Auto-resize: detect viewport size change (fullscreen ↔ windowed toggle)
+    {
+        const float curW = vp->WorkSize.x;
+        const float curH = vp->WorkSize.y;
+        if (prevViewportW_ > 0.0f && prevViewportH_ > 0.0f) {
+            const float dw = std::fabs(curW - prevViewportW_);
+            const float dh = std::fabs(curH - prevViewportH_);
+            if (dw > 1.0f || dh > 1.0f) {
+                // Viewport size changed — force layout recalculation
+                layoutNeedsReset_ = true;
+            }
+        }
+        prevViewportW_ = curW;
+        prevViewportH_ = curH;
+    }
 
     // Sync layout proportions from config
     layoutMgr_.setLogPct(config_.layoutLogPct);
@@ -2411,6 +2528,7 @@ void AppGui::drawSettingsPanel() {
                 layoutNeedsReset_ = true;
                 // Save config (imgui.ini will auto-save after positions are applied)
                 saveConfigToFile(configPath_);
+                if (!layoutIniPath_.empty()) saveLayoutIni(layoutIniPath_);
                 addLog("[Config] Layout applied and saved");
                 if (onSaveConfig_) onSaveConfig_(config_);
             }
@@ -2428,13 +2546,14 @@ void AppGui::drawSettingsPanel() {
                 showIndicators_  = true;
                 showLogs_        = true;
                 saveConfigToFile(configPath_);
+                if (!layoutIniPath_.empty()) saveLayoutIni(layoutIniPath_);
                 addLog("[Config] Layout reset to defaults and saved");
                 if (onSaveConfig_) onSaveConfig_(config_);
             }
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
-                "Tip: Window positions are saved in imgui.ini.");
+                "Tip: Window positions are saved in layout.ini.");
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
                 "Unlock windows to drag and resize freely.");
 
@@ -2447,6 +2566,7 @@ void AppGui::drawSettingsPanel() {
     ImGui::Separator();
     if (ImGui::Button("Save All Settings to File")) {
         saveConfigToFile(configPath_);
+        if (!layoutIniPath_.empty()) saveLayoutIni(layoutIniPath_);
         addLog("[Config] Settings saved to " + configPath_);
         if (onSaveConfig_) onSaveConfig_(config_);
     }
