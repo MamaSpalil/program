@@ -141,9 +141,10 @@ TEST(RLTradingAgentAI, PPOConfigDefaults) {
     EXPECT_FLOAT_EQ(cfg.gamma, 0.99f);
     EXPECT_FLOAT_EQ(cfg.lambda, 0.95f);
     EXPECT_FLOAT_EQ(cfg.epsilon, 0.2f);
-    EXPECT_FLOAT_EQ(cfg.entropyCoeff, 0.01f);
+    EXPECT_FLOAT_EQ(cfg.entropyCoeff, 0.02f);
     EXPECT_FLOAT_EQ(cfg.valueLossCoeff, 0.5f);
     EXPECT_FLOAT_EQ(cfg.maxGradNorm, 0.5f);
+    EXPECT_FLOAT_EQ(cfg.valueLossClipMax, 10.0f);
     EXPECT_FLOAT_EQ(cfg.learningRate, 3e-4f);
     EXPECT_EQ(cfg.ppoEpochs, 4);
     EXPECT_EQ(cfg.miniBatchSize, 64);

@@ -20,6 +20,7 @@
 #include <vector>
 #include <cstdint>
 #include <memory>
+#include <algorithm>
 
 #ifdef USE_LIBTORCH
 #include <torch/torch.h>
@@ -40,15 +41,27 @@ struct PPOConfig {
     float  gamma          = 0.99f; ///< Discount factor γ
     float  lambda         = 0.95f; ///< GAE-λ trace decay
     float  epsilon        = 0.2f;  ///< Clipping parameter ε
-    float  entropyCoeff   = 0.01f; ///< Entropy bonus coefficient c₂
+    float  entropyCoeff   = 0.02f; ///< Entropy bonus coefficient c₂ (range: [0.001, 0.1])
     float  valueLossCoeff = 0.5f;  ///< Value-loss coefficient c₁
     float  maxGradNorm    = 0.5f;  ///< Global gradient clipping
+    float  valueLossClipMax = 10.0f; ///< Maximum value loss clipping threshold
 
     // Optimizer
     float  learningRate   = 3e-4f; ///< AdamW learning rate
     float  weightDecay    = 1e-5f; ///< L2 regularisation
     int    ppoEpochs      = 4;    ///< Number of PPO optimisation epochs per batch
     int    miniBatchSize   = 64;   ///< Mini-batch size for gradient steps
+
+    /// Validate and clamp hyper-parameter bounds
+    void validate() {
+        entropyCoeff    = std::max(0.001f, std::min(entropyCoeff, 0.1f));
+        valueLossCoeff  = std::max(0.1f,  std::min(valueLossCoeff, 1.0f));
+        valueLossClipMax = std::max(1.0f,  std::min(valueLossClipMax, 100.0f));
+        epsilon         = std::max(0.05f, std::min(epsilon, 0.3f));
+        gamma           = std::max(0.9f,  std::min(gamma, 0.999f));
+        lambda          = std::max(0.8f,  std::min(lambda, 0.99f));
+        maxGradNorm     = std::max(0.1f,  std::min(maxGradNorm, 5.0f));
+    }
 };
 
 // ── Experience tuple ─────────────────────────────────────────────────────────

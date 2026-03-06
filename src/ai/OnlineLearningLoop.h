@@ -20,6 +20,8 @@
 #include <atomic>
 #include <functional>
 #include <string>
+#include <unordered_map>
+#include <mutex>
 
 namespace crypto { namespace ai {
 
@@ -69,6 +71,17 @@ public:
     /// Called from the producer (market / trading) thread.
     bool pushExperience(Experience&& exp);
 
+    // ── State caching for RL correctness ────────────────────────────────────
+
+    /// Capture and cache the current feature state for a trade.
+    /// Call this when a position is opened so that pollTrades() can later
+    /// retrieve the state at entry time instead of the stale current state.
+    void captureStateForTrade(const std::string& tradeId);
+
+    /// Retrieve a previously cached state vector for a trade.
+    /// Returns empty vector if no state was cached for this trade ID.
+    std::vector<float> getCachedState(const std::string& tradeId) const;
+
     // ── Statistics ───────────────────────────────────────────────────────────
 
     /// Total number of train_step() calls completed.
@@ -104,6 +117,10 @@ private:
 
     // Track the last processed trade timestamp to avoid re-processing
     std::atomic<long long> lastTradeTime_{0};
+
+    // State cache: maps trade ID → feature vector at entry time
+    mutable std::mutex stateCacheMtx_;
+    std::unordered_map<std::string, std::vector<float>> stateCache_;
 };
 
 }} // namespace crypto::ai

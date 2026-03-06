@@ -1,6 +1,7 @@
 #include "AppGui.h"
 #include "../core/Logger.h"
 #include "../indicators/PineConverter.h"
+#include "../trading/OrderManagement.h"
 
 #include "../../third_party/imgui/imgui.h"
 #include "../../third_party/imgui/imgui_impl_glfw.h"
@@ -1347,7 +1348,7 @@ void AppGui::drawMarketDataWindow() {
             float yLine = p.y + priceH - frac * priceH;
             double priceVal = pMin + frac * range;
             char label[32];
-            snprintf(label, sizeof(label), "%.8f", priceVal);
+            OrderManagement::formatPrice(label, sizeof(label), priceVal);
             draw->AddText(ImVec2(p.x + chartW + 4, yLine - 6),
                           IM_COL32(160, 160, 165, 220), label);
         }
@@ -1360,7 +1361,7 @@ void AppGui::drawMarketDataWindow() {
                 draw->AddLine(ImVec2(p.x, yLast), ImVec2(p.x + chartW, yLast),
                               IM_COL32(80, 140, 220, 150), 1.0f);
                 char priceLabel[32];
-                snprintf(priceLabel, sizeof(priceLabel), "%.8f", lastPrice);
+                OrderManagement::formatPrice(priceLabel, sizeof(priceLabel), lastPrice);
                 draw->AddRectFilled(ImVec2(p.x + chartW + 1, yLast - 8),
                                     ImVec2(p.x + w, yLast + 8),
                                     IM_COL32(60, 120, 200, 200));
@@ -1404,7 +1405,7 @@ void AppGui::drawMarketDataWindow() {
                     // Price label at crosshair Y
                     double crossPrice = pMax - ((double)(my - p.y) / priceH) * range;
                     char crossLabel[32];
-                    snprintf(crossLabel, sizeof(crossLabel), "%.8f", crossPrice);
+                    OrderManagement::formatPrice(crossLabel, sizeof(crossLabel), crossPrice);
                     draw->AddRectFilled(ImVec2(p.x + chartW + 1, my - 8),
                                         ImVec2(p.x + w, my + 8),
                                         IM_COL32(80, 80, 90, 200));
@@ -1549,8 +1550,10 @@ void AppGui::drawMarketDataWindow() {
         // ── 5.5: Right-click context menu popup for chart order placement ──
         if (ImGui::BeginPopup("ChartOrderMenu")) {
             char priceLabel[64];
-            snprintf(priceLabel, sizeof(priceLabel), "Price: %.8f", chartRightClickPrice_);
-            ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", priceLabel);
+            OrderManagement::formatPrice(priceLabel, sizeof(priceLabel), chartRightClickPrice_);
+            char priceLabelFull[80];
+            snprintf(priceLabelFull, sizeof(priceLabelFull), "Price: %s", priceLabel);
+            ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", priceLabelFull);
             ImGui::Separator();
             if (ImGui::MenuItem("Buy Limit at this price")) {
                 omSideIdx_ = 0;
@@ -3056,7 +3059,9 @@ void AppGui::drawUserPanel() {
     ImGui::TextColored(ImVec4(0.60f, 0.70f, 0.85f, 1.0f), "%s", config_.symbol.c_str());
     if (snap.currentPrice > 0) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "$%.8f", snap.currentPrice);
+        char priceBuf[32];
+        OrderManagement::formatPrice(priceBuf, sizeof(priceBuf), snap.currentPrice);
+        ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.35f, 1.0f), "$%s", priceBuf);
     }
     if (!snap.currentPriceError.empty()) {
         ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f), "%s", snap.currentPriceError.c_str());
@@ -3302,8 +3307,8 @@ void AppGui::drawOrderManagementWindow() {
     // Estimated cost
     double estPrice = (omTypeIdx_ == 0) ? snap.currentPrice : omPrice_;
     double estCost = omQuantity_ * estPrice;
-    ImGui::Text("Est. Cost:  $%.8f", estCost);
-    ImGui::Text("Balance:    $%.8f", snap.futuresBalance.totalWalletBalance);
+    ImGui::Text("Est. Cost:  $%.2f", estCost);
+    ImGui::Text("Balance:    $%.2f", snap.futuresBalance.totalWalletBalance);
 
     ImGui::Separator();
 
@@ -3346,9 +3351,15 @@ void AppGui::drawOrderManagementWindow() {
         ImGui::Text("Side: %s", (omSideIdx_ == 0) ? "BUY" : "SELL");
         ImGui::Text("Type: %s", orderTypes[omTypeIdx_]);
         ImGui::Text("Quantity: %.6f", omQuantity_);
-        if (omTypeIdx_ >= 1) ImGui::Text("Price: %.8f", omPrice_);
-        if (omTypeIdx_ == 2) ImGui::Text("Stop Price: %.8f", omStopPrice_);
-        ImGui::Text("Est. Cost: $%.8f", estCost);
+        if (omTypeIdx_ >= 1) {
+            char pb[32]; OrderManagement::formatPrice(pb, sizeof(pb), omPrice_);
+            ImGui::Text("Price: %s", pb);
+        }
+        if (omTypeIdx_ == 2) {
+            char sp[32]; OrderManagement::formatPrice(sp, sizeof(sp), omStopPrice_);
+            ImGui::Text("Stop Price: %s", sp);
+        }
+        ImGui::Text("Est. Cost: $%.2f", estCost);
         ImGui::Separator();
 
         if (ImGui::Button("Confirm", ImVec2(120, 0))) {

@@ -1,5 +1,7 @@
 #include "OrderManagement.h"
 #include "../core/Logger.h"
+#include <cstdio>
+#include <cmath>
 
 namespace crypto {
 
@@ -76,7 +78,22 @@ UIOrderRequest OrderManagement::createCloseOrder(const ManagedPosition& pos) {
 
 double OrderManagement::estimateCost(double qty, double price) {
     if (price <= 0.0) return 0.0;
-    return qty * price;
+    // Include estimated taker commission (0.1% default for most exchanges)
+    constexpr double defaultCommissionRate = 0.001;
+    double notional = qty * price;
+    return notional + notional * defaultCommissionRate;
+}
+
+const char* OrderManagement::priceFormat(double price) {
+    double abs_price = std::fabs(price);
+    if (abs_price >= 1000.0) return "%.2f";
+    if (abs_price >= 1.0)    return "%.4f";
+    if (abs_price >= 0.01)   return "%.6f";
+    return "%.8f";
+}
+
+void OrderManagement::formatPrice(char* buf, size_t bufSize, double price) {
+    snprintf(buf, bufSize, priceFormat(price), price);
 }
 
 } // namespace crypto

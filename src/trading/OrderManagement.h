@@ -52,8 +52,14 @@ public:
     // Create a close-position market order (opposite side)
     static UIOrderRequest createCloseOrder(const ManagedPosition& pos);
 
-    // Estimate order cost
+    // Estimate order cost (including commission)
     static double estimateCost(double qty, double price);
+
+    // Adaptive price formatting: fewer decimals for large prices, more for small
+    // Returns format string like "%.2f", "%.4f", "%.8f"
+    static const char* priceFormat(double price);
+    // Format a price value into a buffer with adaptive decimals
+    static void formatPrice(char* buf, size_t bufSize, double price);
 };
 
 } // namespace crypto

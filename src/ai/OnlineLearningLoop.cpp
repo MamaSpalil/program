@@ -59,6 +59,26 @@ bool OnlineLearningLoop::pushExperience(Experience&& exp) {
     return replayBuffer_.try_push(std::move(exp));
 }
 
+// ── State caching ────────────────────────────────────────────────────────────
+
+void OnlineLearningLoop::captureStateForTrade(const std::string& tradeId) {
+    auto state = feat_.extract(agent_.getMode());
+    std::lock_guard<std::mutex> lk(stateCacheMtx_);
+    stateCache_[tradeId] = std::move(state);
+    // Prune cache if too large (keep most recent 500 entries)
+    if (stateCache_.size() > 500) {
+        auto it = stateCache_.begin();
+        stateCache_.erase(it);
+    }
+}
+
+std::vector<float> OnlineLearningLoop::getCachedState(const std::string& tradeId) const {
+    std::lock_guard<std::mutex> lk(stateCacheMtx_);
+    auto it = stateCache_.find(tradeId);
+    if (it != stateCache_.end()) return it->second;
+    return {};
+}
+
 // ── Main thread function ─────────────────────────────────────────────────────
 
 void OnlineLearningLoop::threadFunc() {
@@ -116,6 +136,9 @@ void OnlineLearningLoop::pollTrades() {
         auto history = trades_->getHistory("", 50);
         long long lastTime = lastTradeTime_.load(std::memory_order_relaxed);
 
+        // Extract current state once for use as nextState (terminal state after trade closes)
+        auto currentState = feat_.extract(agent_.getMode());
+
         for (const auto& t : history) {
             // Skip trades we have already processed
             if (t.exitTime <= lastTime) continue;
@@ -124,21 +147,45 @@ void OnlineLearningLoop::pollTrades() {
             // R_t = PnL * rewardScale
             float reward = static_cast<float>(t.pnl) * cfg_.rewardScale;
 
-            // Build a minimal experience tuple from the trade.
-            // The state vector comes from the feature extractor's current state
-            // (this is an approximation — in a full system the state at trade
-            // time would be stored alongside the order).
+            // Build experience tuple from the trade.
             Experience exp;
-            exp.state    = feat_.extract(agent_.getMode());
+
+            // Use cached state at entry time if available; otherwise skip
+            // this trade to avoid training on stale/incorrect state.
+            auto cachedState = getCachedState(t.id);
+            if (!cachedState.empty()) {
+                exp.state = std::move(cachedState);
+            } else {
+                // No cached state — for historical trades without stored state,
+                // use default logProb (uniform random) and skip RL update
+                // to avoid training on incorrect temporal associations.
+                Logger::get()->debug("[OnlineLearning] No cached state for trade {}, skipping", t.id);
+                if (t.exitTime > lastTime)
+                    lastTime = t.exitTime;
+                continue;
+            }
+
             exp.action   = (t.side == "buy") ? 0 : 2; // BUY=0, SELL=2
             exp.reward   = reward;
-            exp.nextState = exp.state; // approximation for online setting
+            // nextState = current market state (after trade closed),
+            // distinct from entry state — fixes bootstrap convergence.
+            exp.nextState = currentState;
             exp.done     = true;       // trade is completed
-            exp.logProb  = 0.0f;      // unknown for historical trades
-            exp.value    = 0.0f;
+
+            // For trades with cached state, estimate logProb and value
+            // using the current policy (importance sampling will correct).
+            auto ar = agent_.forward_pass(exp.state);
+            exp.logProb = ar.logProb;
+            exp.value   = ar.value;
 
             localBatch_.push_back(std::move(exp));
             samplesConsumed_.fetch_add(1, std::memory_order_relaxed);
+
+            // Clean up used cache entry
+            {
+                std::lock_guard<std::mutex> lk(stateCacheMtx_);
+                stateCache_.erase(t.id);
+            }
 
             if (t.exitTime > lastTime)
                 lastTime = t.exitTime;

@@ -1203,8 +1203,8 @@ TEST(SystemTest, OrderManagementEdgeCases) {
     EXPECT_DOUBLE_EQ(exReq.qty, 0.1);
     EXPECT_DOUBLE_EQ(exReq.price, 50000.0);
 
-    // Estimate cost
-    EXPECT_DOUBLE_EQ(OrderManagement::estimateCost(0.1, 50000.0), 5000.0);
+    // Estimate cost (includes 0.1% taker commission)
+    EXPECT_NEAR(OrderManagement::estimateCost(0.1, 50000.0), 5005.0, 0.01);
     EXPECT_DOUBLE_EQ(OrderManagement::estimateCost(0.0, 50000.0), 0.0);
 }
 
