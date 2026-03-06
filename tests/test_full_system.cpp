@@ -2788,12 +2788,12 @@ TEST(DatabaseV210, EquityRepositoryRoundtrip) {
 // ── Layout Lock v2.2.0 ─────────────────────────────────────────────────────
 
 TEST(LayoutLockV220, LockedWindowsUseCorrectFlags) {
-    // Verify that lockedFlags() returns NoMove|NoResize|NoCollapse|NoBringToFront
+    // Verify that lockedFlags() returns NoMove|NoResize|NoCollapse|NoBringToDisplayFront
     int flags = LayoutManager::lockedFlags();
-    // lockedFlags must include NoMove and NoResize in non-IMGUI stub
     EXPECT_NE(flags & layout_detail::SF_NoMove, 0);
     EXPECT_NE(flags & layout_detail::SF_NoResize, 0);
     EXPECT_NE(flags & layout_detail::SF_NoCollapse, 0);
+    EXPECT_NE(flags & layout_detail::SF_NoBringToDisplayFront, 0);
 }
 
 TEST(LayoutLockV220, LockedScrollFlagsIncludeHScroll) {

@@ -219,6 +219,14 @@ int main(int argc, char* argv[]) {
                                     if (!chatId.empty()) telegramBot->setAuthorizedChat(chatId);
 
                                     // Register real command callbacks
+                                    // Capture cfg fields by value to avoid dangling reference
+                                    // (cfg is a parameter of the connect callback lambda)
+                                    std::string tgExchangeName = cfg.exchangeName;
+                                    std::string tgSymbol = cfg.symbol;
+                                    std::string tgInterval = cfg.interval;
+                                    std::string tgMode = cfg.mode;
+                                    std::string tgMarketType = cfg.marketType;
+
                                     telegramBot->setCommandCallback("/balance", [&engine]() -> std::string {
                                         if (!engine) return "Engine not running";
                                         try {
@@ -231,19 +239,19 @@ int main(int argc, char* argv[]) {
                                         }
                                     });
 
-                                    telegramBot->setCommandCallback("/status", [&engine, &cfg]() -> std::string {
+                                    telegramBot->setCommandCallback("/status", [&engine, tgExchangeName, tgSymbol, tgInterval, tgMode, tgMarketType]() -> std::string {
                                         if (!engine) return "Engine not running";
-                                        return "Connected to " + cfg.exchangeName +
-                                               "\nSymbol: " + cfg.symbol +
-                                               "\nInterval: " + cfg.interval +
-                                               "\nMode: " + cfg.mode +
-                                               "\nMarket: " + cfg.marketType;
+                                        return "Connected to " + tgExchangeName +
+                                               "\nSymbol: " + tgSymbol +
+                                               "\nInterval: " + tgInterval +
+                                               "\nMode: " + tgMode +
+                                               "\nMarket: " + tgMarketType;
                                     });
 
-                                    telegramBot->setCommandCallback("/positions", [&engine, &cfg]() -> std::string {
+                                    telegramBot->setCommandCallback("/positions", [&engine, tgSymbol]() -> std::string {
                                         if (!engine) return "Engine not running";
                                         try {
-                                            auto positions = engine->getPositionRisk(cfg.symbol);
+                                            auto positions = engine->getPositionRisk(tgSymbol);
                                             if (positions.empty()) return "No open positions";
                                             std::string result;
                                             for (auto& p : positions) {
