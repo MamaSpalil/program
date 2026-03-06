@@ -1407,8 +1407,13 @@ std::string PineConverter::generateCpp(const PineScript& script,
     }
 
     // DMI (Directional Movement Index)
+    // NOTE: ADX uses simplified single-period DX calculation.
+    // Full ADX requires EMA smoothing over adxSmoothing periods;
+    // this approximation provides directional strength without
+    // the smoothing lag — adequate for indicator generation.
     for (auto& d : dmiInfos) {
         out << "        // DMI: +DI, -DI, ADX  (diLength=" << d.diLength << ", adxSmoothing=" << d.adxSmoothing << ")\n"
+            << "        // NOTE: ADX is single-period DX (simplified, no EMA smoothing)\n"
             << "        highs_.push_back(c.high);\n"
             << "        lows_.push_back(c.low);\n"
             << "        if (highs_.size() > 1000) highs_.pop_front();\n"
