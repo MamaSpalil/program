@@ -64,6 +64,7 @@ set(EXCHANGE_SOURCES
     src/exchange/OKXExchange.cpp
     src/exchange/BitgetExchange.cpp
     src/exchange/KuCoinExchange.cpp
+    src/exchange/SymbolFormatter.cpp
 )
 
 set(DATA_SOURCES

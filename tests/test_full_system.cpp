@@ -104,6 +104,9 @@
 // Scanner
 #include "../src/scanner/MarketScanner.h"
 
+// Exchange — SymbolFormatter
+#include "../src/exchange/SymbolFormatter.h"
+
 using namespace crypto;
 namespace fs = std::filesystem;
 
@@ -2405,4 +2408,367 @@ TEST(BacktestV200, SharpeRatioEmptyReturns) {
     // Should not crash, sharpeRatio should be 0 or NaN-safe
     EXPECT_FALSE(std::isnan(result.sharpeRatio));
     EXPECT_FALSE(std::isinf(result.sharpeRatio));
+}
+
+// ════════════════════════════════════════════════════════════════
+// БЛОК v2.1.0 — НОВЫЕ ТЕСТЫ
+// ════════════════════════════════════════════════════════════════
+
+// ── TradingDatabase v2.1.0: nullptr guard ───────────────────────────────────
+
+TEST(TradingDatabaseV210, ExecuteWithNullDbReturnsFalse) {
+    // Create database but do NOT init — db_ stays nullptr
+    TradingDatabase db(getTempDir() + "test_v210_null.db");
+    // execute() should return false, not crash
+    EXPECT_FALSE(db.execute("SELECT 1"));
+    // Clean up
+    fs::remove(getTempDir() + "test_v210_null.db");
+}
+
+TEST(TradingDatabaseV210, ExecuteAfterInitSucceeds) {
+    std::string path = getTempDir() + "test_v210_init.db";
+    TradingDatabase db(path);
+    ASSERT_TRUE(db.init());
+    EXPECT_TRUE(db.execute("SELECT 1"));
+    fs::remove(path);
+}
+
+TEST(TradingDatabaseV210, IsOpenFalseBeforeInit) {
+    TradingDatabase db(getTempDir() + "test_v210_isopen.db");
+    EXPECT_FALSE(db.isOpen());
+    fs::remove(getTempDir() + "test_v210_isopen.db");
+}
+
+// ── SymbolFormatter v2.1.0 ──────────────────────────────────────────────────
+
+TEST(SymbolFormatterV210, ToSpotBinance) {
+    EXPECT_EQ(SymbolFormatter::toSpot("binance", "BTC", "USDT"), "BTCUSDT");
+    EXPECT_EQ(SymbolFormatter::toSpot("Binance", "ETH", "USDT"), "ETHUSDT");
+}
+
+TEST(SymbolFormatterV210, ToSpotBybit) {
+    EXPECT_EQ(SymbolFormatter::toSpot("bybit", "BTC", "USDT"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ToSpotOKX) {
+    EXPECT_EQ(SymbolFormatter::toSpot("okx", "BTC", "USDT"), "BTC-USDT");
+    EXPECT_EQ(SymbolFormatter::toSpot("OKX", "ETH", "USDC"), "ETH-USDC");
+}
+
+TEST(SymbolFormatterV210, ToSpotKuCoin) {
+    EXPECT_EQ(SymbolFormatter::toSpot("kucoin", "BTC", "USDT"), "BTC-USDT");
+}
+
+TEST(SymbolFormatterV210, ToSpotBitget) {
+    EXPECT_EQ(SymbolFormatter::toSpot("bitget", "BTC", "USDT"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ToFuturesBinance) {
+    EXPECT_EQ(SymbolFormatter::toFutures("binance", "BTC", "USDT"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ToFuturesOKX) {
+    EXPECT_EQ(SymbolFormatter::toFutures("okx", "BTC", "USDT"), "BTC-USDT-SWAP");
+}
+
+TEST(SymbolFormatterV210, ToFuturesBitget) {
+    EXPECT_EQ(SymbolFormatter::toFutures("bitget", "BTC", "USDT"), "BTCUSDT_UMCBL");
+}
+
+TEST(SymbolFormatterV210, ToFuturesKuCoin) {
+    EXPECT_EQ(SymbolFormatter::toFutures("kucoin", "BTC", "USDT"), "BTC-USDT");
+}
+
+TEST(SymbolFormatterV210, ToUnifiedFromOKXSpot) {
+    EXPECT_EQ(SymbolFormatter::toUnified("okx", "BTC-USDT"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ToUnifiedFromOKXFutures) {
+    EXPECT_EQ(SymbolFormatter::toUnified("okx", "BTC-USDT-SWAP"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ToUnifiedFromBitgetFutures) {
+    EXPECT_EQ(SymbolFormatter::toUnified("bitget", "BTCUSDT_UMCBL"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ToUnifiedFromBinance) {
+    EXPECT_EQ(SymbolFormatter::toUnified("binance", "BTCUSDT"), "BTCUSDT");
+}
+
+TEST(SymbolFormatterV210, ExtractBaseAndQuote) {
+    EXPECT_EQ(SymbolFormatter::extractBase("BTCUSDT"), "BTC");
+    EXPECT_EQ(SymbolFormatter::extractQuote("BTCUSDT"), "USDT");
+    EXPECT_EQ(SymbolFormatter::extractBase("ETHUSDC"), "ETH");
+    EXPECT_EQ(SymbolFormatter::extractQuote("ETHUSDC"), "USDC");
+}
+
+TEST(SymbolFormatterV210, ExtractBaseUnrecognized) {
+    EXPECT_TRUE(SymbolFormatter::extractBase("XYZ").empty());
+    EXPECT_TRUE(SymbolFormatter::extractQuote("XYZ").empty());
+}
+
+// ── Layout v2.1.0: logPct functional ────────────────────────────────────────
+
+TEST(LayoutV210, LogsHeightUsesPercentage) {
+    LayoutManager mgr;
+    mgr.setLogPct(0.15f);
+    mgr.recalculate(1920, 1080);
+    auto log = mgr.get("Logs");
+    float expectedH = std::floor(1080.0f * 0.15f);
+    EXPECT_FLOAT_EQ(log.size.y, expectedH);
+}
+
+TEST(LayoutV210, LogsHeightMinimum40px) {
+    LayoutManager mgr;
+    mgr.setLogPct(0.01f); // 1% of a small screen
+    mgr.recalculate(800, 300);
+    auto log = mgr.get("Logs");
+    // 300 * 0.01 = 3, but minimum is 40
+    EXPECT_GE(log.size.y, 40.0f);
+}
+
+TEST(LayoutV210, LogsHeightDefault10Percent) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto log = mgr.get("Logs");
+    // Default logPct = 0.10, so 1080 * 0.10 = 108
+    EXPECT_FLOAT_EQ(log.size.y, std::floor(1080.0f * 0.10f));
+}
+
+TEST(LayoutV210, MarketDataGetsEnoughSpace) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto md = mgr.get("Market Data");
+    // Market Data should get at least 50% of center height
+    float Hcenter = 1080.0f - 32.0f - 28.0f - std::floor(1080.0f * 0.10f);
+    float expectedMinMD = Hcenter * 0.5f;
+    EXPECT_GT(md.size.y, expectedMinMD);
+}
+
+TEST(LayoutV210, UserPanelOnRight) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto up = mgr.get("User Panel");
+    auto md = mgr.get("Market Data");
+    // User Panel X should be to the right of Market Data
+    EXPECT_GT(up.pos.x, md.pos.x);
+    EXPECT_FLOAT_EQ(up.pos.x, 1920.0f - 290.0f);
+}
+
+TEST(LayoutV210, WindowsNoOverlapAfterLogPctChange) {
+    LayoutManager mgr;
+    mgr.setLogPct(0.20f); // 20% logs
+    mgr.recalculate(1920, 1080);
+    auto md  = mgr.get("Market Data");
+    auto ind = mgr.get("Indicators");
+    auto log = mgr.get("Logs");
+    // Indicators bottom ≤ Logs top
+    EXPECT_LE(ind.pos.y + ind.size.y, log.pos.y + 0.5f);
+    // Market Data bottom ≤ Indicators top (or equal if Indicators starts at MD bottom)
+    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f);
+}
+
+// ── TelegramBot v2.1.0: Command callbacks ───────────────────────────────────
+
+TEST(TelegramBotV210, CommandCallbackRegistration) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+
+    bot.setCommandCallback("/balance", []() {
+        return "USDT: 1500.50, BTC: 0.05";
+    });
+
+    std::string result = bot.processCommand("/balance", "123");
+    EXPECT_EQ(result, "USDT: 1500.50, BTC: 0.05");
+}
+
+TEST(TelegramBotV210, CallbackOverridesStub) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+
+    // Without callback — shows default stub
+    std::string stub = bot.processCommand("/status", "123");
+    EXPECT_NE(stub.find("no callback"), std::string::npos);
+
+    // Register callback — should use it
+    bot.setCommandCallback("/status", []() {
+        return "Status: TRADING, Uptime: 2h30m";
+    });
+    std::string real = bot.processCommand("/status", "123");
+    EXPECT_EQ(real, "Status: TRADING, Uptime: 2h30m");
+}
+
+TEST(TelegramBotV210, MultipleCallbacks) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("c1");
+
+    bot.setCommandCallback("/balance", []() { return "Balance: 1000"; });
+    bot.setCommandCallback("/positions", []() { return "BTC LONG 0.1"; });
+    bot.setCommandCallback("/pnl", []() { return "PnL: +$50.00"; });
+
+    EXPECT_EQ(bot.processCommand("/balance", "c1"), "Balance: 1000");
+    EXPECT_EQ(bot.processCommand("/positions", "c1"), "BTC LONG 0.1");
+    EXPECT_EQ(bot.processCommand("/pnl", "c1"), "PnL: +$50.00");
+}
+
+TEST(TelegramBotV210, UnauthorizedWithCallback) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+
+    bot.setCommandCallback("/balance", []() { return "Secret data"; });
+
+    // Wrong chat ID — still returns Unauthorized
+    EXPECT_EQ(bot.processCommand("/balance", "wrong"), "Unauthorized");
+}
+
+TEST(TelegramBotV210, CallbackExceptionHandled) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+
+    bot.setCommandCallback("/balance", []() -> std::string {
+        throw std::runtime_error("API connection lost");
+    });
+
+    std::string result = bot.processCommand("/balance", "123");
+    EXPECT_NE(result.find("Error"), std::string::npos);
+    EXPECT_NE(result.find("API connection lost"), std::string::npos);
+}
+
+// ── GridBot v2.1.0: OrderFilled profit tracking ─────────────────────────────
+
+TEST(GridBotV210, GridLevelsCreated) {
+    GridBot bot;
+    GridConfig cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.lowerPrice = 50000.0;
+    cfg.upperPrice = 60000.0;
+    cfg.gridCount = 10;
+    cfg.totalInvest = 1000.0;
+    cfg.arithmetic = true;
+    bot.start(cfg);
+    EXPECT_TRUE(bot.isRunning());
+    EXPECT_EQ(bot.levelCount(), 11); // gridCount + 1
+    // First level is at lowerPrice
+    EXPECT_NEAR(bot.levelAt(0), 50000.0, 0.01);
+    // Last level is at upperPrice
+    EXPECT_NEAR(bot.levelAt(10), 60000.0, 0.01);
+}
+
+TEST(GridBotV210, GeometricGridLevels) {
+    GridBot bot;
+    GridConfig cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.lowerPrice = 10000.0;
+    cfg.upperPrice = 20000.0;
+    cfg.gridCount = 4;
+    cfg.totalInvest = 1000.0;
+    cfg.arithmetic = false; // geometric
+    bot.configure(cfg);
+    EXPECT_EQ(bot.levelCount(), 5);
+    EXPECT_NEAR(bot.levelAt(0), 10000.0, 0.01);
+    // Geometric: each level multiplied by ratio
+    EXPECT_GT(bot.levelAt(1), 10000.0);
+    EXPECT_LT(bot.levelAt(1), 15000.0);
+}
+
+TEST(GridBotV210, OnOrderFilledProfitTracking) {
+    GridBot bot;
+    GridConfig cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.lowerPrice = 100.0;
+    cfg.upperPrice = 200.0;
+    cfg.gridCount = 2;
+    cfg.totalInvest = 1000.0;
+    bot.start(cfg);
+
+    auto levels = bot.levels();
+    ASSERT_GE(levels.size(), 3u);
+
+    // No filled orders yet
+    EXPECT_EQ(bot.filledOrders(), 0);
+    EXPECT_DOUBLE_EQ(bot.realizedProfit(), 0.0);
+}
+
+// ── Database v2.1.0: Import/Export roundtrip ────────────────────────────────
+
+TEST(DatabaseV210, TradeRepositoryRoundtrip) {
+    std::string path = getTempDir() + "test_v210_trade_rt.db";
+    TradingDatabase db(path);
+    ASSERT_TRUE(db.init());
+    TradeRepository repo(db);
+
+    // Insert a trade
+    TradingRecord trade;
+    trade.id = "t1";
+    trade.symbol = "BTCUSDT";
+    trade.side = "BUY";
+    trade.entryPrice = 50000.0;
+    trade.qty = 0.1;
+    trade.pnl = 250.0;
+    trade.commission = 5.0;
+    trade.entryTime = 1700000000000LL;
+    trade.status = "open";
+    trade.isPaper = true;
+    EXPECT_TRUE(repo.upsert(trade));
+
+    // Read back
+    auto trades = repo.getOpen(true);
+    ASSERT_GE(trades.size(), 1u);
+    EXPECT_EQ(trades[0].symbol, "BTCUSDT");
+    EXPECT_EQ(trades[0].side, "BUY");
+    EXPECT_DOUBLE_EQ(trades[0].entryPrice, 50000.0);
+    EXPECT_DOUBLE_EQ(trades[0].qty, 0.1);
+
+    fs::remove(path);
+}
+
+TEST(DatabaseV210, OrderRepositoryRoundtrip) {
+    std::string path = getTempDir() + "test_v210_order_rt.db";
+    TradingDatabase db(path);
+    ASSERT_TRUE(db.init());
+    OrderRepository repo(db);
+
+    OrderRecord order;
+    order.id = "o1";
+    order.symbol = "ETHUSDT";
+    order.exchangeOrderId = "ord_12345";
+    order.side = "SELL";
+    order.type = "LIMIT";
+    order.price = 3000.0;
+    order.qty = 1.5;
+    order.status = "FILLED";
+    order.isPaper = false;
+    order.createdAt = 1700000000000LL;
+    EXPECT_TRUE(repo.insert(order));
+
+    auto orders = repo.getAll("ETHUSDT");
+    ASSERT_GE(orders.size(), 1u);
+    EXPECT_EQ(orders[0].symbol, "ETHUSDT");
+    EXPECT_EQ(orders[0].exchangeOrderId, "ord_12345");
+    EXPECT_DOUBLE_EQ(orders[0].price, 3000.0);
+
+    fs::remove(path);
+}
+
+TEST(DatabaseV210, EquityRepositoryRoundtrip) {
+    std::string path = getTempDir() + "test_v210_equity_rt.db";
+    TradingDatabase db(path);
+    ASSERT_TRUE(db.init());
+    EquityRepository repo(db);
+
+    EquitySnapshot snap;
+    snap.timestamp = 1700000000000LL;
+    snap.equity = 10500.0;
+    snap.balance = 10000.0;
+    snap.unrealizedPnl = 500.0;
+    snap.isPaper = false;
+    repo.push(snap);
+    repo.flush();
+
+    auto records = repo.getHistory(false);
+    ASSERT_GE(records.size(), 1u);
+    EXPECT_DOUBLE_EQ(records[0].equity, 10500.0);
+    EXPECT_DOUBLE_EQ(records[0].balance, 10000.0);
+
+    fs::remove(path);
 }
