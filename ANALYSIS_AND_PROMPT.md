@@ -424,10 +424,10 @@ escapeCsvField() добавлена.
 
 ---
 
-### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.4.0
+### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.6.0
 
 ```
-Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.3.0.
+Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.5.0.
 Это C++17 программа для алгоритмической торговли криптовалютами с ML (LSTM, XGBoost), RL (PPO),
 5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 568+ тестами на Google Test.
 
