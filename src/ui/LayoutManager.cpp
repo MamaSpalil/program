@@ -20,6 +20,7 @@ void LayoutManager::recalculate(float screenW, float screenH,
     // Fixed constants
     const float Htop     = 32.0f;   // Main Toolbar height
     const float Hfilters = 28.0f;   // Filters Bar height
+    const float gap      = 1.0f;    // Pixel gap between adjacent windows
 
     // Left column width: shown when either PairList or VD is visible
     const bool  showLeft = showPairList || showVolumeDelta;
@@ -30,21 +31,28 @@ void LayoutManager::recalculate(float screenW, float screenH,
         ? std::max(40.0f, std::floor(Hvp * logPct_))
         : 0.0f;
 
-    // Dynamic center column dimensions
-    const float Wcenter = std::max(0.0f, Wvp - Wleft - Wright);
-    const float Hcenter = std::max(0.0f, Hvp - Htop - Hfilters - Hlogs);
+    // Gaps between columns and rows
+    const float gapLR  = (showLeft ? gap : 0.0f);    // gap between left column and center
+    const float gapRC  = (showUserPanel ? gap : 0.0f); // gap between center and right column
+    const float gapLog = (showLogs ? gap : 0.0f);     // gap above logs
+
+    // Dynamic center column dimensions (account for gaps)
+    const float Wcenter = std::max(0.0f, Wvp - Wleft - Wright - gapLR - gapRC);
+    const float Hcenter = std::max(0.0f, Hvp - Htop - Hfilters - Hlogs - gapLog);
 
     // Left column height distribution: Pair List (top) + Volume Delta (bottom)
+    const float gapVD = (showVolumeDelta && showPairList && showLeft) ? gap : 0.0f;
     const float Hvd = (showVolumeDelta && showLeft) ? std::floor(Hcenter * vdPct_) : 0.0f;
-    const float HpairList = std::max(0.0f, Hcenter - Hvd);
+    const float HpairList = std::max(0.0f, Hcenter - Hvd - gapVD);
 
     // Center column height distribution: Market Data (top) + Indicators (bottom)
+    const float gapInd = showIndicators ? gap : 0.0f;
     const float Hind = showIndicators ? std::floor(Hcenter * indPct_) : 0.0f;
-    const float Hmarket = std::max(0.0f, Hcenter - Hind);
+    const float Hmarket = std::max(0.0f, Hcenter - Hind - gapInd);
 
     // Y-base for the content area (below toolbar + filters)
     const float Ybase   = Yvp + Htop + Hfilters;
-    const float Xcenter = Xvp + Wleft;
+    const float Xcenter = Xvp + Wleft + gapLR;
     const float Xright  = Xvp + Wvp - Wright;
 
     // 1. Main Toolbar — full width, top
@@ -71,10 +79,10 @@ void LayoutManager::recalculate(float screenW, float screenH,
         showPairList
     };
 
-    // 4. Volume Delta — left column, below Pair List
+    // 4. Volume Delta — left column, below Pair List (with gap)
     layouts_["Volume Delta"] = {
         "Volume Delta",
-        Vec2(Xvp, Ybase + HpairList),
+        Vec2(Xvp, Ybase + HpairList + gapVD),
         Vec2(std::max(0.0f, Wleft), std::max(0.0f, Hvd)),
         showVolumeDelta
     };
@@ -87,10 +95,10 @@ void LayoutManager::recalculate(float screenW, float screenH,
         true   // always visible
     };
 
-    // 6. Indicators — center column, below Market Data
+    // 6. Indicators — center column, below Market Data (with gap)
     layouts_["Indicators"] = {
         "Indicators",
-        Vec2(Xcenter, Ybase + Hmarket),
+        Vec2(Xcenter, Ybase + Hmarket + gapInd),
         Vec2(std::max(0.0f, Wcenter), std::max(0.0f, Hind)),
         showIndicators
     };
@@ -103,7 +111,7 @@ void LayoutManager::recalculate(float screenW, float screenH,
         showUserPanel
     };
 
-    // 8. Logs — bottom, full width
+    // 8. Logs — bottom, full width (with gap above)
     layouts_["Logs"] = {
         "Logs",
         Vec2(Xvp, Yvp + Hvp - Hlogs),

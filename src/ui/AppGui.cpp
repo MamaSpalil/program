@@ -455,7 +455,7 @@ void AppGui::loadConfig(const std::string& path) {
         config_.layoutLogPct = ly.value("log_pct",  0.10f);
         config_.layoutVdPct  = ly.value("vd_pct",   0.15f);
         config_.layoutIndPct = ly.value("ind_pct",  0.20f);
-        config_.layoutLocked = ly.value("locked",   false);
+        config_.layoutLocked = ly.value("locked",   true);
         showPairList_    = ly.value("show_pair_list",    true);
         showUserPanel_   = ly.value("show_user_panel",   true);
         showVolumeDelta_ = ly.value("show_volume_delta", true);
@@ -729,7 +729,7 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About")) {
-                addLog("[Info] Crypto ML Trader v2.5.0 — Algorithmic Trading System");
+                addLog("[Info] Crypto ML Trader v2.6.0 — Algorithmic Trading System");
             }
             ImGui::EndMenu();
         }
@@ -2421,7 +2421,7 @@ void AppGui::drawSettingsPanel() {
                 config_.layoutLogPct = 0.10f;
                 config_.layoutVdPct  = 0.15f;
                 config_.layoutIndPct = 0.20f;
-                config_.layoutLocked = false;
+                config_.layoutLocked = true;
                 layoutNeedsReset_ = true;
                 // Reset visibility to defaults
                 showPairList_    = true;
@@ -2824,7 +2824,7 @@ void AppGui::drawStatusBar() {
     ImGui::TextColored(statusColor, "%s", snap.statusMessage.c_str());
     ImGui::SameLine(ImGui::GetWindowWidth() - 200);
     ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.47f, 1.0f),
-                       "Crypto ML Trader v2.5.0");
+                       "Crypto ML Trader v2.6.0");
 }
 
 // ---------------------------------------------------------------------------
