@@ -124,6 +124,14 @@ void Scheduler::loop() {
                     job.nextRun = calcNextRun(job.cronExpr, tm_now);
                     Logger::get()->info("[Scheduler] Triggered job: {} ({})",
                                         job.name, job.symbol);
+                    if (job.callback) {
+                        try {
+                            job.callback();
+                        } catch (const std::exception& e) {
+                            Logger::get()->warn("[Scheduler] Job {} failed: {}",
+                                                job.name, e.what());
+                        }
+                    }
                 }
             }
         }

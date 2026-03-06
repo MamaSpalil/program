@@ -4,6 +4,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <functional>
 #include <sstream>
 #include <ctime>
 #include <nlohmann/json.hpp>
@@ -19,6 +20,7 @@ struct ScheduledJob {
     bool        enabled   = true;
     std::string lastRun;
     std::string nextRun;
+    std::function<void()> callback;
 };
 
 class Scheduler {

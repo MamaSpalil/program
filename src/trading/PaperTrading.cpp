@@ -121,7 +121,7 @@ void PaperTrading::reset(double initialBalance) {
 void PaperTrading::recalcEquity() {
     double posValue = 0.0;
     for (auto& p : account_.openPositions)
-        posValue += p.quantity * p.entryPrice + p.pnl;
+        posValue += p.quantity * p.currentPrice;
     account_.equity = account_.balance + posValue;
     if (account_.equity > account_.peakEquity)
         account_.peakEquity = account_.equity;

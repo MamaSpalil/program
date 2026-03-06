@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <thread>
 #include <algorithm>
 #include <stdexcept>
 
@@ -53,11 +54,27 @@ std::string BybitExchange::sign(const std::string& payload) const {
     return toHexB(digest, digestLen);
 }
 
+void BybitExchange::rateLimit() const {
+    std::lock_guard<std::mutex> lock(rateMutex_);
+    auto now = std::chrono::steady_clock::now();
+    auto windowStart = now - std::chrono::seconds(1);
+
+    while (!requestTimes_.empty() && requestTimes_.front() < windowStart) {
+        requestTimes_.pop();
+    }
+    if (static_cast<int>(requestTimes_.size()) >= MAX_REQUESTS_PER_SECOND) {
+        auto sleepUntil = requestTimes_.front() + std::chrono::seconds(1);
+        std::this_thread::sleep_until(sleepUntil);
+    }
+    requestTimes_.push(now);
+}
+
 std::string BybitExchange::httpGet(const std::string& path) const {
 #ifndef USE_CURL
     throw std::runtime_error("libcurl not available");
     (void)path;
 #else
+    rateLimit();
     std::string url = baseUrl_ + path;
     CURL* curl = curl_easy_init();
     if (!curl) throw std::runtime_error("curl_easy_init failed");
@@ -129,9 +146,103 @@ double BybitExchange::getPrice(const std::string& symbol) {
 }
 
 OrderResponse BybitExchange::placeOrder(const OrderRequest& req) {
-    // Simplified — real implementation would POST to /v5/order/create
+#ifndef USE_CURL
     (void)req;
     return {};
+#else
+    try {
+        rateLimit();
+        std::string side = (req.side == OrderRequest::Side::BUY) ? "Buy" : "Sell";
+        std::string orderType;
+        switch (req.type) {
+            case OrderRequest::Type::MARKET:    orderType = "Market"; break;
+            case OrderRequest::Type::LIMIT:     orderType = "Limit"; break;
+            case OrderRequest::Type::STOP_LOSS: orderType = "Market"; break;
+        }
+
+        nlohmann::json body;
+        body["category"] = "spot";
+        body["symbol"] = req.symbol;
+        body["side"] = side;
+        body["orderType"] = orderType;
+        body["qty"] = std::to_string(req.qty);
+        if (req.type == OrderRequest::Type::LIMIT && req.price > 0)
+            body["price"] = std::to_string(req.price);
+
+        auto resp = httpPost("/v5/order/create", body.dump());
+        auto j = nlohmann::json::parse(resp);
+
+        OrderResponse result;
+        if (j.value("retCode", -1) != 0) {
+            Logger::get()->warn("[Bybit] placeOrder error: retCode={} msg={}",
+                                j.value("retCode", -1), j.value("retMsg", "unknown"));
+            result.status = "ERROR";
+            return result;
+        }
+        if (j.contains("result")) {
+            result.orderId = j["result"].value("orderId", "");
+        }
+        result.status = "NEW";
+        result.executedQty = req.qty;
+        result.executedPrice = req.price;
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] placeOrder failed: {}", e.what());
+        OrderResponse result;
+        result.status = "ERROR";
+        return result;
+    }
+#endif
+}
+
+std::string BybitExchange::httpPost(const std::string& path,
+                                     const std::string& body) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)path; (void)body;
+#else
+    rateLimit();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::string timestamp = std::to_string(ts);
+    std::string recvWindow = "5000";
+
+    // Bybit V5 sign: timestamp + apiKey + recvWindow + body
+    std::string payload = timestamp + apiKey_ + recvWindow + body;
+    std::string sig = sign(payload);
+
+    std::string url = baseUrl_ + path;
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("X-BAPI-API-KEY: " + apiKey_).c_str());
+    headers = curl_slist_append(headers, ("X-BAPI-SIGN: " + sig).c_str());
+    headers = curl_slist_append(headers, ("X-BAPI-TIMESTAMP: " + timestamp).c_str());
+    headers = curl_slist_append(headers, ("X-BAPI-RECV-WINDOW: " + recvWindow).c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, bybitWriteCb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+        throw std::runtime_error(std::string("curl: ") + curl_easy_strerror(res));
+    if (httpCode >= 400)
+        throw std::runtime_error("HTTP POST " + std::to_string(httpCode) + ": " + response);
+    return response;
+#endif
 }
 
 AccountBalance BybitExchange::getBalance() {
@@ -198,7 +309,12 @@ void BybitExchange::subscribeKline(const std::string& symbol,
     klineCb_ = std::move(cb);
     ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/v5/public/spot");
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
-    (void)symbol; (void)interval;
+    ws_->connect();
+    // Send subscription message
+    nlohmann::json sub;
+    sub["op"] = "subscribe";
+    sub["args"] = nlohmann::json::array({"kline." + interval + "." + symbol});
+    ws_->send(sub.dump());
 }
 
 void BybitExchange::connect() {

@@ -6,6 +6,7 @@
 #include <functional>
 #include <mutex>
 #include <queue>
+#include <chrono>
 
 namespace crypto {
 
@@ -45,8 +46,14 @@ private:
     std::function<void(const Candle&)> klineCb_;
     mutable std::mutex rateMutex_;
 
+    // Rate limiting: sliding window
+    mutable std::queue<std::chrono::steady_clock::time_point> requestTimes_;
+    static constexpr int MAX_REQUESTS_PER_SECOND = 50; // public endpoints
+
     std::string sign(const std::string& payload) const;
     std::string httpGet(const std::string& path) const;
+    std::string httpPost(const std::string& path, const std::string& body) const;
+    void rateLimit() const;
     void onWsMessage(const std::string& msg);
 };
 

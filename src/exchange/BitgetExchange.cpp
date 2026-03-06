@@ -75,6 +75,20 @@ std::string BitgetExchange::sign(const std::string& timestamp,
     return base64Encode(digest, digestLen);
 }
 
+std::string BitgetExchange::sign(const std::string& timestamp,
+                                  const std::string& method,
+                                  const std::string& path,
+                                  const std::string& body) const {
+    std::string prehash = timestamp + method + path + body;
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digestLen = 0;
+    HMAC(EVP_sha256(),
+         apiSecret_.c_str(), static_cast<int>(apiSecret_.size()),
+         reinterpret_cast<const unsigned char*>(prehash.c_str()),
+         prehash.size(), digest, &digestLen);
+    return base64Encode(digest, digestLen);
+}
+
 void BitgetExchange::rateLimit() const {
     std::lock_guard<std::mutex> lock(rateMutex_);
     auto now = std::chrono::steady_clock::now();
@@ -198,9 +212,98 @@ double BitgetExchange::getPrice(const std::string& symbol) {
 }
 
 OrderResponse BitgetExchange::placeOrder(const OrderRequest& req) {
-    // Simplified — real implementation would POST to /api/v2/mix/order/place-order
+#ifndef USE_CURL
     (void)req;
     return {};
+#else
+    try {
+        std::string side = (req.side == OrderRequest::Side::BUY) ? "buy" : "sell";
+        std::string orderType;
+        switch (req.type) {
+            case OrderRequest::Type::MARKET:    orderType = "market"; break;
+            case OrderRequest::Type::LIMIT:     orderType = "limit"; break;
+            case OrderRequest::Type::STOP_LOSS: orderType = "market"; break;
+        }
+
+        nlohmann::json body;
+        body["symbol"] = req.symbol;
+        body["side"] = side;
+        body["orderType"] = orderType;
+        body["size"] = std::to_string(req.qty);
+        if (req.type == OrderRequest::Type::LIMIT && req.price > 0)
+            body["price"] = std::to_string(req.price);
+
+        auto resp = httpPost("/api/v2/spot/trade/place-order", body.dump());
+        auto j = nlohmann::json::parse(resp);
+
+        OrderResponse result;
+        if (j.value("code", "") != "00000") {
+            Logger::get()->warn("[Bitget] placeOrder error: code={} msg={}",
+                                j.value("code", ""), j.value("msg", ""));
+            result.status = "ERROR";
+            return result;
+        }
+        if (j.contains("data")) {
+            result.orderId = j["data"].value("orderId", "");
+        }
+        result.status = "NEW";
+        result.executedQty = req.qty;
+        result.executedPrice = req.price;
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] placeOrder failed: {}", e.what());
+        OrderResponse result;
+        result.status = "ERROR";
+        return result;
+    }
+#endif
+}
+
+std::string BitgetExchange::httpPost(const std::string& path,
+                                      const std::string& body) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)path; (void)body;
+#else
+    rateLimit();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::string timestamp = std::to_string(ts);
+
+    std::string sig = sign(timestamp, "POST", path, body);
+
+    std::string url = baseUrl_ + path;
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("ACCESS-KEY: " + apiKey_).c_str());
+    headers = curl_slist_append(headers, ("ACCESS-SIGN: " + sig).c_str());
+    headers = curl_slist_append(headers, ("ACCESS-TIMESTAMP: " + timestamp).c_str());
+    headers = curl_slist_append(headers, ("ACCESS-PASSPHRASE: " + passphrase_).c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, bitgetWriteCb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+        throw std::runtime_error(std::string("curl: ") + curl_easy_strerror(res));
+    if (httpCode >= 400)
+        throw std::runtime_error("HTTP POST " + std::to_string(httpCode) + ": " + response);
+    return response;
+#endif
 }
 
 AccountBalance BitgetExchange::getBalance() {
@@ -260,7 +363,17 @@ void BitgetExchange::subscribeKline(const std::string& symbol,
     klineCb_ = std::move(cb);
     ws_ = std::make_unique<WebSocketClient>(wsHost_, wsPort_, "/v2/ws/public");
     ws_->setMessageCallback([this](const std::string& m){ onWsMessage(m); });
-    (void)symbol; (void)interval;
+    ws_->connect();
+    // Send subscription message
+    nlohmann::json sub;
+    sub["op"] = "subscribe";
+    sub["args"] = nlohmann::json::array();
+    nlohmann::json arg;
+    arg["instType"] = "SPOT";
+    arg["channel"] = "candle" + interval;
+    arg["instId"] = symbol;
+    sub["args"].push_back(arg);
+    ws_->send(sub.dump());
 }
 
 void BitgetExchange::connect() {

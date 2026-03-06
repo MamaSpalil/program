@@ -18,6 +18,8 @@ struct GridConfig {
 
 struct GridLevel {
     double      price       = 0.0;
+    double      buyPrice    = 0.0;
+    double      quantity    = 0.0;
     std::string buyOrderId;
     std::string sellOrderId;
     bool        hasBuy      = false;

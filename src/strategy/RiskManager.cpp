@@ -45,9 +45,11 @@ double RiskManager::trailingStop(double entryPrice, double highSince,
         return std::max(entryPrice,
                         highSince - cfg_.atrStopMultiplier * atr);
     } else {
-        // Trail above the lowest price since entry
+        // Trail above the lowest price since entry (highSince = lowest low for shorts)
         return std::min(entryPrice,
                         highSince + cfg_.atrStopMultiplier * atr);
+        // Note: For SHORT positions, highSince should be passed as the lowest
+        // price since entry. The stop is placed above that low by ATR*mult.
     }
 }
 

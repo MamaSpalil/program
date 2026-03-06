@@ -1,4 +1,5 @@
 #include "GridBot.h"
+#include "../core/Logger.h"
 #include <algorithm>
 
 namespace crypto {
@@ -52,14 +53,22 @@ void GridBot::onOrderFilled(const std::string& orderId) {
     for (auto& lvl : levels_) {
         if (lvl.buyOrderId == orderId) {
             lvl.hasBuy = true;
+            lvl.buyPrice = lvl.price;
             ++filledOrders_;
             return;
         }
         if (lvl.sellOrderId == orderId) {
             lvl.hasSell = true;
             ++filledOrders_;
-            // Realized profit = sell - buy price (simplified)
-            realizedProfit_ += lvl.price * 0.001; // placeholder
+            // Realized profit = sell price - buy price * quantity
+            if (lvl.hasBuy && lvl.buyPrice > 0.0) {
+                double qty = lvl.quantity;
+                if (qty <= 0.0) {
+                    Logger::get()->warn("[GridBot] Level quantity not set, defaulting to 1.0");
+                    qty = 1.0;
+                }
+                realizedProfit_ += (lvl.price - lvl.buyPrice) * qty;
+            }
             return;
         }
     }
