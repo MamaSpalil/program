@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 2.2.0
+> **Версия:** 2.3.0
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 555 тестов, 551 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v2.2.0:** Layout Lock функциональный (lockWindow/lockWindowOnce переключается). Engine::getExchangeName() + SymbolFormatter в Engine. TelegramBot wired to Engine (/balance, /status, /positions, /pnl). DB directory auto-creation. Version v2.2.0. 18 новых тестов. Все 85 проблем исправлены.
+> **Результаты тестирования:** 568 тестов, 564 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v2.3.0:** BacktestEngine сохраняет все метаданные в БД (symbol, timeframe, initialBalance, finalBalance, strategy, commission, dateFrom, dateTo). PineConverter C++ генератор поддерживает SMA, MACD, BB, crossover, crossunder, highest, lowest, stdev, change, VWAP. Version v2.3.0. 13 новых тестов. Все 88 проблем исправлены.
 
 ---
 
@@ -105,6 +105,9 @@
 | **v1.7.4** | UI | AppGui.cpp | Нет визуализации ордеров на графике | ✅ Done (v1.7.4) — Order lines |
 | **v2.2.0** | UI | AppGui.cpp:724,2805 | Версия "v1.0.0" вместо актуальной | ✅ Done (v2.2.0) — обновлено на "v2.2.0" |
 | **v2.2.0** | Data | main.cpp:102 | Нет создания директории конфига при первом запуске | ✅ Done (v2.2.0) — create_directories() |
+| **v2.3.0** | Backtest | BacktestEngine.cpp:172-203 | Метаданные (symbol, timeframe, balance, strategy) не сохраняются в БД | ✅ Done (v2.3.0) — все поля Config теперь сохраняются |
+| **v2.3.0** | Indicators | PineConverter.cpp generateCpp() | C++ генератор поддерживает только EMA/RSI/ATR | ✅ Done (v2.3.0) — добавлены SMA/MACD/BB/crossover/crossunder/highest/lowest/stdev/change/VWAP |
+| **v2.3.0** | UI | AppGui.cpp/main.cpp | Версия "v2.2.0" вместо "v2.3.0" | ✅ Done (v2.3.0) — обновлено |
 
 ---
 
@@ -193,10 +196,11 @@ info.leverage         = safeStod(p.value("leverage", "1"));   // ✅
 ### 3.1 PaperTrading — ✅ Done (v1.7.2)
 Equity: `posValue += p.quantity * p.currentPrice` — корректно.
 
-### 3.2 BacktestEngine — ✅ Done (v1.7.2 + v1.7.4 + v2.0.0)
+### 3.2 BacktestEngine — ✅ Done (v1.7.2 + v1.7.4 + v2.0.0 + v2.3.0)
 - Equity SHORT: `posQty * (2.0 * entryPrice - price)` ✅
 - Sharpe ratio: sample stddev `sqrt(sq_sum / (n-1))` ✅ Done (v1.7.4)
 - Sharpe ratio: empty returns guard `!returns.empty()` ✅ Done (v2.0.0)
+- ✅ **DB metadata (v2.3.0):** computeMetrics() теперь принимает полный Config и сохраняет symbol, timeframe, initialBalance, finalBalance, strategy, commission, dateFrom, dateTo. BtTradeRecord также включает symbol и commission. Ранее сохранялись только метрики производительности.
 
 ### 3.3 RiskManager — ✅ Done (v1.7.3)
 Параметр `priceSinceEntry` (было `highSince`).
@@ -361,12 +365,12 @@ escapeCsvField() добавлена.
 
 ## 7. АНАЛИЗ ТЕСТОВОГО ПОКРЫТИЯ
 
-### 7.1 Статистика (v2.2.0)
-- **Всего тестов:** 555 (551 pass, 4 skip — LibTorch/XGBoost)
+### 7.1 Статистика (v2.3.0)
+- **Всего тестов:** 568 (564 pass, 4 skip — LibTorch/XGBoost)
 - **Файлов тестов:** 15
-- **Новых тестов v2.2.0:** 18
-- **Оценка покрытия:** ~54% кода
-- **Время выполнения:** ~17 секунд
+- **Новых тестов v2.3.0:** 13
+- **Оценка покрытия:** ~56% кода
+- **Время выполнения:** ~22 секунд
 
 ### 7.2 Критически не протестировано
 | Модуль | Что не тестируется |
@@ -385,19 +389,20 @@ escapeCsvField() добавлена.
 ## 8. АНАЛИЗ CHANGELOG
 
 ### Ключевые наблюдения:
-1. **v2.2.0** — 3 исправления: Layout Lock функциональный (lockWindow vs lockWindowOnce), Engine cache key fix (exchangeNameQualified), version update v2.2.0. 2 новых интеграции: TelegramBot → Engine callbacks, DB directory auto-creation. 18 новых тестов.
-2. **v2.1.0** — 3 исправления: TradingDatabase nullptr guard, LayoutManager logPct_ functional (logs height slider), Reset Layout defaults sync. 2 новых модуля: SymbolFormatter, TelegramBot command callbacks. 35 новых тестов.
-3. **v2.0.0** — 4 исправления: Layout перестройка (VD → left column), Bybit/KuCoin WebSocket bounds, KuCoin getPrice bounds, BacktestEngine Sharpe empty returns. 10 новых тестов.
-2. **v1.9.0** — 7 исправлений: Exchange JSON bounds checks (OKX/Bybit/Bitget getPrice+getOrderBook), PaperTrading commission+validation, Scheduler deadlock fix, BacktestEngine div-by-zero protection, ModelTrainer silent failure. 15 новых тестов.
-3. **v1.8.0** — 7 исправлений: OnlineLearningLoop state cache, NewsFeed CryptoPanic API, FearGreed alternative.me API, TelegramBot sendMessage+getUpdates, OrderManagement commission, adaptive price format, PPO tuning (entropy/value clip). 14 новых тестов.
-4. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
-5. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
-6. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
-7. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
-8. **v1.7.1** — Windows compilation fixes
-9. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
-10. **Прогресс:** между v1.7.0 и v2.2.0 исправлено 85 проблем
-11. **Остаётся:** 0 открытых критических проблем
+1. **v2.3.0** — 3 исправления: BacktestEngine DB metadata (symbol/timeframe/balance/strategy/commission/dates), PineConverter C++ generator (10 новых Pine v6 функций), version update v2.3.0. 13 новых тестов.
+2. **v2.2.0** — 3 исправления: Layout Lock функциональный (lockWindow vs lockWindowOnce), Engine cache key fix (exchangeNameQualified), version update v2.2.0. 2 новых интеграции: TelegramBot → Engine callbacks, DB directory auto-creation. 18 новых тестов.
+3. **v2.1.0** — 3 исправления: TradingDatabase nullptr guard, LayoutManager logPct_ functional (logs height slider), Reset Layout defaults sync. 2 новых модуля: SymbolFormatter, TelegramBot command callbacks. 35 новых тестов.
+4. **v2.0.0** — 4 исправления: Layout перестройка (VD → left column), Bybit/KuCoin WebSocket bounds, KuCoin getPrice bounds, BacktestEngine Sharpe empty returns. 10 новых тестов.
+5. **v1.9.0** — 7 исправлений: Exchange JSON bounds checks (OKX/Bybit/Bitget getPrice+getOrderBook), PaperTrading commission+validation, Scheduler deadlock fix, BacktestEngine div-by-zero protection, ModelTrainer silent failure. 15 новых тестов.
+6. **v1.8.0** — 7 исправлений: OnlineLearningLoop state cache, NewsFeed CryptoPanic API, FearGreed alternative.me API, TelegramBot sendMessage+getUpdates, OrderManagement commission, adaptive price format, PPO tuning (entropy/value clip). 14 новых тестов.
+7. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
+8. **v1.7.4** — 10 исправлений: HTTP DELETE для cancelOrder (Binance/KuCoin), signed getPositionRisk (KuCoin/Bitget/Bybit), WebhookServer thread-safety, Sharpe ratio fix, UI: right-click menu + leverage slider + order lines
+9. **v1.7.3** — 22 исправления: setLeverage/getLeverage/cancelOrder, 29 тестов
+10. **v1.7.2** — полный анализ и верификация: 15 проблем подтверждены
+11. **v1.7.1** — Windows compilation fixes
+12. **v1.7.0** — LibTorch + XGBoost + 46 стресс-тестов
+13. **Прогресс:** между v1.7.0 и v2.3.0 исправлено 88 проблем
+14. **Остаётся:** 0 открытых критических проблем
 
 ---
 
@@ -405,24 +410,24 @@ escapeCsvField() добавлена.
 
 ---
 
-### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.3.0
+### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.4.0
 
 ```
-Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.2.0.
+Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.3.0.
 Это C++17 программа для алгоритмической торговли криптовалютами с ML (LSTM, XGBoost), RL (PPO),
-5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 555+ тестами на Google Test.
+5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 568+ тестами на Google Test.
 
 КОНТЕКСТ ПРОЕКТА:
 - Репозиторий: /home/runner/work/program/program
 - Основной код: src/ (69 .cpp файлов, 94 .h файлов)
-- Тесты: tests/ (15 файлов, 555 тестов, 551 pass, 4 skip)
+- Тесты: tests/ (15 файлов, 568 тестов, 564 pass, 4 skip)
 - Конфиг: config/settings.json, config/profiles.json
 - Сборка: cmake -B build/test -DCMAKE_BUILD_TYPE=Debug && cmake --build build/test -j$(nproc)
 - Запуск тестов: cd build/test && ./crypto_trader_tests --gtest_brief=1
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v2.2.0) ===
+=== СТАТУС ПРОЕКТА (v2.3.0) ===
 
 ВСЕ КРИТИЧЕСКИЕ И ВЫСОКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ (✅ Done — НЕ ТРОГАТЬ):
 - Все 5 бирж: placeOrder, cancelOrder, setLeverage, getLeverage, getPositionRisk, getFuturesBalance
@@ -438,11 +443,13 @@ escapeCsvField() добавлена.
 - PaperTrading: commission, validation, equity calc
 - Scheduler: deadlock fix, GridBot: profit tracking
 - Все FeatureExtractor, SignalEnhancer, WebhookServer, CSVExporter, TaxReporter fixes
-- Version strings updated to v2.2.0
+- Version strings updated to v2.3.0
+- BacktestEngine: все метаданные сохраняются в БД (symbol, timeframe, balance, strategy, commission, dates)
+- PineConverter: C++ генератор поддерживает SMA, MACD, BB, crossover, crossunder, highest, lowest, stdev, change, VWAP
 
-=== ЗАДАЧА v2.3.0: UX + ML/AI IMPROVEMENTS + PERFORMANCE ===
+=== ЗАДАЧА v2.4.0: UX + ML/AI IMPROVEMENTS + PERFORMANCE ===
 
-Программа стабильна (85 исправлений, 555 тестов). Следующий этап — углубление функциональности.
+Программа стабильна (88 исправлений, 568 тестов). Следующий этап — углубление функциональности.
 
 === ЭТАП 1: SymbolFormatter — Полная интеграция в PairList ===
 
@@ -491,41 +498,64 @@ escapeCsvField() добавлена.
 3.5. Добавь Multi-timeframe feature aggregation:
    - Объединение фичей с 1m, 5m, 15m, 1h таймфреймов
 
-=== ЭТАП 4: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~54% до ~65%) ===
+=== ЭТАП 4: BacktestEngine — Расширение ===
 
-4.1. Добавь тесты для GridBot executeBuy/executeSell:
+4.1. Добавь поддержку leverage в бэктесте:
+   - BacktestEngine::Config::leverage (default 1x)
+   - PnL *= leverage, liquidation price check
+   
+4.2. Добавь slippage simulation:
+   - BacktestEngine::Config::slippagePct (default 0.01%)
+   - Коррекция entry/exit price на slippage
+
+4.3. Добавь загрузку результатов бэктестов для сравнения:
+   - UI окно "Backtest History" с таблицей из BacktestRepository
+   - Сравнение метрик разных стратегий
+
+=== ЭТАП 5: PineConverter — Расширение C++ генератора ===
+
+5.1. Добавь генерацию для ta.dmi (DMI/ADX)
+5.2. Добавь генерацию для ta.pivothigh / ta.pivotlow
+5.3. Добавь генерацию для ta.highestbars / ta.lowestbars
+5.4. Добавь генерацию для strategy.* (entry/exit/close)
+5.5. Добавь генерацию для if/else конструкций в C++
+
+=== ЭТАП 6: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~56% до ~65%) ===
+
+6.1. Добавь тесты для GridBot executeBuy/executeSell:
    - Выполнение ордера с mock exchange → обновление уровня
    - Profit tracking через полный grid цикл
 
-4.2. Добавь тесты для WebSocket subscribeKline с mock данными:
+6.2. Добавь тесты для WebSocket subscribeKline с mock данными:
    - Проверка парсинга JSON-сообщений от каждой биржи
 
-4.3. Тесты для SymbolFormatter → PairList display:
-   - Проверка что унифицированные символы отображаются в PairList
-
-4.4. Тесты для BacktestEngine с leverage и slippage:
+6.3. Тесты для BacktestEngine с leverage и slippage:
    - Проверка корректности расчётов при различных leverage
 
-=== ЭТАП 5: ПРОИЗВОДИТЕЛЬНОСТЬ И НАДЁЖНОСТЬ ===
+6.4. Тесты для PineConverter: DMI, pivothigh, pivotlow генерация
 
-5.1. Добавь RAII wrapper для curl_slist* (предотвращение утечек при исключениях)
-5.2. Добавь exponential backoff для повторных попыток HTTP-запросов
-5.3. Добавь connection pooling для HTTP-запросов к биржам
-5.4. Профилируй горячие пути с помощью perf/flamegraph
+=== ЭТАП 7: ПРОИЗВОДИТЕЛЬНОСТЬ И НАДЁЖНОСТЬ ===
 
-=== ЭТАП 6: БЕЗОПАСНОСТЬ ===
+7.1. Добавь RAII wrapper для curl_slist* (предотвращение утечек при исключениях)
+7.2. Добавь exponential backoff для повторных попыток HTTP-запросов
+7.3. Добавь connection pooling для HTTP-запросов к биржам
+7.4. Профилируй горячие пути с помощью perf/flamegraph
 
-6.1. Проверь все API ключи на предмет логирования (не должны логироваться)
-6.2. Проверь SQL injection prevention во всех Repository классах
-6.3. Добавь rate limiting для TelegramBot команд (предотвращение спама)
-6.4. Добавь input validation для Telegram /buy и /sell команд
+=== ЭТАП 8: БЕЗОПАСНОСТЬ ===
+
+8.1. Проверь все API ключи на предмет логирования (не должны логироваться)
+8.2. Проверь SQL injection prevention во всех Repository классах
+8.3. Добавь rate limiting для TelegramBot команд (предотвращение спама)
+8.4. Добавь input validation для Telegram /buy и /sell команд
 
 === ПРИОРИТЕТЫ ===
 Приоритет 1 (UX): Этап 1+2 — SymbolFormatter в PairList + визуальные улучшения
-Приоритет 2 (ML): Этап 3 — расширение ML функциональности
-Приоритет 3 (ТЕСТЫ): Этап 4 — увеличение покрытия
-Приоритет 4 (PERF): Этап 5 — оптимизация и надёжность
-Приоритет 5 (SECURITY): Этап 6 — безопасность
+Приоритет 2 (BACKTEST): Этап 4 — leverage, slippage, history UI
+Приоритет 3 (ML): Этап 3 — расширение ML функциональности
+Приоритет 4 (PINE): Этап 5 — расширение C++ генератора (DMI, pivots, strategy)
+Приоритет 5 (ТЕСТЫ): Этап 6 — увеличение покрытия
+Приоритет 6 (PERF): Этап 7 — оптимизация и надёжность
+Приоритет 7 (SECURITY): Этап 8 — безопасность
 
 === ОГРАНИЧЕНИЯ ===
 - НЕ меняй архитектуру проекта
@@ -541,32 +571,35 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.2.0)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.3.0)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.2.0) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.3.0) |
 |-----------|--------------|--------------|-----------|---------------|
 | Биржи | 24 | 24 | 0 | 0 |
 | Торговые модули | 14 | 14 | 0 | 0 |
 | ML/AI | 19 | 19 | 0 | 0 |
-| UI/Настройки | 19 | 19 | 0 | +3 (Layout Lock functional, version update, cache key fix) |
-| Интеграции | 12 | 12 | 0 | +1 (TelegramBot → Engine wiring) |
-| Backtest | 5 | 5 | 0 | 0 |
-| Data | 2 | 2 | 0 | +1 (DB directory auto-creation) |
-| **ИТОГО** | **85** | **85** | **0** | **+3 исправления + 2 новых интеграции (v2.2.0)** |
+| UI/Настройки | 20 | 20 | 0 | +1 (version update v2.3.0) |
+| Интеграции | 12 | 12 | 0 | 0 |
+| Backtest | 6 | 6 | 0 | +1 (DB metadata: symbol/timeframe/balance/strategy/commission/dates) |
+| Data | 2 | 2 | 0 | 0 |
+| Indicators | 1 | 1 | 0 | +1 (PineConverter C++ generator: SMA/MACD/BB/crossover/crossunder/highest/lowest/stdev/change/VWAP) |
+| **ИТОГО** | **88** | **88** | **0** | **+3 исправления (v2.3.0)** |
 
 ### Прогресс исправлений:
-- **v2.1.0 → v2.2.0:** 3 новых исправления + 2 новых интеграции (всего 82→85) + 18 новых тестов
-- **Тесты:** 555 (551 pass, 4 skip) — +18 новых тестов
-- **Новые интеграции:** TelegramBot → Engine callbacks, DB directory auto-creation
-- **Общий статус:** 85 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
+- **v2.2.0 → v2.3.0:** 3 новых исправления (всего 85→88) + 13 новых тестов
+- **Тесты:** 568 (564 pass, 4 skip) — +13 новых тестов
+- **Новые улучшения:** BacktestEngine DB metadata, PineConverter C++ generator expanded
+- **Общий статус:** 88 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
 
-### Направления развития (v2.3.0):
+### Направления развития (v2.4.0):
 1. SymbolFormatter полная интеграция в PairList для автоматического отображения унифицированных символов
 2. UX: equity curve мини-график, order book heatmap, drag-and-drop ордеров, keyboard shortcuts
-3. ML: LR scheduler, feature importance, RAII wrappers, multi-timeframe features
-4. Тестовое покрытие (54% → 65%): GridBot execute, WebSocket mock, BacktestEngine leverage/slippage
-5. Производительность: RAII curl wrapper, connection pooling, exponential backoff
-6. Безопасность: API key audit, SQL injection check, TelegramBot rate limiting + input validation
+3. BacktestEngine: leverage, slippage simulation, backtest history comparison UI
+4. PineConverter: DMI, pivothigh/pivotlow, highestbars/lowestbars, strategy.*, if/else в C++
+5. ML: LR scheduler, feature importance, RAII wrappers, multi-timeframe features
+6. Тестовое покрытие (56% → 65%): GridBot execute, WebSocket mock, BacktestEngine leverage/slippage
+7. Производительность: RAII curl wrapper, connection pooling, exponential backoff
+8. Безопасность: API key audit, SQL injection check, TelegramBot rate limiting + input validation
 
 ### Обнаруженные проблемы для будущего исправления:
 1. **XGBoostModel** — нет RAII wrapper для DMatrix/booster (утечка при исключениях)
@@ -575,8 +608,9 @@ escapeCsvField() добавлена.
 4. **TelegramBot** — нет rate limiting для команд (потенциальный спам)
 5. **TelegramBot** — нет input validation для /buy и /sell (потенциально опасные ордера без валидации)
 6. **OnlineLearningLoop** — batch сделки могут получать одинаковый nextState
-7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.3.0)
+7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.4.0)
+8. **PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции (v2.4.0)
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.2.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 555 тестов подтверждены. Все 85 найденных проблем исправлены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.3.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 568 тестов подтверждены. Все 88 найденных проблем исправлены.*
