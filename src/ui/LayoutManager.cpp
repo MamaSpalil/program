@@ -25,7 +25,10 @@ void LayoutManager::recalculate(float screenW, float screenH,
     const bool  showLeft = showPairList || showVolumeDelta;
     const float Wleft  = showLeft      ? 200.0f : 0.0f;
     const float Wright = showUserPanel ? 290.0f : 0.0f;
-    const float Hlogs  = showLogs      ? 120.0f : 0.0f;
+    // Logs height: percentage-based with minimum constraint (min 40px)
+    const float Hlogs  = showLogs
+        ? std::max(40.0f, std::floor(Hvp * logPct_))
+        : 0.0f;
 
     // Dynamic center column dimensions
     const float Wcenter = std::max(0.0f, Wvp - Wleft - Wright);
