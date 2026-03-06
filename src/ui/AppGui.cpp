@@ -1459,6 +1459,13 @@ void AppGui::drawMarketDataWindow() {
                     ImGui::EndTooltip();
                 }
             }
+
+            // ── 5.4: Right-click context menu for placing orders at price level ──
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && mx >= p.x && mx <= p.x + chartW && my >= p.y && my <= p.y + priceH) {
+                chartRightClickPrice_ = pMax - ((double)(my - p.y) / priceH) * range;
+                chartRightClickOpen_ = true;
+                ImGui::OpenPopup("ChartOrderMenu");
+            }
         }
 
         // ── H3: Trade markers ──
@@ -1525,6 +1532,64 @@ void AppGui::drawMarketDataWindow() {
                                   IM_COL32(200, 0, 0, 150), 1.0f);
                     draw->AddText(ImVec2(p.x + chartW + 4, slY - 6),
                                   IM_COL32(200, 0, 0, 200), "SL");
+                }
+            }
+        }
+
+        // ── 5.5: Right-click context menu popup for chart order placement ──
+        if (ImGui::BeginPopup("ChartOrderMenu")) {
+            char priceLabel[64];
+            snprintf(priceLabel, sizeof(priceLabel), "Price: %.8f", chartRightClickPrice_);
+            ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", priceLabel);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Buy Limit at this price")) {
+                omSideIdx_ = 0;
+                omTypeIdx_ = 1;  // LIMIT
+                omPrice_ = chartRightClickPrice_;
+                showOrderManagement_ = true;
+                addLog("[Chart] Buy Limit set at " + std::to_string(chartRightClickPrice_));
+            }
+            if (ImGui::MenuItem("Sell Limit at this price")) {
+                omSideIdx_ = 1;
+                omTypeIdx_ = 1;  // LIMIT
+                omPrice_ = chartRightClickPrice_;
+                showOrderManagement_ = true;
+                addLog("[Chart] Sell Limit set at " + std::to_string(chartRightClickPrice_));
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Buy Stop-Limit at this price")) {
+                omSideIdx_ = 0;
+                omTypeIdx_ = 2;  // STOP_LIMIT
+                omStopPrice_ = chartRightClickPrice_;
+                showOrderManagement_ = true;
+            }
+            if (ImGui::MenuItem("Sell Stop-Limit at this price")) {
+                omSideIdx_ = 1;
+                omTypeIdx_ = 2;  // STOP_LIMIT
+                omStopPrice_ = chartRightClickPrice_;
+                showOrderManagement_ = true;
+            }
+            ImGui::EndPopup();
+        }
+
+        // ── 5.6: Draw open order price lines on chart ──
+        if (!snap.openOrders.empty()) {
+            for (auto& ord : snap.openOrders) {
+                double oPrice = ord.price;
+                if (oPrice >= pMin && oPrice <= pMax) {
+                    float ordY = (float)(p.y + priceH - ((oPrice - pMin) / range) * priceH);
+                    ImU32 ordCol = (ord.side == "BUY")
+                        ? IM_COL32(0, 180, 80, 160)
+                        : IM_COL32(200, 60, 60, 160);
+                    draw->AddLine(ImVec2(p.x, ordY), ImVec2(p.x + chartW, ordY),
+                                  ordCol, 1.0f);
+                    char ordLabel[64];
+                    snprintf(ordLabel, sizeof(ordLabel), "%s %.4f @ %.8f",
+                             ord.side.c_str(), ord.qty, oPrice);
+                    draw->AddRectFilled(ImVec2(p.x + chartW + 1, ordY - 8),
+                                        ImVec2(p.x + w, ordY + 8), ordCol);
+                    draw->AddText(ImVec2(p.x + chartW + 4, ordY - 6),
+                                  IM_COL32(255, 255, 255, 230), ordLabel);
                 }
             }
         }
@@ -3206,6 +3271,20 @@ void AppGui::drawOrderManagementWindow() {
     // Reduce Only (futures)
     if (config_.marketType == "futures") {
         ImGui::Checkbox("Reduce Only", &omReduceOnly_);
+
+        // Leverage input for futures trading
+        ImGui::SetNextItemWidth(-1);
+        ImGui::SliderInt("Leverage##OM", &omLeverage_, 1, 125, "%dx");
+        if (omLeverage_ < 1) omLeverage_ = 1;
+        if (omLeverage_ > 125) omLeverage_ = 125;
+
+        // Apply leverage to exchange
+        if (ImGui::Button("Apply Leverage##OM", ImVec2(-1, 0))) {
+            if (onSetLeverage_) {
+                onSetLeverage_(config_.symbol, omLeverage_);
+                addLog("[Leverage] Set " + std::to_string(omLeverage_) + "x for " + config_.symbol);
+            }
+        }
     }
 
     ImGui::Separator();

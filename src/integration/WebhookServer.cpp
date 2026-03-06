@@ -33,9 +33,8 @@ bool WebhookServer::checkRateLimit(const std::string& ip) {
         std::chrono::system_clock::now().time_since_epoch()).count();
 
     // Periodic cleanup: remove stale entries older than 1 hour every 100 requests
-    static int requestCount = 0;
-    if (++requestCount >= 100) {
-        requestCount = 0;
+    if (++cleanupCounter_ >= 100) {
+        cleanupCounter_ = 0;
         for (auto it = rateLimit_.begin(); it != rateLimit_.end(); ) {
             if (now - it->second.second > 3600)
                 it = rateLimit_.erase(it);

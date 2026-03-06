@@ -386,6 +386,48 @@ std::string BinanceExchange::httpPost(const std::string& path,
 #endif
 }
 
+std::string BinanceExchange::httpDelete(const std::string& path,
+                                         const std::string& params) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)path; (void)params;
+#else
+    rateLimit();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::string signedParams = params + "&timestamp=" + std::to_string(ts);
+    std::string sig = sign(signedParams);
+    std::string fullParams = signedParams + "&signature=" + sig;
+
+    std::string url = effectiveBaseUrl() + path + "?" + fullParams;
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("X-MBX-APIKEY: " + apiKey_).c_str());
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+        throw std::runtime_error(std::string("curl: ") + curl_easy_strerror(res));
+    if (httpCode >= 400)
+        throw std::runtime_error("HTTP DELETE " + std::to_string(httpCode) + ": " + response);
+    return response;
+#endif
+}
+
 Candle BinanceExchange::parseKlineJson(const nlohmann::json& k) const {
     Candle c;
     c.openTime  = k[0].get<int64_t>();
@@ -789,9 +831,9 @@ bool BinanceExchange::cancelOrder(const std::string& symbol, const std::string& 
         else
             path = "/api/v3/order";
 
-        std::ostringstream body;
-        body << "symbol=" << symbol << "&orderId=" << orderId;
-        auto resp = httpPost(path, body.str());
+        std::ostringstream params;
+        params << "symbol=" << symbol << "&orderId=" << orderId;
+        auto resp = httpDelete(path, params.str());
         auto j = nlohmann::json::parse(resp);
         if (j.contains("code")) {
             Logger::get()->warn("[Binance] cancelOrder error: {}", j.value("msg", ""));

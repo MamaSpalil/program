@@ -496,18 +496,18 @@ std::vector<PositionInfo> BitgetExchange::getPositionRisk(const std::string& sym
         rateLimit();
         std::string path = "/api/v2/mix/position/all-position?productType=USDT-FUTURES";
         if (!symbol.empty()) path += "&symbol=" + symbol;
-        auto resp = httpGet(path);
+        auto resp = httpGet(path, true);
         auto j = nlohmann::json::parse(resp);
         std::vector<PositionInfo> result;
         if (j.contains("data") && j["data"].is_array()) {
             for (auto& p : j["data"]) {
                 PositionInfo info;
                 info.symbol           = p.value("symbol", "");
-                info.positionAmt      = std::stod(p.value("total", "0"));
-                info.entryPrice       = std::stod(p.value("openPriceAvg", "0"));
-                info.unrealizedProfit = std::stod(p.value("unrealizedPL", "0"));
+                info.positionAmt      = safeStod(p.value("total", "0"));
+                info.entryPrice       = safeStod(p.value("openPriceAvg", "0"));
+                info.unrealizedProfit = safeStod(p.value("unrealizedPL", "0"));
                 info.marginType       = p.value("marginMode", "");
-                info.leverage         = std::stod(p.value("leverage", "1"));
+                info.leverage         = safeStod(p.value("leverage", "1"));
                 result.push_back(std::move(info));
             }
         }

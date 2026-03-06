@@ -5,6 +5,52 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Exchange Bug Fixes — Аутентификация и HTTP методы
+- **KuCoinExchange.cpp getPositionRisk()** — исправлена отсутствующая аутентификация: `httpGet(path)` → `httpGet(path, true)`. Эндпоинт `/api/v1/positions` требует подписи (KuCoinExchange.cpp:501). Без `signed=true` запрос отправлялся без API-ключей, получая ошибку 401.
+- **BitgetExchange.cpp getPositionRisk()** — аналогичное исправление: `httpGet(path)` → `httpGet(path, true)`. Эндпоинт `/api/v2/mix/position/all-position` требует подписи (BitgetExchange.cpp:499).
+- **BybitExchange.cpp getPositionRisk()** — замена `std::stod()` на `safeStod()` для всех полей позиции (size, avgPrice, unrealisedPnl, cumRealisedPnl, leverage). `std::stod()` бросает исключение на невалидных строках, `safeStod()` возвращает 0.0 (BybitExchange.cpp:446-451).
+- **KuCoinExchange.cpp getPositionRisk()** — аналогичная замена `std::stod()` → `safeStod()` для всех числовых полей (KuCoinExchange.cpp:508-513).
+- **BitgetExchange.cpp getPositionRisk()** — аналогичная замена `std::stod()` → `safeStod()` для всех числовых полей (BitgetExchange.cpp:506-510).
+- **BinanceExchange.cpp cancelOrder()** — исправлен HTTP метод: `httpPost()` → `httpDelete()`. Binance API для отмены ордера требует DELETE-запрос на `/api/v3/order` (spot) и `/fapi/v1/order` (futures). Добавлен метод `httpDelete()` с поддержкой HMAC-SHA256 подписи и `CURLOPT_CUSTOMREQUEST "DELETE"` (BinanceExchange.cpp:794, 388-432).
+- **KuCoinExchange.cpp cancelOrder()** — исправлен HTTP метод: `httpPost()` → `httpDelete()`. KuCoin API для отмены ордера требует DELETE-запрос на `/api/v1/orders/{orderId}`. Добавлен метод `httpDelete()` с подписью и `CURLOPT_CUSTOMREQUEST "DELETE"` (KuCoinExchange.cpp:588, 316-372).
+
+#### Этап 2: WebhookServer Thread-Safety Fix
+- **WebhookServer.cpp checkRateLimit()** — заменён `static int requestCount` на член класса `cleanupCounter_`. Static-переменная разделялась между всеми экземплярами WebhookServer, что нарушало изоляцию между серверами и создавало race condition при многопоточном доступе к разным экземплярам (WebhookServer.cpp:36-38, WebhookServer.h:71).
+
+#### Этап 3: BacktestEngine Sharpe Ratio Fix
+- **BacktestEngine.cpp computeMetrics()** — исправлен расчёт Sharpe ratio: std::dev теперь вычисляется как sample standard deviation (`sqrt(sq_sum / (n-1))`) вместо population standard deviation (`sqrt(sq_sum / n)`). Для финансовых данных sample stddev статистически корректнее (BacktestEngine.cpp:162-164).
+
+### Added
+
+#### Этап 4: UI/UX Improvements — Chart Order Placement & Leverage
+- **AppGui.cpp — Контекстное меню правой кнопки мыши на графике** — добавлено контекстное меню при правом клике на графике (в зоне цены), позволяющее:
+  - **Buy Limit** на выбранном уровне цены
+  - **Sell Limit** на выбранном уровне цены
+  - **Buy Stop-Limit** (stop price = уровень клика)
+  - **Sell Stop-Limit** (stop price = уровень клика)
+  - При выборе пункта автоматически заполняется Order Management и открывается окно (AppGui.cpp:1464-1503).
+- **AppGui.cpp — Визуализация открытых ордеров на графике** — горизонтальные линии ордеров отображаются на графике: зелёные для BUY, красные для SELL. Каждая линия подписана (side, qty, price). Линии рисуются только для ордеров в видимом ценовом диапазоне (AppGui.cpp:1506-1526).
+- **AppGui.cpp — Leverage Slider в Order Management** — добавлен слайдер "Leverage" (1x–125x) в секции Futures с кнопкой "Apply Leverage" для отправки через API (AppGui.cpp:3279-3290). Добавлен callback `SetLeverageCallback` и setter `setSetLeverageCallback()` (AppGui.h:233, 244, 357).
+- **BinanceExchange.h/.cpp — httpDelete()** — новый метод для DELETE-запросов с HMAC-SHA256 подписью (BinanceExchange.h:108-109, BinanceExchange.cpp:388-432).
+- **KuCoinExchange.h/.cpp — httpDelete()** — новый метод для DELETE-запросов с HMAC-SHA256+Base64 подписью (KuCoinExchange.h:64, KuCoinExchange.cpp:316-372).
+- **AppGui.h** — новые поля: `omLeverage_` (int, default 1), `chartRightClickOpen_` (bool), `chartRightClickPrice_` (double).
+
+#### Этап 5: Тестирование v1.7.4
+- **test_full_system.cpp** — 8 новых тестов:
+  - `WebhookV174` (1): RateLimitCleanupIsMemberVariable — проверяет что два экземпляра WebhookServer имеют независимые счётчики cleanup
+  - `BacktestV174` (1): SharpeRatioSampleStddev — проверяет что Sharpe ratio конечное число
+  - `AppGuiV174` (1): LeverageFieldDefault — компиляционная проверка наличия поля leverage
+  - `ExchangeV174` (5): BybitGetPositionRiskSafeStod, KuCoinGetPositionRiskSigned, BitgetGetPositionRiskSigned, BinanceCancelOrderUsesDelete, KuCoinCancelOrderUsesDelete
+- **Итого тестов:** 453 (449 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v1.7.4 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v1.7.4: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v1.8.0.
+
 ## [1.7.3] - 2026-03-06
 
 ### Fixed

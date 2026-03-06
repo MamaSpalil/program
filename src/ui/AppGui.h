@@ -231,6 +231,7 @@ public:
                                                    double price)>;
     using LoadPairsCallback  = std::function<void(const std::string& marketType)>;
     using RefreshDataCallback = std::function<void()>;
+    using SetLeverageCallback = std::function<void(const std::string& symbol, int leverage)>;
 
     void setConnectCallback(ConnectCallback cb)       { onConnect_ = std::move(cb); }
     void setDisconnectCallback(DisconnectCallback cb)  { onDisconnect_ = std::move(cb); }
@@ -240,6 +241,7 @@ public:
     void setOrderCallback(OrderCallback cb)            { onOrder_ = std::move(cb); }
     void setLoadPairsCallback(LoadPairsCallback cb)    { onLoadPairs_ = std::move(cb); }
     void setRefreshDataCallback(RefreshDataCallback cb) { onRefreshData_ = std::move(cb); }
+    void setSetLeverageCallback(SetLeverageCallback cb) { onSetLeverage_ = std::move(cb); }
 
     // Add a log line (thread-safe)
     void addLog(const std::string& line);
@@ -350,6 +352,7 @@ private:
     OrderCallback      onOrder_;
     LoadPairsCallback  onLoadPairs_;
     RefreshDataCallback onRefreshData_;
+    SetLeverageCallback onSetLeverage_;
 
     // Trading panel state
     double orderQty_{0.001};
@@ -391,7 +394,12 @@ private:
     double omStopPrice_{0.0};
     bool   omReduceOnly_{false};
     bool   omShowConfirm_{false};
+    int    omLeverage_{1};          // Leverage for futures orders (1x-125x)
     std::string omValidationError_;
+
+    // Chart right-click order placement
+    bool   chartRightClickOpen_{false};
+    double chartRightClickPrice_{0.0};
 
     // H1 — Managed positions for TP/SL popup
     bool   omShowTPSL_{false};

@@ -443,12 +443,12 @@ std::vector<PositionInfo> BybitExchange::getPositionRisk(const std::string& symb
             for (auto& p : j["result"]["list"]) {
                 PositionInfo info;
                 info.symbol           = p.value("symbol", "");
-                info.positionAmt      = std::stod(p.value("size", "0"));
-                info.entryPrice       = std::stod(p.value("avgPrice", "0"));
-                info.unrealizedProfit = std::stod(p.value("unrealisedPnl", "0"));
-                info.realizedProfit   = std::stod(p.value("cumRealisedPnl", "0"));
+                info.positionAmt      = safeStod(p.value("size", "0"));
+                info.entryPrice       = safeStod(p.value("avgPrice", "0"));
+                info.unrealizedProfit = safeStod(p.value("unrealisedPnl", "0"));
+                info.realizedProfit   = safeStod(p.value("cumRealisedPnl", "0"));
                 info.marginType       = p.value("tradeMode", "");
-                info.leverage         = std::stod(p.value("leverage", "1"));
+                info.leverage         = safeStod(p.value("leverage", "1"));
                 result.push_back(std::move(info));
             }
         }

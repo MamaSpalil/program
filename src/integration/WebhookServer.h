@@ -65,6 +65,7 @@ private:
     // Rate limiting: ip -> (count, windowStart)
     std::map<std::string, std::pair<int, long long>> rateLimit_;
     std::mutex rateMutex_;
+    int cleanupCounter_{0};  // counter for periodic rate-limit cleanup
 
     std::vector<WebhookSignal> recentSignals_;
     AuxRepository* auxRepo_{nullptr};
