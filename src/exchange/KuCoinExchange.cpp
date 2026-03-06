@@ -314,6 +314,61 @@ std::string KuCoinExchange::httpPost(const std::string& path,
 #endif
 }
 
+std::string KuCoinExchange::httpDelete(const std::string& path) const {
+#ifndef USE_CURL
+    throw std::runtime_error("libcurl not available");
+    (void)path;
+#else
+    rateLimit();
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::string timestamp = std::to_string(ts);
+
+    std::string sig = sign(timestamp, "DELETE", path);
+
+    // Sign the passphrase
+    unsigned char ppDigest[EVP_MAX_MD_SIZE];
+    unsigned int ppDigestLen = 0;
+    HMAC(EVP_sha256(),
+         apiSecret_.c_str(), static_cast<int>(apiSecret_.size()),
+         reinterpret_cast<const unsigned char*>(passphrase_.c_str()),
+         passphrase_.size(), ppDigest, &ppDigestLen);
+    std::string signedPassphrase = base64EncodeKc(ppDigest, ppDigestLen);
+
+    std::string url = baseUrl_ + path;
+    CURL* curl = curl_easy_init();
+    if (!curl) throw std::runtime_error("curl_easy_init failed");
+
+    std::string response;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("KC-API-KEY: " + apiKey_).c_str());
+    headers = curl_slist_append(headers, ("KC-API-SIGN: " + sig).c_str());
+    headers = curl_slist_append(headers, ("KC-API-TIMESTAMP: " + timestamp).c_str());
+    headers = curl_slist_append(headers, ("KC-API-PASSPHRASE: " + signedPassphrase).c_str());
+    headers = curl_slist_append(headers, "KC-API-KEY-VERSION: 2");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, kucoinWriteCb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK)
+        throw std::runtime_error(std::string("curl: ") + curl_easy_strerror(res));
+    if (httpCode >= 400)
+        throw std::runtime_error("HTTP DELETE " + std::to_string(httpCode) + ": " + response);
+    return response;
+#endif
+}
+
 AccountBalance KuCoinExchange::getBalance() {
 #ifndef USE_CURL
     return {};
@@ -498,19 +553,19 @@ std::vector<PositionInfo> KuCoinExchange::getPositionRisk(const std::string& sym
         rateLimit();
         std::string path = "/api/v1/positions";
         if (!symbol.empty()) path += "?symbol=" + symbol;
-        auto resp = httpGet(path);
+        auto resp = httpGet(path, true);
         auto j = nlohmann::json::parse(resp);
         std::vector<PositionInfo> result;
         if (j.contains("data") && j["data"].is_array()) {
             for (auto& p : j["data"]) {
                 PositionInfo info;
                 info.symbol           = p.value("symbol", "");
-                info.positionAmt      = std::stod(p.value("currentQty", "0"));
-                info.entryPrice       = std::stod(p.value("avgEntryPrice", "0"));
-                info.unrealizedProfit = std::stod(p.value("unrealisedPnl", "0"));
-                info.realizedProfit   = std::stod(p.value("realisedGrossPnl", "0"));
+                info.positionAmt      = safeStod(p.value("currentQty", "0"));
+                info.entryPrice       = safeStod(p.value("avgEntryPrice", "0"));
+                info.unrealizedProfit = safeStod(p.value("unrealisedPnl", "0"));
+                info.realizedProfit   = safeStod(p.value("realisedGrossPnl", "0"));
                 info.marginType       = p.value("crossMode", "");
-                info.leverage         = std::stod(p.value("realLeverage", "1"));
+                info.leverage         = safeStod(p.value("realLeverage", "1"));
                 result.push_back(std::move(info));
             }
         }
@@ -530,7 +585,7 @@ bool KuCoinExchange::cancelOrder(const std::string& symbol, const std::string& o
     try {
         rateLimit();
         (void)symbol;  // KuCoin cancel uses orderId in the URL
-        auto resp = httpPost("/api/v1/orders/" + orderId, "");
+        auto resp = httpDelete("/api/v1/orders/" + orderId);
         auto j = nlohmann::json::parse(resp);
         if (j.value("code", "") != "200000") {
             Logger::get()->warn("[KuCoin] cancelOrder error: {}", j.value("msg", ""));

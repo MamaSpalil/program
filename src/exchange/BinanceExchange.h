@@ -105,6 +105,8 @@ private:
                             const std::string& newBase) const;
     std::string httpPost(const std::string& path,
                           const std::string& body) const;
+    std::string httpDelete(const std::string& path,
+                            const std::string& params) const;
     void rateLimit() const;
     void orderRateLimit() const;
     void wsConnectionRateLimit() const;
