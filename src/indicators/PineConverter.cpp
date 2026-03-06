@@ -1100,22 +1100,24 @@ std::string PineConverter::generateCpp(const PineScript& script,
     struct VarInfo { std::string name; double defaultVal; };
     std::vector<VarInfo> simpleVars;
 
-    // Collect SMA / crossover / crossunder / highest / lowest / stdev / change / vwap / macd / bb calls
+    // Collect SMA / crossover / crossunder / highest / lowest / stdev / change / vwap / macd / bb / dmi calls
     struct SmaInfo { std::string key; int period; };
     std::vector<SmaInfo> smaInfos;
     struct CrossInfo { std::string key; std::string srcA; std::string srcB; bool isOver; };
     std::vector<CrossInfo> crossInfos;
     struct SeriesFuncInfo { std::string key; std::string func; int period; };
-    std::vector<SeriesFuncInfo> seriesFuncs; // highest, lowest, stdev, change
+    std::vector<SeriesFuncInfo> seriesFuncs; // highest, lowest, stdev, change, highestbars, lowestbars, pivothigh, pivotlow
     struct MacdInfo { std::string key; int fast; int slow; int signal; };
     std::vector<MacdInfo> macdInfos;
     struct BbInfo { std::string key; int period; double stddev; };
     std::vector<BbInfo> bbInfos;
+    struct DmiInfo { std::string key; int diLength; int adxSmoothing; };
+    std::vector<DmiInfo> dmiInfos;
     bool needsVwap = false;
     std::string vwapKey;
 
     // Strategy entry/exit/close calls
-    struct StrategyCall { std::string action; std::string id; std::string condition; };
+    struct StrategyCall { std::string action; std::string id; std::string direction; };
     std::vector<StrategyCall> strategyCalls;
 
     for (auto& stmt : script.statements) {
@@ -1144,7 +1146,9 @@ std::string PineConverter::generateCpp(const PineScript& script,
                     crossInfos.push_back({stmt.name, a, b, false});
                 }
                 else if (fn == "ta.highest" || fn == "ta.lowest" ||
-                         fn == "ta.stdev" || fn == "ta.change") {
+                         fn == "ta.stdev" || fn == "ta.change" ||
+                         fn == "ta.highestbars" || fn == "ta.lowestbars" ||
+                         fn == "ta.pivothigh" || fn == "ta.pivotlow") {
                     seriesFuncs.push_back({stmt.name, fn, period});
                 }
                 else if (fn == "ta.macd" && stmt.expr->children.size() >= 3) {
@@ -1167,6 +1171,13 @@ std::string PineConverter::generateCpp(const PineScript& script,
                 else if (fn == "ta.vwap") {
                     needsVwap = true;
                     vwapKey = stmt.name;
+                }
+                else if (fn == "ta.dmi" && stmt.expr->children.size() >= 2) {
+                    int diLen = static_cast<int>(stmt.expr->children[0]->numVal);
+                    int adxSmooth = static_cast<int>(stmt.expr->children[1]->numVal);
+                    if (diLen <= 0) diLen = 14;
+                    if (adxSmooth <= 0) adxSmooth = 14;
+                    dmiInfos.push_back({stmt.name, diLen, adxSmooth});
                 }
             } else if (stmt.expr && stmt.expr->kind == PineExpr::Kind::LITERAL_NUM) {
                 simpleVars.push_back({stmt.name, stmt.expr->numVal});
@@ -1197,7 +1208,28 @@ std::string PineConverter::generateCpp(const PineScript& script,
                     id = stmt.expr->children[0]->strVal;
                 else if (!stmt.expr->children.empty())
                     id = stmt.expr->children[0]->strVal;
-                strategyCalls.push_back({action, id, ""});
+                // Parse direction from second argument (strategy.long / strategy.short)
+                std::string direction;
+                if (stmt.expr->children.size() >= 2) {
+                    const auto& dirArg = stmt.expr->children[1];
+                    if (dirArg->kind == PineExpr::Kind::VARIABLE) {
+                        if (dirArg->strVal == "strategy.long" || dirArg->strVal == "long")
+                            direction = "long";
+                        else if (dirArg->strVal == "strategy.short" || dirArg->strVal == "short")
+                            direction = "short";
+                    }
+                }
+                // Also check named args
+                if (direction.empty() && stmt.expr->namedArgs.count("direction")) {
+                    const auto& dirArg = stmt.expr->namedArgs.at("direction");
+                    if (dirArg->kind == PineExpr::Kind::VARIABLE) {
+                        if (dirArg->strVal == "strategy.long" || dirArg->strVal == "long")
+                            direction = "long";
+                        else if (dirArg->strVal == "strategy.short" || dirArg->strVal == "short")
+                            direction = "short";
+                    }
+                }
+                strategyCalls.push_back({action, id, direction});
             }
         }
         // Also detect strategy calls as assign statements (strategy.entry used inline)
@@ -1212,7 +1244,17 @@ std::string PineConverter::generateCpp(const PineScript& script,
                 std::string id;
                 if (!stmt.expr->children.empty() && stmt.expr->children[0]->kind == PineExpr::Kind::LITERAL_STR)
                     id = stmt.expr->children[0]->strVal;
-                strategyCalls.push_back({action, id, ""});
+                std::string direction;
+                if (stmt.expr->children.size() >= 2) {
+                    const auto& dirArg = stmt.expr->children[1];
+                    if (dirArg->kind == PineExpr::Kind::VARIABLE) {
+                        if (dirArg->strVal == "strategy.long" || dirArg->strVal == "long")
+                            direction = "long";
+                        else if (dirArg->strVal == "strategy.short" || dirArg->strVal == "short")
+                            direction = "short";
+                    }
+                }
+                strategyCalls.push_back({action, id, direction});
             }
         }
     }
@@ -1226,6 +1268,7 @@ std::string PineConverter::generateCpp(const PineScript& script,
         for (auto& sf : seriesFuncs) if (sf.key == name) return true;
         for (auto& m : macdInfos) if (m.key == name) return true;
         for (auto& b : bbInfos) if (b.key == name) return true;
+        for (auto& d : dmiInfos) if (d.key == name) return true;
         if (needsVwap && vwapKey == name) return true;
         return false;
     };
@@ -1363,6 +1406,76 @@ std::string PineConverter::generateCpp(const PineScript& script,
             << "        double " << vwapKey << " = (cumVol_ > 0.0) ? cumPV_ / cumVol_ : c.close;\n";
     }
 
+    // DMI (Directional Movement Index)
+    for (auto& d : dmiInfos) {
+        out << "        // DMI: +DI, -DI, ADX  (diLength=" << d.diLength << ", adxSmoothing=" << d.adxSmoothing << ")\n"
+            << "        highs_.push_back(c.high);\n"
+            << "        lows_.push_back(c.low);\n"
+            << "        if (highs_.size() > 1000) highs_.pop_front();\n"
+            << "        if (lows_.size() > 1000) lows_.pop_front();\n"
+            << "        double " << d.key << "_diPlus = 0.0, " << d.key << "_diMinus = 0.0, " << d.key << "_adx = 0.0;\n"
+            << "        { int n = static_cast<int>(highs_.size());\n"
+            << "          if (n > " << d.diLength << ") {\n"
+            << "            double smPlusDM = 0.0, smMinusDM = 0.0, smTR = 0.0;\n"
+            << "            for (int i = 1; i <= " << d.diLength << "; ++i) {\n"
+            << "              double hi = highs_[static_cast<size_t>(n - " << d.diLength << " - 1 + i)];\n"
+            << "              double lo = lows_[static_cast<size_t>(n - " << d.diLength << " - 1 + i)];\n"
+            << "              double phi = highs_[static_cast<size_t>(n - " << d.diLength << " - 1 + i - 1)];\n"
+            << "              double plo = lows_[static_cast<size_t>(n - " << d.diLength << " - 1 + i - 1)];\n"
+            << "              double pclose = closes_[static_cast<size_t>(n - " << d.diLength << " - 1 + i - 1)];\n"
+            << "              double upMove = hi - phi; double downMove = plo - lo;\n"
+            << "              double plusDM = (upMove > downMove && upMove > 0) ? upMove : 0.0;\n"
+            << "              double minusDM = (downMove > upMove && downMove > 0) ? downMove : 0.0;\n"
+            << "              double tr = std::max({hi - lo, std::abs(hi - pclose), std::abs(lo - pclose)});\n"
+            << "              smPlusDM += plusDM; smMinusDM += minusDM; smTR += tr;\n"
+            << "            }\n"
+            << "            if (smTR > 0.0) {\n"
+            << "              " << d.key << "_diPlus = 100.0 * smPlusDM / smTR;\n"
+            << "              " << d.key << "_diMinus = 100.0 * smMinusDM / smTR;\n"
+            << "              double dx = std::abs(" << d.key << "_diPlus - " << d.key << "_diMinus) / (" << d.key << "_diPlus + " << d.key << "_diMinus + 1e-10) * 100.0;\n"
+            << "              " << d.key << "_adx = dx; // Simplified: use single-period DX as ADX approximation\n"
+            << "            }\n"
+            << "          } }\n"
+            << "        double " << d.key << " = " << d.key << "_adx;\n";
+    }
+
+    // Series functions: highestbars, lowestbars, pivothigh, pivotlow
+    for (auto& sf : seriesFuncs) {
+        if (sf.func == "ta.highestbars") {
+            out << "        double " << sf.key << " = 0.0;\n"
+                << "        { int n = static_cast<int>(closes_.size()); int start = std::max(0, n - " << sf.period << ");\n"
+                << "          double mx = -1e18; int mxi = n - 1;\n"
+                << "          for (int i = start; i < n; ++i) { if (closes_[static_cast<size_t>(i)] >= mx) { mx = closes_[static_cast<size_t>(i)]; mxi = i; } }\n"
+                << "          " << sf.key << " = static_cast<double>(mxi - (n - 1)); }\n";
+        } else if (sf.func == "ta.lowestbars") {
+            out << "        double " << sf.key << " = 0.0;\n"
+                << "        { int n = static_cast<int>(closes_.size()); int start = std::max(0, n - " << sf.period << ");\n"
+                << "          double mn = 1e18; int mni = n - 1;\n"
+                << "          for (int i = start; i < n; ++i) { if (closes_[static_cast<size_t>(i)] <= mn) { mn = closes_[static_cast<size_t>(i)]; mni = i; } }\n"
+                << "          " << sf.key << " = static_cast<double>(mni - (n - 1)); }\n";
+        } else if (sf.func == "ta.pivothigh") {
+            int bars = sf.period;
+            out << "        double " << sf.key << " = 0.0/0.0; // NaN = no pivot\n"
+                << "        { int n = static_cast<int>(closes_.size()); int lb = " << bars << "; int rb = " << bars << ";\n"
+                << "          if (n >= lb + rb + 1) {\n"
+                << "            int pivotIdx = n - 1 - rb; double pivotVal = closes_[static_cast<size_t>(pivotIdx)]; bool isPivot = true;\n"
+                << "            for (int i = pivotIdx - lb; i < pivotIdx; ++i) { if (closes_[static_cast<size_t>(i)] >= pivotVal) { isPivot = false; break; } }\n"
+                << "            if (isPivot) for (int i = pivotIdx + 1; i <= pivotIdx + rb; ++i) { if (closes_[static_cast<size_t>(i)] >= pivotVal) { isPivot = false; break; } }\n"
+                << "            if (isPivot) " << sf.key << " = pivotVal;\n"
+                << "          } }\n";
+        } else if (sf.func == "ta.pivotlow") {
+            int bars = sf.period;
+            out << "        double " << sf.key << " = 0.0/0.0; // NaN = no pivot\n"
+                << "        { int n = static_cast<int>(closes_.size()); int lb = " << bars << "; int rb = " << bars << ";\n"
+                << "          if (n >= lb + rb + 1) {\n"
+                << "            int pivotIdx = n - 1 - rb; double pivotVal = closes_[static_cast<size_t>(pivotIdx)]; bool isPivot = true;\n"
+                << "            for (int i = pivotIdx - lb; i < pivotIdx; ++i) { if (closes_[static_cast<size_t>(i)] <= pivotVal) { isPivot = false; break; } }\n"
+                << "            if (isPivot) for (int i = pivotIdx + 1; i <= pivotIdx + rb; ++i) { if (closes_[static_cast<size_t>(i)] <= pivotVal) { isPivot = false; break; } }\n"
+                << "            if (isPivot) " << sf.key << " = pivotVal;\n"
+                << "          } }\n";
+        }
+    }
+
     out << "        (void)barIndex_; // bar count available for threshold checks\n";
 
     // Generate strategy entry/exit/close signal methods
@@ -1372,15 +1485,18 @@ std::string PineConverter::generateCpp(const PineScript& script,
         for (size_t si = 0; si < strategyCalls.size(); ++si) {
             const auto& sc = strategyCalls[si];
             if (sc.action == "entry") {
-                // Heuristic: determine direction from id string keywords
-                // (Long/long/Buy/buy → long, otherwise → short).
-                // This may not cover all naming conventions; future versions
-                // could parse the Pine Script direction parameter explicitly.
-                bool isLong = (sc.id.find("Long") != std::string::npos ||
-                               sc.id.find("long") != std::string::npos ||
-                               sc.id.find("Buy") != std::string::npos ||
-                               sc.id.find("buy") != std::string::npos);
-                out << "        // strategy.entry(\"" << sc.id << "\")\n"
+                // Use parsed direction if available, otherwise fallback to heuristic
+                bool isLong = false;
+                if (!sc.direction.empty()) {
+                    isLong = (sc.direction == "long");
+                } else {
+                    // Fallback heuristic: determine direction from id string keywords
+                    isLong = (sc.id.find("Long") != std::string::npos ||
+                              sc.id.find("long") != std::string::npos ||
+                              sc.id.find("Buy") != std::string::npos ||
+                              sc.id.find("buy") != std::string::npos);
+                }
+                out << "        // strategy.entry(\"" << sc.id << "\", " << (isLong ? "strategy.long" : "strategy.short") << ")\n"
                     << "        // Set signal_=" << (isLong ? "1" : "-1") << " when entry condition is met\n";
             } else if (sc.action == "exit") {
                 out << "        // strategy.exit(\"" << sc.id << "\")\n"
@@ -1445,8 +1561,12 @@ std::string PineConverter::generateCpp(const PineScript& script,
         out << "    double cumPV_{0.0};\n"
             << "    double cumVol_{0.0};\n";
     }
-    out << "    std::deque<double> closes_;\n"
-        << "    std::map<std::string, double> plots_;\n"
+    out << "    std::deque<double> closes_;\n";
+    if (!dmiInfos.empty()) {
+        out << "    std::deque<double> highs_;\n"
+            << "    std::deque<double> lows_;\n";
+    }
+    out << "    std::map<std::string, double> plots_;\n"
         << "    int barIndex_{0};\n";
     if (!strategyCalls.empty()) {
         out << "    int signal_{0};\n";

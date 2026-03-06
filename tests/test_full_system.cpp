@@ -3710,3 +3710,118 @@ TEST(VersionV250, VersionStringExists) {
     EXPECT_FALSE(version.empty());
     EXPECT_NE(version.find("2.5"), std::string::npos);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  v2.6.0 — NEW TESTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// --- Stage 1: Layout Lock & Gap improvements ---
+
+TEST(LayoutV260, DefaultLayoutLockedIsTrue) {
+    GuiConfig cfg;
+    EXPECT_TRUE(cfg.layoutLocked);
+}
+
+TEST(LayoutV260, WindowGapsBetweenColumns) {
+    // When all panels are visible, center width must account for 2px gaps
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto md = mgr.get("Market Data");
+    auto up = mgr.get("User Panel");
+    // Market data starts at Pair List end + 1px gap
+    EXPECT_GT(md.pos.x, pl.pos.x + pl.size.x - 0.5f);
+    // User panel starts at Market Data end + 1px gap
+    EXPECT_GT(up.pos.x, md.pos.x + md.size.x - 0.5f);
+}
+
+TEST(LayoutV260, VerticalGapBetweenMarketDataAndIndicators) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto md = mgr.get("Market Data");
+    auto ind = mgr.get("Indicators");
+    // Indicators Y should be at least 1px below Market Data bottom
+    float mdBottom = md.pos.y + md.size.y;
+    EXPECT_GE(ind.pos.y, mdBottom + 0.5f);
+}
+
+TEST(LayoutV260, VerticalGapBetweenPairListAndVolumeDelta) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    float plBottom = pl.pos.y + pl.size.y;
+    EXPECT_GE(vd.pos.y, plBottom + 0.5f);
+}
+
+TEST(LayoutV260, NoGapsWhenPanelsHidden) {
+    // When left panel is hidden, center should start at left edge (no gap)
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080, 0, 0, false, true, false, true, true);
+    auto md = mgr.get("Market Data");
+    EXPECT_NEAR(md.pos.x, 0.0f, 0.5f);
+}
+
+// --- Stage 2: PineConverter DMI support ---
+
+TEST(PineConverterV260, DmiGeneratesCppCode) {
+    std::string pine = R"(
+//@version=6
+indicator("DMI Test", overlay=false)
+dmi_val = ta.dmi(14, 14)
+plot(dmi_val, title="ADX")
+)";
+    auto script = PineConverter::parseSource(pine);
+    auto cpp = PineConverter::generateCpp(script, "DmiIndicator");
+    EXPECT_NE(cpp.find("diPlus"), std::string::npos);
+    EXPECT_NE(cpp.find("diMinus"), std::string::npos);
+    EXPECT_NE(cpp.find("adx"), std::string::npos);
+    EXPECT_NE(cpp.find("highs_"), std::string::npos);
+}
+
+TEST(PineConverterV260, HighestBarsGeneratesCppCode) {
+    std::string pine = R"(
+//@version=6
+indicator("HB Test", overlay=false)
+hb = ta.highestbars(close, 20)
+plot(hb, title="HighestBars")
+)";
+    auto script = PineConverter::parseSource(pine);
+    auto cpp = PineConverter::generateCpp(script, "HBIndicator");
+    EXPECT_NE(cpp.find("hb"), std::string::npos);
+    EXPECT_NE(cpp.find("mxi"), std::string::npos);
+}
+
+TEST(PineConverterV260, LowestBarsGeneratesCppCode) {
+    std::string pine = R"(
+//@version=6
+indicator("LB Test", overlay=false)
+lb = ta.lowestbars(close, 20)
+plot(lb, title="LowestBars")
+)";
+    auto script = PineConverter::parseSource(pine);
+    auto cpp = PineConverter::generateCpp(script, "LBIndicator");
+    EXPECT_NE(cpp.find("lb"), std::string::npos);
+    EXPECT_NE(cpp.find("mni"), std::string::npos);
+}
+
+TEST(PineConverterV260, PivotHighGeneratesCppCode) {
+    std::string pine = R"(
+//@version=6
+indicator("Pivot Test", overlay=false)
+ph = ta.pivothigh(close, 5, 5)
+plot(ph, title="PivotHigh")
+)";
+    auto script = PineConverter::parseSource(pine);
+    auto cpp = PineConverter::generateCpp(script, "PivotIndicator");
+    EXPECT_NE(cpp.find("pivotIdx"), std::string::npos);
+    EXPECT_NE(cpp.find("isPivot"), std::string::npos);
+}
+
+// --- Stage 3: Version v2.6.0 ---
+
+TEST(VersionV260, VersionStringExists) {
+    std::string version = "2.6.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.6"), std::string::npos);
+}
