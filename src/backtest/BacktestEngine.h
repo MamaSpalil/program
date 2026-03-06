@@ -59,7 +59,7 @@ private:
     // Simple EMA crossover signal: +1 buy, -1 sell, 0 hold
     static int emaSignal(const std::vector<Candle>& bars, size_t idx);
     static double calcEMA(const std::vector<double>& prices, int period, size_t idx);
-    void computeMetrics(Result& result, double initialBalance);
+    void computeMetrics(Result& result, const Config& cfg);
     BacktestRepository* btRepo_{nullptr};
 };
 

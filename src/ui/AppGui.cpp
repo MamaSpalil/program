@@ -721,7 +721,7 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About")) {
-                addLog("[Info] Crypto ML Trader v2.2.0 — Algorithmic Trading System");
+                addLog("[Info] Crypto ML Trader v2.3.0 — Algorithmic Trading System");
             }
             ImGui::EndMenu();
         }
@@ -2817,7 +2817,7 @@ void AppGui::drawStatusBar() {
     ImGui::TextColored(statusColor, "%s", snap.statusMessage.c_str());
     ImGui::SameLine(ImGui::GetWindowWidth() - 200);
     ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.47f, 1.0f),
-                       "Crypto ML Trader v2.2.0");
+                       "Crypto ML Trader v2.3.0");
 }
 
 // ---------------------------------------------------------------------------

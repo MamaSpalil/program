@@ -5,6 +5,55 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: BacktestEngine — Полное сохранение метаданных в БД
+- **BacktestEngine.cpp computeMetrics()** — полностью переработана секция сохранения в базу данных:
+  - ✅ `symbol` — теперь сохраняется из Config (ранее пустая строка)
+  - ✅ `timeframe` — теперь сохраняется из Config (ранее пустая строка)
+  - ✅ `initialBalance` — теперь сохраняется из Config (ранее 0.0)
+  - ✅ `finalBalance` — теперь вычисляется из последней точки equity curve (ранее 0.0)
+  - ✅ `strategy` — теперь "EMA_Crossover" (ранее пустая строка)
+  - ✅ `commission` — теперь сохраняется из Config (ранее 0.0)
+  - ✅ `dateFrom` — теперь берётся из первой сделки entryTime (ранее 0)
+  - ✅ `dateTo` — теперь берётся из последней сделки exitTime (ранее 0)
+- **BacktestEngine.h computeMetrics()** — сигнатура изменена с `(Result&, double)` на `(Result&, const Config&)` для доступа ко всем полям конфигурации.
+- **BtTradeRecord** — теперь сохраняет `symbol` из Config и вычисляет `commission` как `(entryPrice * qty + exitPrice * qty) * cfg.commission` (ранее оба поля были 0).
+
+#### Этап 2: PineConverter — Расширенная генерация C++ для Pine Script v6
+- **PineConverter.cpp generateCpp()** — полностью переработан C++ генератор для поддержки всех основных функций Pine Script v6:
+  - ✅ `ta.sma(source, length)` — SMA вычисляется из внутреннего deque closes_ (ранее НЕ поддерживался)
+  - ✅ `ta.macd(source, fast, slow, signal)` — генерирует 3 EMA (fast/slow/signal) + macd/signal/histogram (ранее НЕ поддерживался)
+  - ✅ `ta.bb(source, period, stddev)` — Bollinger Bands upper/middle/lower (ранее НЕ поддерживался)
+  - ✅ `ta.crossover(a, b)` — сохраняет предыдущие значения, детектирует пересечение вверх (ранее НЕ поддерживался)
+  - ✅ `ta.crossunder(a, b)` — детектирует пересечение вниз (ранее НЕ поддерживался)
+  - ✅ `ta.highest(source, length)` — максимум за период из closes_ (ранее НЕ поддерживался)
+  - ✅ `ta.lowest(source, length)` — минимум за период из closes_ (ранее НЕ поддерживался)
+  - ✅ `ta.stdev(source, length)` — стандартное отклонение за период (ранее НЕ поддерживался)
+  - ✅ `ta.change(source, length)` — изменение за N баров (ранее НЕ поддерживался)
+  - ✅ `ta.vwap(source)` — VWAP через cumPV_/cumVol_ (ранее НЕ поддерживался)
+  - Генерируемый C++ класс теперь включает `<deque>`, `<numeric>`, `<algorithm>` для SMA/BB/стат. функций
+  - Обратная совместимость: EMA, RSI, ATR по-прежнему генерируются корректно
+
+#### Этап 3: Версия приложения обновлена
+- **AppGui.cpp** — версия обновлена с "v2.2.0" на "v2.3.0" в двух местах: welcome log и About menu.
+- **main.cpp** — версия обновлена с "v2.2.0" на "v2.3.0" в startup log.
+
+### Added
+
+#### Этап 4: Тестирование v2.3.0 (13 новых тестов)
+- **test_full_system.cpp** — 13 новых тестов:
+  - `BacktestV230` (3): DatabaseSavesSymbolAndTimeframe — проверка symbol/timeframe/initialBalance/finalBalance/strategy/commission в БД, DatabaseSavesFinalBalance — проверка finalBalance из equity curve, TradeRecordsIncludeSymbolAndCommission — проверка BtTradeRecord с symbol и commission
+  - `PineConverterV230` (9): GenerateCppWithSMA — SMA генерация, GenerateCppWithMACD — MACD генерация (3 EMA + macd/signal/hist), GenerateCppWithBollingerBands — BB upper/middle/lower, GenerateCppWithCrossover — crossover с prev_ переменными, GenerateCppWithHighestLowest — highest/lowest из closes_, GenerateCppWithStdev — stdev с sqrt, GenerateCppWithVWAP — VWAP с cumPV/cumVol, GenerateCppWithChange — change за N баров, GenerateCppEMAStillWorks — обратная совместимость EMA/RSI/ATR
+  - `VersionV230` (1): VersionStringExists — проверка наличия строки "2.3.0"
+- **Итого тестов:** 568 (564 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.3.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.3.0: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v2.4.0.
+
 ## [2.2.0] - 2026-03-06
 
 ### Fixed

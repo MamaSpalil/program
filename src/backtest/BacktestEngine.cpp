@@ -112,11 +112,12 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
         result.equityCurve.push_back(equity);
     }
 
-    computeMetrics(result, cfg.initialBalance);
+    computeMetrics(result, cfg);
     return result;
 }
 
-void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
+void BacktestEngine::computeMetrics(Result& result, const Config& cfg) {
+    double initialBalance = cfg.initialBalance;
     // Total PnL
     result.totalPnL = 0;
     double totalWins = 0, totalLosses = 0;
@@ -174,6 +175,10 @@ void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
         BacktestResult dbResult;
         dbResult.id = "bt_" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
+        dbResult.symbol = cfg.symbol;
+        dbResult.timeframe = cfg.interval;
+        dbResult.initialBalance = cfg.initialBalance;
+        dbResult.finalBalance = result.equityCurve.empty() ? cfg.initialBalance : result.equityCurve.back();
         dbResult.pnl = result.totalPnL;
         dbResult.pnlPct = result.totalPnLPct;
         dbResult.maxDrawdown = result.maxDrawdownPct;
@@ -183,6 +188,10 @@ void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
         dbResult.winningTrades = result.winTrades;
         dbResult.losingTrades = result.lossTrades;
         dbResult.profitFactor = result.profitFactor;
+        dbResult.strategy = "EMA_Crossover";
+        dbResult.commission = cfg.commission;
+        dbResult.dateFrom = (!result.trades.empty()) ? result.trades.front().entryTime : 0;
+        dbResult.dateTo = (!result.trades.empty()) ? result.trades.back().exitTime : 0;
         dbResult.runAt = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
@@ -190,11 +199,13 @@ void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
         for (const auto& t : result.trades) {
             BtTradeRecord bt;
             bt.backtestId = dbResult.id;
+            bt.symbol = cfg.symbol;
             bt.side = t.side;
             bt.entryPrice = t.entryPrice;
             bt.exitPrice = t.exitPrice;
             bt.qty = t.qty;
             bt.pnl = t.pnl;
+            bt.commission = (t.entryPrice * t.qty + t.exitPrice * t.qty) * cfg.commission;
             bt.entryTime = t.entryTime;
             bt.exitTime = t.exitTime;
             dbTrades.push_back(std::move(bt));
