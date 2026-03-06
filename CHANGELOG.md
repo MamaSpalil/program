@@ -5,6 +5,52 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: PineConverter — Исправлен парсер для strategy.* вызовов
+- **PineConverter.cpp parseStmt()** — исправлена ошибка парсера, где `strategy.entry(...)`, `strategy.exit(...)`, `strategy.close(...)` ошибочно распознавались как `strategy(...)` объявление стратегии (INDICATOR kind). Теперь парсер проверяет наличие LPAREN после `strategy`/`indicator` и при отсутствии (когда следует DOT) выполняет rewind позиции, позволяя выражению быть разобранным как EXPR с FUNC_CALL.
+
+### Added
+
+#### Этап 2: BacktestEngine — Поддержка Leverage и Slippage
+- **BacktestEngine.h Config** — добавлены новые поля:
+  - ✅ `leverage` (double, default 1.0) — множитель кредитного плеча
+  - ✅ `slippagePct` (double, default 0.0001 = 0.01%) — процент проскальзывания цены
+- **BacktestEngine.cpp run()** — полностью переработана логика позиции с учётом leverage и slippage:
+  - ✅ Entry: fillPrice = price * (1 + slippagePct) для BUY, (1 - slippagePct) для SELL
+  - ✅ Exit: fillPrice = price * (1 - slippagePct) для BUY, (1 + slippagePct) для SELL
+  - ✅ Position qty = (margin - commission) / fillPrice * leverage
+  - ✅ PnL = (exitPrice - entryPrice) * qty / leverage - exitCommission
+  - ✅ Equity = balance + margin + unrealizedPnl (корректный расчёт с margin)
+  - ✅ Liquidation check: при leverage > 1.0, если цена движется на 1/leverage от entry, позиция принудительно закрывается
+  - ✅ Обратная совместимость: при leverage=1.0 и slippage=0.0 поведение идентично v2.3.0
+
+#### Этап 3: PineConverter — Генерация C++ для strategy.entry/exit/close
+- **PineConverter.cpp generateCpp()** — расширен C++ генератор для поддержки strategy.* функций Pine Script v6:
+  - ✅ `strategy.entry("id")` → генерирует signal_ = 1 (long) / -1 (short) с определением направления из id
+  - ✅ `strategy.exit("id")` → генерирует signal_ = 2 / -2 для выхода из позиции
+  - ✅ `strategy.close("id")` → генерирует signal_ = 3 для закрытия всех позиций
+  - ✅ Добавлен метод `signal()` для доступа к текущему торговому сигналу
+  - ✅ Private member `signal_{0}` добавлен только при наличии strategy.* вызовов
+  - ✅ Обратная совместимость: скрипты без strategy.* вызовов НЕ содержат signal_ поля
+
+#### Этап 4: Версия приложения обновлена
+- **AppGui.cpp** — версия обновлена с "v2.3.0" на "v2.4.0" в welcome log и About menu.
+- **main.cpp** — версия обновлена с "v2.3.0" на "v2.4.0" в startup log.
+
+#### Этап 5: Тестирование v2.4.0 (10 новых тестов)
+- **test_full_system.cpp** — 10 новых тестов:
+  - `BacktestV240` (5): DefaultLeverageIsOne — проверка дефолтных значений leverage=1.0/slippage=0.0001, LeverageIncreasesPositionSize — 3x leverage = 3x qty, SlippageReducesPnL — slippage уменьшает PnL, LiquidationTriggered — 10x leverage ликвидация при 10% движении, DatabaseSavesLeverageAndSlippage — DB сохранение с leverage
+  - `PineConverterV240` (4): GenerateCppWithStrategyEntry — strategy.entry генерация signal_, GenerateCppWithStrategyExit — strategy.exit генерация, GenerateCppWithStrategyClose — strategy.close генерация close_all, GenerateCppBackwardsCompatible — скрипты без strategy.* НЕ содержат signal_
+  - `VersionV240` (1): VersionStringExists — проверка наличия строки "2.4.0"
+- **Итого тестов:** 578 (574 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.4.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.4.0: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v2.5.0.
+
 ## [2.3.0] - 2026-03-06
 
 ### Fixed

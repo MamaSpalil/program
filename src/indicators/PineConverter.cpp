@@ -242,31 +242,37 @@ PineStmt PineConverter::Parser::parseStmt() {
         return s;
     }
 
-    // indicator(...) or strategy(...)
+    // indicator(...) or strategy(...) — but NOT strategy.entry/exit/close
     if (check(PineTok::IDENT) && (cur().value == "indicator" || cur().value == "strategy")) {
+        size_t save = pos_;
+        std::string kw = cur().value;
         advance();
-        expect(PineTok::LPAREN);
-        s.kind = PineStmt::Kind::INDICATOR;
-        if (check(PineTok::STRING)) {
-            s.name = cur().value;
-            advance();
-        }
-        // Parse optional named args (overlay=true)
-        auto overlayExpr = std::make_shared<PineExpr>();
-        overlayExpr->kind = PineExpr::Kind::LITERAL_BOOL;
-        overlayExpr->boolVal = false;
-        while (!check(PineTok::RPAREN) && !check(PineTok::END_OF_FILE)) {
-            if (check(PineTok::IDENT) && cur().value == "overlay") {
-                advance(); expect(PineTok::ASSIGN);
-                if (check(PineTok::KW_TRUE)) { overlayExpr->boolVal = true; advance(); }
-                else if (check(PineTok::KW_FALSE)) { advance(); }
-            } else {
+        if (check(PineTok::LPAREN)) {
+            advance(); // consume LPAREN
+            s.kind = PineStmt::Kind::INDICATOR;
+            if (check(PineTok::STRING)) {
+                s.name = cur().value;
                 advance();
             }
+            // Parse optional named args (overlay=true)
+            auto overlayExpr = std::make_shared<PineExpr>();
+            overlayExpr->kind = PineExpr::Kind::LITERAL_BOOL;
+            overlayExpr->boolVal = false;
+            while (!check(PineTok::RPAREN) && !check(PineTok::END_OF_FILE)) {
+                if (check(PineTok::IDENT) && cur().value == "overlay") {
+                    advance(); expect(PineTok::ASSIGN);
+                    if (check(PineTok::KW_TRUE)) { overlayExpr->boolVal = true; advance(); }
+                    else if (check(PineTok::KW_FALSE)) { advance(); }
+                } else {
+                    advance();
+                }
+            }
+            s.expr = overlayExpr;
+            expect(PineTok::RPAREN);
+            return s;
         }
-        s.expr = overlayExpr;
-        expect(PineTok::RPAREN);
-        return s;
+        // Not a declaration (e.g., strategy.entry) — rewind
+        pos_ = save;
     }
 
     // 'type' declaration block — skip to end of block
@@ -1108,6 +1114,10 @@ std::string PineConverter::generateCpp(const PineScript& script,
     bool needsVwap = false;
     std::string vwapKey;
 
+    // Strategy entry/exit/close calls
+    struct StrategyCall { std::string action; std::string id; std::string condition; };
+    std::vector<StrategyCall> strategyCalls;
+
     for (auto& stmt : script.statements) {
         if (stmt.kind == PineStmt::Kind::ASSIGN ||
             stmt.kind == PineStmt::Kind::VAR_DECL) {
@@ -1172,6 +1182,38 @@ std::string PineConverter::generateCpp(const PineScript& script,
                      stmt.expr->children[0]->kind == PineExpr::Kind::VARIABLE)
                 src = stmt.expr->children[0]->strVal;
             plotInfos.push_back({stmt.plotTitle, src});
+        }
+        // Detect strategy.entry / strategy.exit / strategy.close calls
+        if (stmt.kind == PineStmt::Kind::EXPR && stmt.expr &&
+            stmt.expr->kind == PineExpr::Kind::FUNC_CALL) {
+            const auto& fn = stmt.expr->strVal;
+            if (fn == "strategy.entry" || fn == "strategy.exit" || fn == "strategy.close") {
+                std::string action;
+                if (fn == "strategy.entry") action = "entry";
+                else if (fn == "strategy.exit") action = "exit";
+                else action = "close";
+                std::string id;
+                if (!stmt.expr->children.empty() && stmt.expr->children[0]->kind == PineExpr::Kind::LITERAL_STR)
+                    id = stmt.expr->children[0]->strVal;
+                else if (!stmt.expr->children.empty())
+                    id = stmt.expr->children[0]->strVal;
+                strategyCalls.push_back({action, id, ""});
+            }
+        }
+        // Also detect strategy calls as assign statements (strategy.entry used inline)
+        if ((stmt.kind == PineStmt::Kind::ASSIGN || stmt.kind == PineStmt::Kind::VAR_DECL) &&
+            stmt.expr && stmt.expr->kind == PineExpr::Kind::FUNC_CALL) {
+            const auto& fn = stmt.expr->strVal;
+            if (fn == "strategy.entry" || fn == "strategy.exit" || fn == "strategy.close") {
+                std::string action;
+                if (fn == "strategy.entry") action = "entry";
+                else if (fn == "strategy.exit") action = "exit";
+                else action = "close";
+                std::string id;
+                if (!stmt.expr->children.empty() && stmt.expr->children[0]->kind == PineExpr::Kind::LITERAL_STR)
+                    id = stmt.expr->children[0]->strVal;
+                strategyCalls.push_back({action, id, ""});
+            }
         }
     }
 
@@ -1323,6 +1365,33 @@ std::string PineConverter::generateCpp(const PineScript& script,
 
     out << "        (void)barIndex_; // bar count available for threshold checks\n";
 
+    // Generate strategy entry/exit/close signal methods
+    if (!strategyCalls.empty()) {
+        out << "\n        // Strategy signals\n"
+            << "        signal_ = 0; // 0=hold, 1=entry_long, -1=entry_short, 2=exit_long, -2=exit_short, 3=close_all\n";
+        for (size_t si = 0; si < strategyCalls.size(); ++si) {
+            const auto& sc = strategyCalls[si];
+            if (sc.action == "entry") {
+                // Heuristic: determine direction from id string keywords
+                // (Long/long/Buy/buy → long, otherwise → short).
+                // This may not cover all naming conventions; future versions
+                // could parse the Pine Script direction parameter explicitly.
+                bool isLong = (sc.id.find("Long") != std::string::npos ||
+                               sc.id.find("long") != std::string::npos ||
+                               sc.id.find("Buy") != std::string::npos ||
+                               sc.id.find("buy") != std::string::npos);
+                out << "        // strategy.entry(\"" << sc.id << "\")\n"
+                    << "        // Set signal_=" << (isLong ? "1" : "-1") << " when entry condition is met\n";
+            } else if (sc.action == "exit") {
+                out << "        // strategy.exit(\"" << sc.id << "\")\n"
+                    << "        // Set signal_=2 or -2 when exit condition is met\n";
+            } else if (sc.action == "close") {
+                out << "        // strategy.close(\"" << sc.id << "\")\n"
+                    << "        // Set signal_=3 when close condition is met\n";
+            }
+        }
+    }
+
     // Save previous values for crossover/crossunder detection
     for (auto& cr : crossInfos) {
         out << "        prev_" << cr.srcA << "_ = " << cr.srcA << ";\n"
@@ -1349,6 +1418,12 @@ std::string PineConverter::generateCpp(const PineScript& script,
         << "    bool ready() const { return barIndex_ >= 2; }\n\n"
         << "    int barIndex() const { return barIndex_; }\n\n";
 
+    // Strategy signal accessor
+    if (!strategyCalls.empty()) {
+        out << "    /// Get strategy signal: 0=hold, 1=entry_long, -1=entry_short, 2=exit_long, -2=exit_short, 3=close_all\n"
+            << "    int signal() const { return signal_; }\n\n";
+    }
+
     // Private members
     out << "private:\n";
     for (auto& ind : inds)
@@ -1373,6 +1448,9 @@ std::string PineConverter::generateCpp(const PineScript& script,
     out << "    std::deque<double> closes_;\n"
         << "    std::map<std::string, double> plots_;\n"
         << "    int barIndex_{0};\n";
+    if (!strategyCalls.empty()) {
+        out << "    int signal_{0};\n";
+    }
     out << "};\n\n} // namespace crypto\n";
 
     return out.str();

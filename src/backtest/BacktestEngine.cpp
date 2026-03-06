@@ -49,6 +49,7 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
     std::string positionSide;
     double entryPrice = 0;
     double posQty = 0;
+    double margin = 0;       // margin locked for current position
     int64_t entryTime = 0;
 
     result.equityCurve.push_back(equity);
@@ -58,15 +59,17 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
         double price = bars[i].close;
 
         if (!inPosition && signal != 0) {
-            // Open position — use configurable fraction of balance
-            double cost = balance * cfg.positionSizePct;
-            double commission = cost * cfg.commission;
-            posQty = (cost - commission) / price;
-            entryPrice = price;
+            // Open position — use configurable fraction of balance, apply slippage
+            margin = balance * cfg.positionSizePct;
+            double entryCommission = margin * cfg.commission;
+            double slipAdj = (signal > 0) ? (1.0 + cfg.slippagePct) : (1.0 - cfg.slippagePct);
+            double fillPrice = price * slipAdj;
+            posQty = (margin - entryCommission) / fillPrice * cfg.leverage;
+            entryPrice = fillPrice;
             entryTime = bars[i].openTime;
             positionSide = (signal > 0) ? "BUY" : "SELL";
             inPosition = true;
-            balance -= cost;
+            balance -= margin;
         } else if (inPosition) {
             // Check for exit signal (opposite direction or last bar)
             bool shouldClose = (i == bars.size() - 1);
@@ -75,37 +78,53 @@ BacktestEngine::Result BacktestEngine::run(const Config& cfg,
                     (positionSide == "SELL" && signal > 0))
                     shouldClose = true;
             }
+            // Simplified liquidation check for leveraged positions:
+            // Triggers when price moves more than 1/leverage from entry.
+            // Real exchanges use maintenance margin and liquidation fees;
+            // this is a conservative approximation for backtesting.
+            if (cfg.leverage > 1.0) {
+                double liqDist = 1.0 / cfg.leverage;
+                if (positionSide == "BUY" && price <= entryPrice * (1.0 - liqDist))
+                    shouldClose = true;
+                else if (positionSide == "SELL" && price >= entryPrice * (1.0 + liqDist))
+                    shouldClose = true;
+            }
             if (shouldClose) {
-                double exitValue = posQty * price;
-                double commission = exitValue * cfg.commission;
+                double slipAdj = (positionSide == "BUY") ? (1.0 - cfg.slippagePct) : (1.0 + cfg.slippagePct);
+                double exitFillPrice = price * slipAdj;
+                double exitValue = posQty * exitFillPrice / cfg.leverage;
+                double exitCommission = exitValue * cfg.commission;
                 double pnl = 0;
                 if (positionSide == "BUY")
-                    pnl = (price - entryPrice) * posQty - commission;
+                    pnl = (exitFillPrice - entryPrice) * posQty / cfg.leverage - exitCommission;
                 else
-                    pnl = (entryPrice - price) * posQty - commission;
+                    pnl = (entryPrice - exitFillPrice) * posQty / cfg.leverage - exitCommission;
 
                 BacktestTrade trade;
                 trade.side = positionSide;
                 trade.entryPrice = entryPrice;
-                trade.exitPrice = price;
+                trade.exitPrice = exitFillPrice;
                 trade.qty = posQty;
                 trade.pnl = pnl;
-                trade.pnlPct = (entryPrice > 0) ? (pnl / (entryPrice * posQty)) * 100.0 : 0.0;
+                trade.pnlPct = (margin > 0) ? (pnl / margin) * 100.0 : 0.0; // ROI on margin (leveraged return)
                 trade.entryTime = entryTime;
                 trade.exitTime = bars[i].openTime;
                 result.trades.push_back(trade);
 
-                balance += exitValue - commission;
+                balance += margin + pnl;
+                margin = 0;
                 inPosition = false;
             }
         }
 
         // Update equity
         if (inPosition) {
+            double unrealizedPnl = 0;
             if (positionSide == "BUY")
-                equity = balance + price * posQty;
+                unrealizedPnl = (price - entryPrice) * posQty / cfg.leverage;
             else
-                equity = balance + posQty * (2.0 * entryPrice - price);
+                unrealizedPnl = (entryPrice - price) * posQty / cfg.leverage;
+            equity = balance + margin + unrealizedPnl;
         } else {
             equity = balance;
         }
