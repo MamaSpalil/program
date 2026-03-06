@@ -1218,7 +1218,7 @@ std::string PineConverter::generateCpp(const PineScript& script,
         if (ind.type == "ATR")
             out << "        " << ind.key << "_.update(c);\n";
         else if (ind.type == "RSI") {
-            out << "        { Candle rc; rc.close = c.close; "
+            out << "        { Candle rc{}; rc.close = c.close; rc.open = c.open; rc.high = c.high; rc.low = c.low; "
                 << ind.key << "_.update(rc); }\n";
         } else
             out << "        " << ind.key << "_.updateValue(c.close);\n";
