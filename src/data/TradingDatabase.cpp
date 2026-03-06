@@ -32,6 +32,10 @@ bool TradingDatabase::isOpen() const {
 }
 
 bool TradingDatabase::execute(const std::string& sql) {
+    if (!db_) {
+        Logger::get()->warn("[TradingDB] execute() called with null db handle");
+        return false;
+    }
     char* errMsg = nullptr;
     int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {

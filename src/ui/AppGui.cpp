@@ -2376,11 +2376,16 @@ void AppGui::drawSettingsPanel() {
             if (ImGui::SliderFloat("Indicators Height (%%)", &indPct, 10.0f, 40.0f, "%.0f%%"))
                 config_.layoutIndPct = indPct / 100.0f;
 
-            float mdPct = 1.0f - config_.layoutLogPct - config_.layoutVdPct - config_.layoutIndPct;
+            // Market Data gets center column remainder (not affected by VD — VD is in left column)
+            float mdCenterPct = (1.0f - config_.layoutIndPct) * (1.0f - config_.layoutLogPct);
             ImGui::TextColored(ImVec4(0.50f, 0.80f, 0.50f, 1.0f),
-                "Market Data Height: %.0f%%", mdPct * 100.0f);
+                "Market Data Height: ~%.0f%%", mdCenterPct * 100.0f);
+            ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.50f, 1.0f),
+                "(Logs: %.0f%% of viewport, VD: %.0f%% of left, Ind: %.0f%% of center)",
+                config_.layoutLogPct * 100.0f, config_.layoutVdPct * 100.0f,
+                config_.layoutIndPct * 100.0f);
 
-            if (mdPct < 0.20f) {
+            if (mdCenterPct < 0.30f) {
                 ImGui::TextColored(ImVec4(0.90f, 0.30f, 0.30f, 1.0f),
                     "Warning: Market Data window too small! Reduce other proportions.");
             }
@@ -2403,8 +2408,8 @@ void AppGui::drawSettingsPanel() {
             ImGui::SameLine();
             if (ImGui::Button("Reset Layout to Defaults")) {
                 config_.layoutLogPct = 0.10f;
-                config_.layoutVdPct  = 0.13f;
-                config_.layoutIndPct = 0.25f;
+                config_.layoutVdPct  = 0.15f;
+                config_.layoutIndPct = 0.20f;
                 config_.layoutLocked = false;
                 layoutNeedsReset_ = true;
                 ImGuiIO& io = ImGui::GetIO();

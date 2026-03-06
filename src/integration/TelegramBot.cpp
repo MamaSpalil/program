@@ -1,6 +1,7 @@
 #include "TelegramBot.h"
 #include "../core/Logger.h"
 #include <chrono>
+#include <map>
 #ifdef USE_CURL
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
@@ -32,6 +33,12 @@ void TelegramBot::stopPolling() {
     if (pollThread_.joinable()) pollThread_.join();
 }
 
+void TelegramBot::setCommandCallback(const std::string& command,
+                                      TelegramCommandCallback cb) {
+    std::lock_guard<std::mutex> lk(callbackMutex_);
+    commandCallbacks_[command] = std::move(cb);
+}
+
 std::string TelegramBot::processCommand(const std::string& text,
                                          const std::string& chatId) {
     // Security: only authorized chat
@@ -50,19 +57,37 @@ std::string TelegramBot::processCommand(const std::string& text,
                "/start - start engine\n"
                "/help - this help";
     }
+
+    // Check for registered command callbacks
+    {
+        std::lock_guard<std::mutex> lk(callbackMutex_);
+        auto it = commandCallbacks_.find(text);
+        if (it != commandCallbacks_.end() && it->second) {
+            try {
+                return it->second();
+            } catch (const std::exception& e) {
+                Logger::get()->warn("[TelegramBot] Command callback error for '{}': {}",
+                                    text, e.what());
+                return "Error executing command: " + std::string(e.what());
+            }
+        }
+    }
+
+    // Default stub responses for commands without registered callbacks
     if (text == "/balance") {
-        return "Balance: (requires exchange connection)";
+        return "Balance: (no callback registered — connect exchange first)";
     }
     if (text == "/status") {
-        return "Status: idle";
+        return "Status: idle (no callback registered)";
     }
     if (text == "/positions") {
-        return "No open positions";
+        return "No open positions (no callback registered)";
     }
     if (text == "/pnl") {
-        return "Daily P&L: $0.00";
+        return "Daily P&L: $0.00 (no callback registered)";
     }
     if (text == "/stop") {
+        // Check for /stop callback
         return "Engine stopped";
     }
     if (text == "/start") {

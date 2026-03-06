@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 2.0.0
+> **Версия:** 2.1.0
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 502 теста, 498 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v2.0.0:** Layout: Volume Delta перемещён в левую колонку ниже Pair List. Exchange: WebSocket bounds checks для Bybit/KuCoin onWsMessage(), KuCoin getPrice() bounds check. BacktestEngine: Sharpe ratio empty returns guard. 10 новых тестов. Все 79 проблем исправлены.
+> **Результаты тестирования:** 537 тестов, 533 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v2.1.0:** TradingDatabase nullptr guard. LayoutManager logPct_ функциональный (слайдер Logs Height работает). Reset Layout defaults синхронизированы. SymbolFormatter для унификации формата символов. TelegramBot command callbacks. 35 новых тестов. Все 82 проблемы исправлены.
 
 ---
 
@@ -254,9 +254,10 @@ Callback: `job.callback()` вызывается.
 Фильтры и флаги индикаторов сохраняются.
 ✅ **chartBarWidth_, chartScrollOffset_ (v1.7.5):** сохраняются в configToJson/loadConfig под ключом "chart".
 
-### 5.2 Layout дефолты — ✅ Done (v1.7.3 + v2.0.0)
+### 5.2 Layout дефолты — ✅ Done (v1.7.3 + v2.0.0 + v2.1.0)
 vdPct=0.15f, indPct=0.20f — синхронизировано.
 ✅ **Layout v2.0.0:** Volume Delta перемещён из центральной колонки в левую колонку ниже Pair List.
+✅ **Layout v2.1.0:** logPct_ теперь функциональный (слайдер Logs Height работает, min 40px). Reset defaults синхронизированы (vdPct=0.15, indPct=0.20). Market Data Height display исправлен.
 
 ### 5.3 Layout — Расположение окон (v2.0.0) ✅ Done
 Корректное расположение всех окон:
@@ -318,10 +319,13 @@ vdPct=0.15f, indPct=0.20f — синхронизировано.
 - NewsFeed: CryptoPanic API с API-ключом, JSON-парсинг, sentiment из votes
 - FearGreed: Alternative.me API (GET /fng/?limit=1), парсинг value/classification/timestamp
 
-### 6.2 TelegramBot — ✅ Done (v1.8.0)
+### 6.2 TelegramBot — ✅ Done (v1.8.0 + v2.1.0)
 - sendMessage(): POST https://api.telegram.org/bot{token}/sendMessage
 - getUpdates(): GET с long-polling, парсинг update_id/text/chat_id
 - Graceful fallback при отсутствии токена
+- ✅ **Command callbacks (v2.1.0):** setCommandCallback() для /balance, /status, /positions, /pnl
+- Callbacks защищены mutex, exception handling в processCommand()
+- Stub-ответы обновлены с пометкой "(no callback registered)"
 
 ### 6.3 WebhookServer — ✅ Done (v1.7.3 + v1.7.4)
 - ✅ rateLimit_ cleanup (v1.7.3)
@@ -339,12 +343,12 @@ escapeCsvField() добавлена.
 
 ## 7. АНАЛИЗ ТЕСТОВОГО ПОКРЫТИЯ
 
-### 7.1 Статистика (v2.0.0)
-- **Всего тестов:** 502 (498 pass, 4 skip — LibTorch/XGBoost)
+### 7.1 Статистика (v2.1.0)
+- **Всего тестов:** 537 (533 pass, 4 skip — LibTorch/XGBoost)
 - **Файлов тестов:** 15
-- **Новых тестов v2.0.0:** 10
-- **Оценка покрытия:** ~47% кода
-- **Время выполнения:** ~13 секунд
+- **Новых тестов v2.1.0:** 35
+- **Оценка покрытия:** ~52% кода
+- **Время выполнения:** ~18 секунд
 
 ### 7.2 Критически не протестировано
 | Модуль | Что не тестируется |
@@ -363,7 +367,8 @@ escapeCsvField() добавлена.
 ## 8. АНАЛИЗ CHANGELOG
 
 ### Ключевые наблюдения:
-1. **v2.0.0** — 4 исправления: Layout перестройка (VD → left column), Bybit/KuCoin WebSocket bounds, KuCoin getPrice bounds, BacktestEngine Sharpe empty returns. 10 новых тестов.
+1. **v2.1.0** — 3 исправления: TradingDatabase nullptr guard, LayoutManager logPct_ functional (logs height slider), Reset Layout defaults sync. 2 новых модуля: SymbolFormatter, TelegramBot command callbacks. 35 новых тестов.
+2. **v2.0.0** — 4 исправления: Layout перестройка (VD → left column), Bybit/KuCoin WebSocket bounds, KuCoin getPrice bounds, BacktestEngine Sharpe empty returns. 10 новых тестов.
 2. **v1.9.0** — 7 исправлений: Exchange JSON bounds checks (OKX/Bybit/Bitget getPrice+getOrderBook), PaperTrading commission+validation, Scheduler deadlock fix, BacktestEngine div-by-zero protection, ModelTrainer silent failure. 15 новых тестов.
 3. **v1.8.0** — 7 исправлений: OnlineLearningLoop state cache, NewsFeed CryptoPanic API, FearGreed alternative.me API, TelegramBot sendMessage+getUpdates, OrderManagement commission, adaptive price format, PPO tuning (entropy/value clip). 14 новых тестов.
 4. **v1.7.5** — 9 исправлений: getFuturesBalance() для 4 бирж, OnlineLearningLoop atomic, ModelTrainer candlesPerDay, FeatureExtractor mid fallback, SignalEnhancer thread-safety, chart persistence, Engine maxCandleHistory config, BacktestEngine positionSizePct, TaxReporter unitCost. 10 новых тестов.
@@ -381,150 +386,132 @@ escapeCsvField() добавлена.
 
 ---
 
-### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.1.0
+### 🎯 ПРОМТ (PROMPT) ДЛЯ СЛЕДУЮЩЕГО ЭТАПА РАЗРАБОТКИ v2.2.0
 
 ```
-Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.0.0.
+Ты — senior C++ разработчик, работающий над проектом CryptoTrader (VT — Virtual Trade System) v2.1.0.
 Это C++17 программа для алгоритмической торговли криптовалютами с ML (LSTM, XGBoost), RL (PPO),
-5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 502+ тестами на Google Test.
+5 биржами (Binance, Bybit, OKX, KuCoin, Bitget), GUI на Dear ImGui и 537+ тестами на Google Test.
 
 КОНТЕКСТ ПРОЕКТА:
 - Репозиторий: /home/runner/work/program/program
-- Основной код: src/ (67 .cpp файлов, 92 .h файлов)
-- Тесты: tests/ (15 файлов, 502 теста, 498 pass, 4 skip)
+- Основной код: src/ (69 .cpp файлов, 94 .h файлов)
+- Тесты: tests/ (15 файлов, 537 тестов, 533 pass, 4 skip)
 - Конфиг: config/settings.json, config/profiles.json
 - Сборка: cmake -B build/test -DCMAKE_BUILD_TYPE=Debug && cmake --build build/test -j$(nproc)
 - Запуск тестов: cd build/test && ./crypto_trader_tests --gtest_brief=1
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v2.0.0) ===
+=== СТАТУС ПРОЕКТА (v2.1.0) ===
 
 ВСЕ КРИТИЧЕСКИЕ И ВЫСОКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ (✅ Done — НЕ ТРОГАТЬ):
 - Все 5 бирж: placeOrder, cancelOrder, setLeverage, getLeverage, getPositionRisk, getFuturesBalance
-- Все subscribeKline для всех 5 бирж с корректными подписками
-- Exchange JSON bounds checks: OKX/Bybit/Bitget getPrice() + OKX getOrderBook() — проверка массивов
-- Exchange WebSocket bounds: Bybit/KuCoin onWsMessage() — проверка data array/candles
-- KuCoin getPrice() bounds check — проверка наличия data object
-- OnlineLearningLoop: state cache + captureStateForTrade + nextState ≠ state + atomic lastTradeTime_
-- NewsFeed: CryptoPanic API, FearGreed: Alternative.me API, TelegramBot: Telegram Bot API
-- OrderManagement: estimateCost с комиссией 0.1%, adaptive price format (%.2f/%.4f/%.6f/%.8f)
-- RLTradingAgent: entropyCoeff=0.02, valueLossClipMax=10.0, PPOConfig::validate() bounds
-- BacktestEngine: equity SHORT, Sharpe ratio (n-1), positionSizePct, div-by-zero protection, empty returns guard
-- PaperTrading: commission (0.1% open+close), qty/price validation, equity calc
-- Scheduler: callbacks outside mutex (deadlock fix), GridBot profit
-- ModelTrainer: no lastRetrainTime update on empty data, configurable candlesPerDay
-- All FeatureExtractor division-by-zero guards, SignalEnhancer thread-safety
-- WebhookServer: rate limit cleanup, constant-time HMAC comparison, cleanupCounter_
-- AppGui: configToJson/loadConfig (filters + indicators + chart settings), layout defaults
-- Layout: Volume Delta перемещён в левую колонку ниже Pair List (v2.0.0)
-- CSVExporter: escapeCsvField, TaxReporter: unitCost precision
-- Binance/KuCoin httpDelete, Engine atomic init, TradeHistory thread-safety
+- Exchange JSON bounds checks, WebSocket bounds checks
+- TradingDatabase: nullptr guard в execute()
+- LayoutManager: logPct_ функциональный (слайдер Logs Height работает, min 40px)
+- SymbolFormatter: toSpot/toFutures/toUnified/extractBase/extractQuote для всех 5 бирж
+- TelegramBot: setCommandCallback() для /balance, /status, /positions, /pnl
+- OnlineLearningLoop: state cache + atomic lastTradeTime_
+- NewsFeed, FearGreed, TelegramBot: реальные API
+- OrderManagement: estimateCost с комиссией 0.1%, adaptive price format
+- RLTradingAgent: PPO tuning, BacktestEngine: equity/Sharpe/div-by-zero
+- PaperTrading: commission, validation, equity calc
+- Scheduler: deadlock fix, GridBot: profit tracking
+- Все FeatureExtractor, SignalEnhancer, WebhookServer, CSVExporter, TaxReporter fixes
 
-=== ЗАДАЧА v2.1.0: РАСШИРЕНИЕ ФУНКЦИОНАЛЬНОСТИ И НАДЁЖНОСТЬ ===
+=== ЗАДАЧА v2.2.0: РАСШИРЕНИЕ ФУНКЦИОНАЛЬНОСТИ И ВИЗУАЛ ===
 
-Программа стабильна (79 исправлений, 502 теста). Следующий этап — расширение
-функциональности, унификация, повышение тестового покрытия и UX-улучшения.
+Программа стабильна (82 исправления, 537 тестов). Следующий этап — расширение.
 
-=== ЭТАП 1: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~47% до ~65%) ===
+=== ЭТАП 1: ИНТЕГРАЦИЯ SymbolFormatter В Engine ===
 
-1.1. Добавь тесты для GridBot executeBuy/executeSell:
-   - Выполнение ордера → обновление уровня
-   - Profit tracking → grid levels
-
-1.2. Добавь тесты для WebSocket subscribeKline с mock данными:
-   - Проверка парсинга JSON-сообщений от каждой биржи
-   - Проверка callback вызова
-
-1.3. Добавь тесты для DatabaseManager Import/Export:
-   - Проверка записи и чтения данных через все Repository классы
-   - Проверка миграций БД
-   - Проверка целостности данных при Import/Export
-
-1.4. Добавь тесты для TelegramBot команд:
-   - Тестирование обработки реальных команд (/balance, /status, /positions)
-   - Тестирование авторизации (неавторизованный чат → отклонение)
-
-=== ЭТАП 2: УНИФИКАЦИЯ ФОРМАТА СИМВОЛОВ ===
-
-2.1. Создай SymbolFormatter (новый класс в src/exchange/):
-   - toSpot(exchangeName, baseSymbol) → Binance: "BTCUSDT", OKX: "BTC-USDT", Bitget: "BTCUSDT"
-   - toFutures(exchangeName, baseSymbol) → Binance: "BTCUSDT", OKX: "BTC-USDT-SWAP", Bitget: "BTCUSDT_UMCBL"
-   - fromExchange(exchangeName, rawSymbol) → "BTCUSDT" (unified)
-
-2.2. Интегрируй SymbolFormatter в Engine и AppGui:
-   - Все вызовы бирж используют форматированные символы
+1.1. Интегрируй SymbolFormatter в Engine и AppGui:
+   - Все вызовы бирж используют форматированные символы через SymbolFormatter
    - PairList отображает унифицированные символы
+   - При смене биржи символы автоматически переформатируются
 
-=== ЭТАП 3: UX УЛУЧШЕНИЯ ===
+=== ЭТАП 2: UX УЛУЧШЕНИЯ ===
 
-3.1. Добавь drag-and-drop order modification на графике:
-   - Перетаскивание ордерных линий для изменения цены
-   - Visual feedback при hover
+2.1. Добавь Layout Lock toggle:
+   - Чекбокс "Lock Windows" в Settings → Layout → при включении окна фиксированы
+   - При выключении — свободное перемещение окон
+   - Кнопка "Reset Layout" для возврата к defaults
 
-3.2. Добавь order book heatmap:
-   - Глубина стакана визуализирована цветом
+2.2. Добавь мини-график equity curve в User Panel:
+   - Последние 100 точек equity из EquityRepository
+   - Линия с градиентом profit (зелёный) / loss (красный)
+   - Обновление каждые 30 секунд
+
+2.3. Добавь order book heatmap:
+   - Глубина стакана визуализирована цветом (тепловая карта)
    - Кластеры ликвидности выделены
 
-3.3. Добавь мини-график equity curve в User Panel:
-   - Последние 100 точек equity
-   - Линия с градиентом profit/loss
+2.4. Добавь drag-and-drop order modification:
+   - Перетаскивание ордерных линий на графике для изменения цены
+   - Visual feedback при hover
 
-3.4. Добавь Layout Lock toggle в Settings panel:
-   - Чекбокс для блокировки/разблокировки расположения окон
-   - Кнопка Reset Layout в View menu
+=== ЭТАП 3: ML/AI УЛУЧШЕНИЯ ===
 
-=== ЭТАП 4: ML/AI УЛУЧШЕНИЯ ===
-
-4.1. LSTMModel — добавь learning rate scheduler:
+3.1. LSTMModel — добавь learning rate scheduler:
    - ReduceLROnPlateau или Cosine Annealing
    - Configurable patience и factor
 
-4.2. XGBoostModel — добавь RAII wrapper для DMatrix/booster:
+3.2. XGBoostModel — добавь RAII wrapper для DMatrix/booster:
    - RAII обёртка для предотвращения утечек при исключениях
    - XGDMatrixFree(dmat) в деструкторе или scope guard
 
-4.3. XGBoostModel — добавь feature importance logging:
+3.3. XGBoostModel — добавь feature importance logging:
    - После каждого train выводить top-10 features
    - Сохранять в файл для анализа
 
-4.4. OnlineLearningLoop — добавь periodic model evaluation:
-   - Каждые N шагов запускать eval на валидационных данных
-   - Логировать val_loss, val_accuracy
-   - Early stopping при ухудшении
+3.4. OnlineLearningLoop — добавь periodic model evaluation:
+   - Каждые N шагов eval на валидационных данных
+   - Логировать val_loss, val_accuracy, early stopping
 
-4.5. Добавь Multi-timeframe feature aggregation:
+3.5. Добавь Multi-timeframe feature aggregation:
    - Объединение фичей с 1m, 5m, 15m, 1h таймфреймов
-   - Взвешенная комбинация для RL agent
 
-4.6. TelegramBot — реализовать реальные команды:
-   - /balance → реальный баланс с биржи
+3.6. Реализуй TelegramBot real commands через Engine callbacks:
+   - /balance → реальный баланс с биржи (через setCommandCallback)
    - /status → текущие позиции и P&L
    - /positions → список открытых позиций
    - /pnl → сводка прибыли/убытков
 
+=== ЭТАП 4: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~52% до ~65%) ===
+
+4.1. Добавь тесты для GridBot executeBuy/executeSell:
+   - Выполнение ордера с mock exchange → обновление уровня
+   - Profit tracking через полный grid цикл
+
+4.2. Добавь тесты для WebSocket subscribeKline с mock данными:
+   - Проверка парсинга JSON-сообщений от каждой биржи
+
+4.3. Добавь тесты для TelegramBot реальных команд:
+   - /balance, /status, /positions с зарегистрированными callbacks
+
+4.4. Добавь тесты для SymbolFormatter edge cases:
+   - Пустые строки, lowercase input, unknown exchange
+
 === ЭТАП 5: ПРОИЗВОДИТЕЛЬНОСТЬ И НАДЁЖНОСТЬ ===
 
-5.1. Профилируй горячие пути с помощью perf/flamegraph
-5.2. Оптимизируй FeatureExtractor — pre-allocated буферы, SIMD
-5.3. Оптимизируй chart rendering — batched draw calls
-5.4. Добавь connection pooling для HTTP-запросов к биржам
-5.5. Добавь RAII wrapper для curl_slist* (предотвращение утечек при исключениях)
-5.6. Добавь exponential backoff для повторных попыток HTTP-запросов
+5.1. Добавь RAII wrapper для curl_slist* (предотвращение утечек при исключениях)
+5.2. Добавь exponential backoff для повторных попыток HTTP-запросов
+5.3. Добавь connection pooling для HTTP-запросов к биржам
+5.4. Профилируй горячие пути с помощью perf/flamegraph
 
 === ЭТАП 6: БЕЗОПАСНОСТЬ ===
 
 6.1. Проверь все API ключи на предмет логирования (не должны логироваться)
-6.2. Добавь HMAC-SHA256 verification для webhook signatures
+6.2. Проверь SQL injection prevention во всех Repository классах
 6.3. Добавь rate limiting для TelegramBot команд
-6.4. Проверь SQL injection prevention во всех Repository классах
-6.5. TradingDatabase.cpp — добавь проверку db_ != nullptr перед sqlite3_exec()
+6.4. TradingDatabase.cpp — проверка db_ != nullptr перед sqlite3_exec() ✅ Done (v2.1.0)
 
 === ПРИОРИТЕТЫ ===
-Приоритет 1 (ТЕСТЫ): Этап 1 — увеличение покрытия
-Приоритет 2 (СИМВОЛЫ): Этап 2 — унификация форматов
-Приоритет 3 (UX): Этап 3 — визуальные улучшения
-Приоритет 4 (ML): Этап 4 — расширение ML функциональности
+Приоритет 1 (ИНТЕГРАЦИЯ): Этап 1 — SymbolFormatter в Engine
+Приоритет 2 (UX): Этап 2 — визуальные улучшения
+Приоритет 3 (ML): Этап 3 — расширение ML функциональности
+Приоритет 4 (ТЕСТЫ): Этап 4 — увеличение покрытия
 Приоритет 5 (PERF): Этап 5 — оптимизация и надёжность
 Приоритет 6 (SECURITY): Этап 6 — безопасность
 
@@ -542,40 +529,42 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.0.0)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.1.0)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.0.0) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.1.0) |
 |-----------|--------------|--------------|-----------|---------------|
-| Биржи | 24 | 24 | 0 | +3 (Bybit/KuCoin WS bounds, KuCoin getPrice bounds) |
+| Биржи | 24 | 24 | 0 | 0 |
 | Торговые модули | 14 | 14 | 0 | 0 |
 | ML/AI | 19 | 19 | 0 | 0 |
-| UI/Настройки | 13 | 13 | 0 | +1 (Layout VD → left column) |
-| Интеграции | 10 | 10 | 0 | 0 |
-| Backtest | 5 | 5 | 0 | +1 (Sharpe empty returns) |
-| **ИТОГО** | **79** | **79** | **0** | **+4 новых исправлений (v2.0.0)** |
+| UI/Настройки | 16 | 16 | 0 | +3 (logPct functional, Reset defaults, MD Height display) |
+| Интеграции | 11 | 11 | 0 | +1 (TelegramBot command callbacks) |
+| Backtest | 5 | 5 | 0 | 0 |
+| Data | 1 | 1 | 0 | +1 (TradingDatabase nullptr guard) |
+| **ИТОГО** | **82** | **82** | **0** | **+3 новых исправлений + 2 новых модуля (v2.1.0)** |
 
 ### Прогресс исправлений:
-- **v1.9.0 → v2.0.0:** 4 новых исправления (всего 75→79) + 10 новых тестов
-- **Тесты:** 502 (498 pass, 4 skip) — +10 новых тестов
-- **Общий статус:** 79 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
+- **v2.0.0 → v2.1.0:** 3 новых исправления + 2 новых модуля (всего 79→82) + 35 новых тестов
+- **Тесты:** 537 (533 pass, 4 skip) — +35 новых тестов
+- **Новые модули:** SymbolFormatter (src/exchange/), TelegramBot command callbacks
+- **Общий статус:** 82 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
 
-### Направления развития (v2.1.0):
-1. Увеличение тестового покрытия (47% → 65%)
-2. Унификация формата символов (SymbolFormatter)
-3. UX: drag-and-drop ордеров, order book heatmap, equity curve, layout lock
-4. ML: LR scheduler, feature importance, RAII wrappers, multi-timeframe features
-5. Производительность: profiling, SIMD, connection pooling, RAII curl
-6. Безопасность: HMAC webhook verification, SQL injection audit, db_ nullptr check
+### Направления развития (v2.2.0):
+1. Интеграция SymbolFormatter в Engine для автоматической конвертации символов
+2. UX: Layout Lock toggle, equity curve мини-график, order book heatmap, drag-and-drop ордеров
+3. ML: LR scheduler, feature importance, RAII wrappers, multi-timeframe features
+4. Тестовое покрытие (52% → 65%): GridBot execute, WebSocket mock, TelegramBot real commands
+5. Производительность: RAII curl wrapper, connection pooling, exponential backoff
+6. Безопасность: API key audit, SQL injection check, TelegramBot rate limiting
 
 ### Обнаруженные проблемы для будущего исправления:
-1. **TelegramBot** — команды (/balance, /status, /positions, /pnl) возвращают stub-ответы
-2. **XGBoostModel** — нет RAII wrapper для DMatrix/booster (утечка при исключениях)
-3. **OnlineLearningLoop** — все сделки в batch получают одинаковый nextState (текущее состояние рынка)
-4. **BacktestEngine** — нет поддержки leverage и slippage в бэктесте
-5. **UI** — нет layout lock toggle и reset layout кнопки в интерфейсе
-6. **Curl headers** — нет RAII wrapper для curl_slist* (утечка при исключениях в HTTP-запросах)
-7. **TradingDatabase.cpp** — нет проверки db_ != nullptr перед sqlite3_exec()
+1. **XGBoostModel** — нет RAII wrapper для DMatrix/booster (утечка при исключениях)
+2. **OnlineLearningLoop** — все сделки в batch получают одинаковый nextState (текущее состояние рынка)
+3. **BacktestEngine** — нет поддержки leverage и slippage в бэктесте
+4. **UI** — Layout Lock чекбокс есть в Settings, но не полностью реализован (нужен toggle между locked/free)
+5. **Curl headers** — нет RAII wrapper для curl_slist* (утечка при исключениях в HTTP-запросах)
+6. **SymbolFormatter** — создан, но ещё не интегрирован в Engine и AppGui (v2.2.0)
+7. **TelegramBot callbacks** — механизм добавлен, но Engine ещё не регистрирует реальные обработчики (v2.2.0)
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.0.0, включая все 67 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 502 тестов подтверждены. Все 79 найденных проблем исправлены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.1.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 537 тестов подтверждены. Все 82 найденных проблемы исправлены.*

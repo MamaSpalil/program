@@ -97,11 +97,13 @@ TEST(LayoutStress, TopBarHeight32) {
     EXPECT_FLOAT_EQ(tb.size.x, 1920.0f);
 }
 
-TEST(LayoutStress, LogWindowHeight120) {
+TEST(LayoutStress, LogWindowHeightPercentage) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
-    EXPECT_FLOAT_EQ(log.size.y, 120.0f);
+    // logPct default=0.10, so height = floor(1080 * 0.10) = 108
+    float expectedH = std::floor(1080.0f * 0.10f);
+    EXPECT_FLOAT_EQ(log.size.y, expectedH);
     EXPECT_FLOAT_EQ(log.size.x, 1920.0f);
     // Logs at bottom of viewport
     EXPECT_FLOAT_EQ(log.pos.y + log.size.y, 1080.0f);
@@ -282,9 +284,10 @@ TEST(LayoutStress, HideLogsExpandsCenter) {
 
     auto plAll = mgrAll.get("Pair List");
     auto plNo  = mgrNo.get("Pair List");
-    // Hiding Logs(120px) should increase sidebar height
+    // Hiding Logs (logPct*Hvp ≈ 108px) should increase sidebar height
     // PairList gets ~85% of freed space (rest goes to VD)
-    EXPECT_GT(plNo.size.y, plAll.size.y + 90.0f);
+    float logsH = std::floor(1080.0f * 0.10f);
+    EXPECT_GT(plNo.size.y, plAll.size.y + logsH * 0.7f);
 }
 
 TEST(LayoutStress, HideAllOptionalPanels) {

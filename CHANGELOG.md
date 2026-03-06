@@ -5,6 +5,53 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: TradingDatabase — nullptr guard
+- **TradingDatabase.cpp execute()** — добавлена проверка `if (!db_)` перед вызовом `sqlite3_exec()`. Ранее при вызове `execute()` без предварительного `init()` (или после failed init) происходил crash, т.к. `db_` был nullptr. Теперь возвращает `false` с предупреждением в лог (TradingDatabase.cpp:35-38).
+
+#### Этап 2: LayoutManager — logPct_ теперь функциональный
+- **LayoutManager.cpp** — высота окна Logs теперь вычисляется как `max(40, floor(Hvp * logPct_))` вместо жёстко заданных 120px. Слайдер "Logs Height (%)" в Settings теперь реально влияет на высоту окна Logs. Минимальная высота 40px для предотвращения исчезновения окна на маленьких экранах (LayoutManager.cpp:28-30).
+- **AppGui.cpp "Reset Layout to Defaults"** — исправлены значения по умолчанию: `vdPct=0.15` и `indPct=0.20` (ранее `0.13` и `0.25`). Теперь синхронизированы с LayoutManager.h defaults (AppGui.cpp:2406-2407).
+- **AppGui.cpp Settings → Layout** — исправлено отображение "Market Data Height": теперь показывает `(1 - indPct) * (1 - logPct)` вместо `1 - logPct - vdPct - indPct`. VD находится в левой колонке и не влияет на высоту Market Data в центральной колонке. Добавлена пояснительная строка с разбивкой пропорций (AppGui.cpp:2379-2389).
+
+### Added
+
+#### Этап 3: SymbolFormatter — Унификация формата символов
+- **SymbolFormatter** (`src/exchange/SymbolFormatter.h`, `src/exchange/SymbolFormatter.cpp`) — новый утилитный класс для конвертации символов между форматами бирж:
+  - `toSpot(exchange, base, quote)` → Binance/Bybit/Bitget: "BTCUSDT", OKX/KuCoin: "BTC-USDT"
+  - `toFutures(exchange, base, quote)` → OKX: "BTC-USDT-SWAP", Bitget: "BTCUSDT_UMCBL", остальные: "BTCUSDT"/"BTC-USDT"
+  - `toUnified(exchange, rawSymbol)` → удаляет разделители и суффиксы (-SWAP, _UMCBL, -) → "BTCUSDT"
+  - `extractBase(unified)` / `extractQuote(unified)` → разбор "BTCUSDT" → "BTC" + "USDT"
+  - Поддерживает USDT, USDC, BUSD, BTC, ETH как quote assets
+- **CMakeLists.txt** — добавлен `src/exchange/SymbolFormatter.cpp` в EXCHANGE_SOURCES
+
+#### Этап 4: TelegramBot — Реальные command callbacks
+- **TelegramBot.h** — добавлен `setCommandCallback(command, callback)` для регистрации обработчиков команд. `TelegramCommandCallback = std::function<std::string()>`. Хранятся в `commandCallbacks_` (map, protected by `callbackMutex_`).
+- **TelegramBot.cpp processCommand()** — при наличии зарегистрированного callback для команды, вызывает его вместо stub-ответа. Callback exceptions обрабатываются с `try/catch` и логированием ошибки. Stub-ответы обновлены с пометкой "(no callback registered)" для ясности.
+- Позволяет Engine регистрировать реальные обработчики:
+  - `/balance` → запрос баланса с биржи
+  - `/status` → текущий статус Engine
+  - `/positions` → список открытых позиций
+  - `/pnl` → сводка P&L
+
+#### Этап 5: Тестирование v2.1.0
+- **test_full_system.cpp** — 35 новых тестов:
+  - `TradingDatabaseV210` (3): ExecuteWithNullDbReturnsFalse, ExecuteAfterInitSucceeds, IsOpenFalseBeforeInit
+  - `SymbolFormatterV210` (16): ToSpot × 5 бирж, ToFutures × 4 биржи, ToUnified × 4 формата, ExtractBaseAndQuote, ExtractBaseUnrecognized
+  - `LayoutV210` (6): LogsHeightUsesPercentage, LogsHeightMinimum40px, LogsHeightDefault10Percent, MarketDataGetsEnoughSpace, UserPanelOnRight, WindowsNoOverlapAfterLogPctChange
+  - `TelegramBotV210` (5): CommandCallbackRegistration, CallbackOverridesStub, MultipleCallbacks, UnauthorizedWithCallback, CallbackExceptionHandled
+  - `GridBotV210` (3): GridLevelsCreated, GeometricGridLevels, OnOrderFilledProfitTracking
+  - `DatabaseV210` (3): TradeRepositoryRoundtrip, OrderRepositoryRoundtrip, EquityRepositoryRoundtrip
+- **test_v170.cpp** — обновлены тесты: LogWindowHeight120 → LogWindowHeightPercentage (проверка percentage-based расчёта вместо fixed 120px)
+- **Итого тестов:** 537 (533 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.1.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.1.0: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v2.2.0.
+
 ## [2.0.0] - 2026-03-06
 
 ### Fixed

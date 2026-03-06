@@ -1,9 +1,11 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <map>
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <functional>
 
 namespace crypto {
 
@@ -12,6 +14,10 @@ struct TelegramUpdate {
     std::string text;
     std::string chatId;
 };
+
+/// Callback type for command data providers.
+/// Returns the response string for a given command.
+using TelegramCommandCallback = std::function<std::string()>;
 
 class TelegramBot {
 public:
@@ -24,6 +30,10 @@ public:
     void startPolling();
     void stopPolling();
     bool isPolling() const { return polling_; }
+
+    /// Register a callback that provides data for a command.
+    /// Example: setCommandCallback("/balance", [&]{ return "USDT: 1000.0"; });
+    void setCommandCallback(const std::string& command, TelegramCommandCallback cb);
 
     // Process a command — public for testing
     std::string processCommand(const std::string& text, const std::string& chatId);
@@ -44,6 +54,10 @@ private:
     std::thread     pollThread_;
     std::atomic<bool> polling_{false};
     mutable std::mutex mutex_;
+
+    // Command callbacks for dynamic data
+    std::mutex callbackMutex_;
+    std::map<std::string, TelegramCommandCallback> commandCallbacks_;
 };
 
 } // namespace crypto
