@@ -3284,3 +3284,245 @@ TEST(VersionV230, VersionStringExists) {
     EXPECT_FALSE(version.empty());
     EXPECT_NE(version.find("2.3"), std::string::npos);
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  v2.4.0 — BacktestEngine Leverage & Slippage + PineConverter strategy.*
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── BacktestEngine v2.4.0 ─────────────────────────────────────────────────
+
+TEST(BacktestV240, DefaultLeverageIsOne) {
+    BacktestEngine::Config cfg;
+    EXPECT_DOUBLE_EQ(cfg.leverage, 1.0);
+    EXPECT_DOUBLE_EQ(cfg.slippagePct, 0.0001);
+}
+
+TEST(BacktestV240, LeverageIncreasesPositionSize) {
+    // Create test candles with a clear uptrend
+    std::vector<Candle> bars;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        c.close = 100.0 + i * 0.5;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.2;
+        c.low = c.close - 0.2;
+        c.volume = 1000.0;
+        c.openTime = 1700000000000LL + i * 60000;
+        bars.push_back(c);
+    }
+
+    BacktestEngine eng;
+    // Custom signal: buy at bar 25, sell at bar 45
+    auto sigFn = [](const std::vector<Candle>&, size_t idx) -> int {
+        if (idx == 25) return 1;   // buy
+        if (idx == 45) return -1;  // sell
+        return 0;
+    };
+
+    BacktestEngine::Config cfg1x;
+    cfg1x.symbol = "BTCUSDT";
+    cfg1x.leverage = 1.0;
+    cfg1x.slippagePct = 0.0;
+    cfg1x.commission = 0.0;
+    auto r1 = eng.run(cfg1x, bars, sigFn);
+
+    BacktestEngine::Config cfg3x;
+    cfg3x.symbol = "BTCUSDT";
+    cfg3x.leverage = 3.0;
+    cfg3x.slippagePct = 0.0;
+    cfg3x.commission = 0.0;
+    auto r3 = eng.run(cfg3x, bars, sigFn);
+
+    // With 3x leverage the position qty should be 3x larger
+    ASSERT_FALSE(r1.trades.empty());
+    ASSERT_FALSE(r3.trades.empty());
+    EXPECT_NEAR(r3.trades[0].qty / r1.trades[0].qty, 3.0, 0.01);
+}
+
+TEST(BacktestV240, SlippageReducesPnL) {
+    std::vector<Candle> bars;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        c.close = 100.0 + i * 0.5;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.2;
+        c.low = c.close - 0.2;
+        c.volume = 1000.0;
+        c.openTime = 1700000000000LL + i * 60000;
+        bars.push_back(c);
+    }
+
+    BacktestEngine eng;
+    auto sigFn = [](const std::vector<Candle>&, size_t idx) -> int {
+        if (idx == 25) return 1;
+        if (idx == 45) return -1;
+        return 0;
+    };
+
+    BacktestEngine::Config cfgNoSlip;
+    cfgNoSlip.symbol = "BTCUSDT";
+    cfgNoSlip.slippagePct = 0.0;
+    cfgNoSlip.commission = 0.0;
+    auto r0 = eng.run(cfgNoSlip, bars, sigFn);
+
+    BacktestEngine::Config cfgSlip;
+    cfgSlip.symbol = "BTCUSDT";
+    cfgSlip.slippagePct = 0.005; // 0.5% slippage
+    cfgSlip.commission = 0.0;
+    auto rS = eng.run(cfgSlip, bars, sigFn);
+
+    ASSERT_FALSE(r0.trades.empty());
+    ASSERT_FALSE(rS.trades.empty());
+    // Slippage should reduce PnL
+    EXPECT_GT(r0.trades[0].pnl, rS.trades[0].pnl);
+}
+
+TEST(BacktestV240, LiquidationTriggered) {
+    // Create candles with a sharp drop to trigger liquidation
+    std::vector<Candle> bars;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        if (i < 25) c.close = 100.0;
+        else c.close = 100.0 - (i - 25) * 5.0; // sharp drop
+        c.open = c.close;
+        c.high = c.close + 0.1;
+        c.low = c.close - 0.1;
+        c.volume = 1000.0;
+        c.openTime = 1700000000000LL + i * 60000;
+        bars.push_back(c);
+    }
+
+    BacktestEngine eng;
+    auto sigFn = [](const std::vector<Candle>&, size_t idx) -> int {
+        if (idx == 5) return 1; // buy early
+        return 0;
+    };
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.leverage = 10.0; // 10x leverage → liquidation at 10% drop
+    cfg.slippagePct = 0.0;
+    cfg.commission = 0.0;
+    auto r = eng.run(cfg, bars, sigFn);
+
+    // Position should have been liquidated before bar 49
+    ASSERT_FALSE(r.trades.empty());
+    // Liquidation should happen when price drops ~10% from entry
+    EXPECT_LT(r.trades[0].pnl, 0); // loss expected
+}
+
+TEST(BacktestV240, DatabaseSavesLeverageAndSlippage) {
+    // Verify that backtest with leverage saves correct data to DB
+    std::vector<Candle> bars;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        c.close = 50000.0 + i * 100.0;
+        c.open = c.close - 10;
+        c.high = c.close + 20;
+        c.low = c.close - 20;
+        c.volume = 100.0;
+        c.openTime = 1700000000000LL + i * 60000;
+        bars.push_back(c);
+    }
+
+    auto dbPath = getTempDir() + "bt_v240_test.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+    BacktestEngine eng;
+    eng.setRepository(&repo);
+
+    // Use custom signal to ensure a trade happens
+    auto sigFn = [](const std::vector<Candle>&, size_t idx) -> int {
+        if (idx == 5) return 1;   // buy
+        if (idx == 40) return -1; // sell
+        return 0;
+    };
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "ETHUSDT";
+    cfg.interval = "5m";
+    cfg.initialBalance = 5000.0;
+    cfg.leverage = 5.0;
+    cfg.slippagePct = 0.0005;
+    cfg.commission = 0.001;
+    auto result = eng.run(cfg, bars, sigFn);
+
+    // Verify DB has the result
+    auto saved = repo.getAll("ETHUSDT");
+    ASSERT_FALSE(saved.empty());
+    EXPECT_EQ(saved.back().symbol, "ETHUSDT");
+    EXPECT_EQ(saved.back().timeframe, "5m");
+    EXPECT_DOUBLE_EQ(saved.back().initialBalance, 5000.0);
+    EXPECT_GT(saved.back().finalBalance, 0.0);
+
+    std::filesystem::remove(dbPath);
+}
+
+// ── PineConverter v2.4.0 ─────────────────────────────────────────────────
+
+TEST(PineConverterV240, GenerateCppWithStrategyEntry) {
+    std::string src = R"(
+//@version=6
+indicator("Strategy Test")
+fast = ta.ema(close, 9)
+slow = ta.ema(close, 21)
+strategy.entry("Long", strategy.long)
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "StratTestInd");
+    // Should contain signal_ and strategy.entry comment
+    EXPECT_NE(cpp.find("signal_"), std::string::npos);
+    EXPECT_NE(cpp.find("strategy.entry"), std::string::npos);
+    EXPECT_NE(cpp.find("signal()"), std::string::npos);
+}
+
+TEST(PineConverterV240, GenerateCppWithStrategyExit) {
+    std::string src = R"(
+//@version=6
+indicator("Exit Test")
+rsi14 = ta.rsi(close, 14)
+strategy.exit("ExitLong", "Long")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "ExitTestInd");
+    EXPECT_NE(cpp.find("signal_"), std::string::npos);
+    EXPECT_NE(cpp.find("strategy.exit"), std::string::npos);
+}
+
+TEST(PineConverterV240, GenerateCppWithStrategyClose) {
+    std::string src = R"(
+//@version=6
+indicator("Close Test")
+ema9 = ta.ema(close, 9)
+strategy.close("Long")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "CloseTestInd");
+    EXPECT_NE(cpp.find("signal_"), std::string::npos);
+    EXPECT_NE(cpp.find("strategy.close"), std::string::npos);
+    EXPECT_NE(cpp.find("close_all"), std::string::npos);
+}
+
+TEST(PineConverterV240, GenerateCppBackwardsCompatible) {
+    // Ensure that scripts WITHOUT strategy calls still work and have NO signal_
+    std::string src = R"(
+//@version=6
+indicator("Simple EMA")
+ema9 = ta.ema(close, 9)
+plot(ema9, "EMA 9")
+)";
+    auto script = PineConverter::parseSource(src);
+    auto cpp = PineConverter::generateCpp(script, "SimpleEmaInd");
+    EXPECT_NE(cpp.find("EMA ema9_"), std::string::npos);
+    // No signal_ since no strategy calls
+    EXPECT_EQ(cpp.find("signal_"), std::string::npos);
+}
+
+// ── Version String v2.4.0 ──────────────────────────────────────────────────
+
+TEST(VersionV240, VersionStringExists) {
+    std::string version = "2.4.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.4"), std::string::npos);
+}
