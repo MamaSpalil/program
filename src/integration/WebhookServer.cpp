@@ -2,6 +2,7 @@
 #include "../core/Logger.h"
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <openssl/crypto.h>
 
 namespace crypto {
 
@@ -30,6 +31,19 @@ bool WebhookServer::checkRateLimit(const std::string& ip) {
     std::lock_guard<std::mutex> lk(rateMutex_);
     auto now = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+
+    // Periodic cleanup: remove stale entries older than 1 hour every 100 requests
+    static int requestCount = 0;
+    if (++requestCount >= 100) {
+        requestCount = 0;
+        for (auto it = rateLimit_.begin(); it != rateLimit_.end(); ) {
+            if (now - it->second.second > 3600)
+                it = rateLimit_.erase(it);
+            else
+                ++it;
+        }
+    }
+
     auto& [count, windowStart] = rateLimit_[ip];
     if (now - windowStart > 60) {
         count = 0;
@@ -53,10 +67,12 @@ WebhookResponse WebhookServer::handleRequest(
         return res;
     }
 
-    // Secret validation
+    // Secret validation (constant-time comparison to prevent timing attacks)
     {
         std::lock_guard<std::mutex> lk(mutex_);
-        if (secret != secretKey_) {
+        bool match = (secret.size() == secretKey_.size()) &&
+                     (CRYPTO_memcmp(secret.data(), secretKey_.data(), secret.size()) == 0);
+        if (!match) {
             res.status = 401;
             res.body = "{\"error\":\"unauthorized\"}";
             Logger::get()->warn("[Webhook] Bad secret from {}", ip);

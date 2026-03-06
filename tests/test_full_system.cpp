@@ -1433,3 +1433,91 @@ TEST(VolumeDelta, ZeroVolumeNoDiv) {
     double norm = (maxDelta > 0) ? std::log1p(absDelta) / std::log1p(maxDelta) : 0.0;
     EXPECT_NEAR(norm, 0.0, 1e-9);
 }
+
+// ════════════════════════════════════════════════════════════════
+// БЛОК v1.7.3 — Тесты исправлений
+// ════════════════════════════════════════════════════════════════
+
+// TradeHistory winRate thread-safe (single lock)
+TEST(TradeHistoryV173, WinRateSingleLock) {
+    TradeHistory hist;
+    HistoricalTrade w; w.pnl = 50;
+    HistoricalTrade l; l.pnl = -25;
+    hist.addTrade(w);
+    hist.addTrade(l);
+    EXPECT_NEAR(hist.winRate(), 0.5, 0.001);
+}
+
+// profitFactor ignores breakeven trades (pnl == 0)
+TEST(TradeHistoryV173, ProfitFactorIgnoresBreakeven) {
+    TradeHistory hist;
+    HistoricalTrade w; w.pnl = 100;
+    HistoricalTrade be; be.pnl = 0;  // breakeven — should not count as loss
+    HistoricalTrade l; l.pnl = -50;
+    hist.addTrade(w);
+    hist.addTrade(be);
+    hist.addTrade(l);
+    // profitFactor = 100 / 50 = 2.0 (breakeven not counted)
+    EXPECT_NEAR(hist.profitFactor(), 2.0, 0.01);
+}
+
+// CSVExporter escapes fields with commas
+TEST(CSVExporterV173, EscapesCommasInFields) {
+    std::vector<HistoricalTrade> trades;
+    HistoricalTrade t;
+    t.id = "trade,with,commas";
+    t.symbol = "BTC-USDT";
+    t.side = "BUY";
+    t.type = "LIMIT";
+    t.qty = 1.0;
+    t.entryPrice = 50000;
+    t.exitPrice = 51000;
+    t.pnl = 1000;
+    t.commission = 10;
+    t.entryTime = 1700000000000LL;
+    t.exitTime = 1700003600000LL;
+    t.isPaper = true;
+    trades.push_back(t);
+
+    std::string path = "csv_escape_test.csv";
+    bool ok = CSVExporter::exportTrades(trades, path);
+    if (ok) {
+        std::ifstream f(path);
+        std::string header, line;
+        std::getline(f, header);
+        std::getline(f, line);
+        // Field with commas should be quoted
+        EXPECT_NE(line.find("\"trade,with,commas\""), std::string::npos);
+        f.close();
+        std::filesystem::remove(path);
+    }
+}
+
+// Webhook constant-time comparison
+TEST(WebhookV173, SecretComparisonWorks) {
+    WebhookServer server;
+    server.setSecret("correct_secret");
+    auto res = server.simulateRequest("correct_secret", "{\"action\":\"buy\",\"symbol\":\"BTCUSDT\"}", "1.2.3.4");
+    EXPECT_NE(res.status, 401);
+    auto res2 = server.simulateRequest("wrong_secret", "{\"action\":\"buy\",\"symbol\":\"BTCUSDT\"}", "1.2.3.5");
+    EXPECT_EQ(res2.status, 401);
+}
+
+// RiskManager trailingStop parameter
+TEST(RiskManagerV173, TrailingStopLong) {
+    RiskManager::Config cfg;
+    cfg.atrStopMultiplier = 2.0;
+    RiskManager rm(cfg, 10000.0);
+    double stop = rm.trailingStop(100.0, 120.0, 5.0, true);
+    // Long: max(entryPrice, highSince - mult*atr) = max(100, 120 - 10) = 110
+    EXPECT_NEAR(stop, 110.0, 0.01);
+}
+
+TEST(RiskManagerV173, TrailingStopShort) {
+    RiskManager::Config cfg;
+    cfg.atrStopMultiplier = 2.0;
+    RiskManager rm(cfg, 10000.0);
+    double stop = rm.trailingStop(100.0, 80.0, 5.0, false);
+    // Short: min(entryPrice, lowSince + mult*atr) = min(100, 80 + 10) = 90
+    EXPECT_NEAR(stop, 90.0, 0.01);
+}

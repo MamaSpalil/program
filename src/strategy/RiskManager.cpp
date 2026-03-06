@@ -38,18 +38,16 @@ bool RiskManager::canTrade() const {
     return true;
 }
 
-double RiskManager::trailingStop(double entryPrice, double highSince,
+double RiskManager::trailingStop(double entryPrice, double priceSinceEntry,
                                   double atr, bool isLong) const {
     if (isLong) {
         // Trail below the highest price since entry
         return std::max(entryPrice,
-                        highSince - cfg_.atrStopMultiplier * atr);
+                        priceSinceEntry - cfg_.atrStopMultiplier * atr);
     } else {
-        // Trail above the lowest price since entry (highSince = lowest low for shorts)
+        // Trail above the lowest price since entry
         return std::min(entryPrice,
-                        highSince + cfg_.atrStopMultiplier * atr);
-        // Note: For SHORT positions, highSince should be passed as the lowest
-        // price since entry. The stop is placed above that low by ATR*mult.
+                        priceSinceEntry + cfg_.atrStopMultiplier * atr);
     }
 }
 

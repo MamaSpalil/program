@@ -193,8 +193,8 @@ struct GuiConfig {
 
     // Layout proportions (height fraction of available space)
     float layoutLogPct{0.10f};
-    float layoutVdPct{0.13f};
-    float layoutIndPct{0.25f};
+    float layoutVdPct{0.15f};
+    float layoutIndPct{0.20f};
     bool  layoutLocked{false};  // when true, windows cannot be moved/resized
 };
 

@@ -33,6 +33,9 @@ void XGBoostModel::train(const std::vector<std::vector<double>>& X,
     XGDMatrixCreateFromMat(flat.data(), nRows, nCols, NAN, &dmat);
     XGDMatrixSetFloatInfo(dmat, "label", labels.data(), nRows);
 
+    // Free previous booster to avoid memory leak on re-training
+    if (booster_) { XGBoosterFree(booster_); booster_ = nullptr; }
+
     XGBoosterCreate(&dmat, 1, &booster_);
     XGBoosterSetParam(booster_, "max_depth", std::to_string(cfg_.maxDepth).c_str());
     XGBoosterSetParam(booster_, "eta", std::to_string(cfg_.eta).c_str());

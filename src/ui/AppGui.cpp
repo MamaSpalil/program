@@ -452,9 +452,27 @@ void AppGui::loadConfig(const std::string& path) {
     if (j.contains("layout")) {
         auto& ly = j["layout"];
         config_.layoutLogPct = ly.value("log_pct",  0.10f);
-        config_.layoutVdPct  = ly.value("vd_pct",   0.13f);
-        config_.layoutIndPct = ly.value("ind_pct",  0.25f);
+        config_.layoutVdPct  = ly.value("vd_pct",   0.15f);
+        config_.layoutIndPct = ly.value("ind_pct",  0.20f);
         config_.layoutLocked = ly.value("locked",   false);
+    }
+
+    if (j.contains("filters")) {
+        auto& f = j["filters"];
+        config_.filterMinVolume = f.value("min_volume", 0.0);
+        config_.filterMinPrice  = f.value("min_price",  0.0);
+        config_.filterMaxPrice  = f.value("max_price",  0.0);
+        config_.filterMinChange = f.value("min_change", -100.0);
+        config_.filterMaxChange = f.value("max_change",  100.0);
+    }
+
+    if (j.contains("indicators_enabled")) {
+        auto& ie = j["indicators_enabled"];
+        config_.indEmaEnabled  = ie.value("ema",  true);
+        config_.indRsiEnabled  = ie.value("rsi",  true);
+        config_.indAtrEnabled  = ie.value("atr",  true);
+        config_.indMacdEnabled = ie.value("macd", true);
+        config_.indBbEnabled   = ie.value("bb",   true);
     }
 
     state_.equity = config_.initialCapital;
@@ -520,6 +538,20 @@ nlohmann::json AppGui::configToJson() const {
         {"vd_pct",   config_.layoutVdPct},
         {"ind_pct",  config_.layoutIndPct},
         {"locked",   config_.layoutLocked}
+    };
+    j["filters"] = {
+        {"min_volume", config_.filterMinVolume},
+        {"min_price",  config_.filterMinPrice},
+        {"max_price",  config_.filterMaxPrice},
+        {"min_change", config_.filterMinChange},
+        {"max_change", config_.filterMaxChange}
+    };
+    j["indicators_enabled"] = {
+        {"ema",  config_.indEmaEnabled},
+        {"rsi",  config_.indRsiEnabled},
+        {"atr",  config_.indAtrEnabled},
+        {"macd", config_.indMacdEnabled},
+        {"bb",   config_.indBbEnabled}
     };
     return j;
 }

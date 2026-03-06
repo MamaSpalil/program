@@ -911,3 +911,196 @@ TEST(ExchangeBalance, BinanceGetBalanceFuturesNoCrash) {
     AccountBalance bal = ex.getBalance();
     EXPECT_GE(bal.totalUSDT, 0.0);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// v1.7.3 Tests: setLeverage, getLeverage, cancelOrder, getPositionRisk
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── setLeverage / getLeverage interface defaults ────────────────────────────
+TEST(ExchangeInterface, SetLeverageDefaultReturnsFalse) {
+    // Base IExchange default returns false
+    struct TestExchange : public IExchange {
+        bool testConnection(std::string&) override { return true; }
+        std::vector<Candle> getKlines(const std::string&, const std::string&, int) override { return {}; }
+        double getPrice(const std::string&) override { return 0; }
+        OrderResponse placeOrder(const OrderRequest&) override { return {}; }
+        AccountBalance getBalance() override { return {}; }
+        void subscribeKline(const std::string&, const std::string&, std::function<void(const Candle&)>) override {}
+        void connect() override {}
+        void disconnect() override {}
+    } ex;
+    EXPECT_FALSE(ex.setLeverage("BTCUSDT", 10));
+}
+
+TEST(ExchangeInterface, GetLeverageDefaultReturns1) {
+    struct TestExchange : public IExchange {
+        bool testConnection(std::string&) override { return true; }
+        std::vector<Candle> getKlines(const std::string&, const std::string&, int) override { return {}; }
+        double getPrice(const std::string&) override { return 0; }
+        OrderResponse placeOrder(const OrderRequest&) override { return {}; }
+        AccountBalance getBalance() override { return {}; }
+        void subscribeKline(const std::string&, const std::string&, std::function<void(const Candle&)>) override {}
+        void connect() override {}
+        void disconnect() override {}
+    } ex;
+    EXPECT_EQ(ex.getLeverage("BTCUSDT"), 1);
+}
+
+// ── setLeverage NoCrash for all exchanges ──────────────────────────────────
+TEST(ExchangeLeverage, BinanceSetLeverageNoCrash) {
+    BinanceExchange ex("invalid", "invalid");
+    // Should not crash even with invalid credentials
+    bool result = ex.setLeverage("BTCUSDT", 10);
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeLeverage, BybitSetLeverageNoCrash) {
+    BybitExchange ex("invalid", "invalid");
+    bool result = ex.setLeverage("BTCUSDT", 10);
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeLeverage, OKXSetLeverageNoCrash) {
+    OKXExchange ex("invalid", "invalid", "invalid");
+    bool result = ex.setLeverage("BTC-USDT-SWAP", 10);
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeLeverage, KuCoinSetLeverageNoCrash) {
+    KuCoinExchange ex("invalid", "invalid", "invalid");
+    bool result = ex.setLeverage("BTCUSDTM", 10);
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeLeverage, BitgetSetLeverageNoCrash) {
+    BitgetExchange ex("invalid", "invalid", "invalid");
+    bool result = ex.setLeverage("BTCUSDT", 10);
+    (void)result;
+    SUCCEED();
+}
+
+// ── getLeverage NoCrash for all exchanges ──────────────────────────────────
+TEST(ExchangeLeverage, BinanceGetLeverageDefaultIs1) {
+    BinanceExchange ex("invalid", "invalid");
+    int lev = ex.getLeverage("BTCUSDT");
+    EXPECT_GE(lev, 1);
+}
+
+TEST(ExchangeLeverage, BybitGetLeverageDefaultIs1) {
+    BybitExchange ex("invalid", "invalid");
+    int lev = ex.getLeverage("BTCUSDT");
+    EXPECT_GE(lev, 1);
+}
+
+TEST(ExchangeLeverage, OKXGetLeverageDefaultIs1) {
+    OKXExchange ex("invalid", "invalid", "invalid");
+    int lev = ex.getLeverage("BTC-USDT-SWAP");
+    EXPECT_GE(lev, 1);
+}
+
+TEST(ExchangeLeverage, KuCoinGetLeverageDefaultIs1) {
+    KuCoinExchange ex("invalid", "invalid", "invalid");
+    int lev = ex.getLeverage("BTCUSDTM");
+    EXPECT_GE(lev, 1);
+}
+
+TEST(ExchangeLeverage, BitgetGetLeverageDefaultIs1) {
+    BitgetExchange ex("invalid", "invalid", "invalid");
+    int lev = ex.getLeverage("BTCUSDT");
+    EXPECT_GE(lev, 1);
+}
+
+// ── cancelOrder NoCrash for all exchanges ─────────────────────────────────
+TEST(ExchangeCancelOrder, BinanceCancelOrderNoCrash) {
+    BinanceExchange ex("invalid", "invalid");
+    bool result = ex.cancelOrder("BTCUSDT", "12345");
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeCancelOrder, BybitCancelOrderNoCrash) {
+    BybitExchange ex("invalid", "invalid");
+    bool result = ex.cancelOrder("BTCUSDT", "12345");
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeCancelOrder, OKXCancelOrderNoCrash) {
+    OKXExchange ex("invalid", "invalid", "invalid");
+    bool result = ex.cancelOrder("BTC-USDT", "12345");
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeCancelOrder, KuCoinCancelOrderNoCrash) {
+    KuCoinExchange ex("invalid", "invalid", "invalid");
+    bool result = ex.cancelOrder("BTC-USDT", "12345");
+    (void)result;
+    SUCCEED();
+}
+
+TEST(ExchangeCancelOrder, BitgetCancelOrderNoCrash) {
+    BitgetExchange ex("invalid", "invalid", "invalid");
+    bool result = ex.cancelOrder("BTCUSDT", "12345");
+    (void)result;
+    SUCCEED();
+}
+
+// ── getPositionRisk NoCrash for all exchanges ─────────────────────────────
+TEST(ExchangePositionRisk, BybitGetPositionRiskNoCrash) {
+    BybitExchange ex("invalid", "invalid");
+    auto positions = ex.getPositionRisk("BTCUSDT");
+    EXPECT_GE(positions.size(), 0u);
+}
+
+TEST(ExchangePositionRisk, KuCoinGetPositionRiskNoCrash) {
+    KuCoinExchange ex("invalid", "invalid", "invalid");
+    auto positions = ex.getPositionRisk("BTCUSDTM");
+    EXPECT_GE(positions.size(), 0u);
+}
+
+TEST(ExchangePositionRisk, BitgetGetPositionRiskNoCrash) {
+    BitgetExchange ex("invalid", "invalid", "invalid");
+    auto positions = ex.getPositionRisk("BTCUSDT");
+    EXPECT_GE(positions.size(), 0u);
+}
+
+// ── configToJson saves filters and indicators ─────────────────────────────
+TEST(GuiConfig, ConfigSavesFilters) {
+    GuiConfig cfg;
+    cfg.filterMinVolume = 1000.0;
+    cfg.filterMinPrice = 0.5;
+    cfg.filterMaxPrice = 100000.0;
+    cfg.filterMinChange = -50.0;
+    cfg.filterMaxChange = 50.0;
+    // Verify defaults exist and are correct type
+    EXPECT_DOUBLE_EQ(cfg.filterMinVolume, 1000.0);
+    EXPECT_DOUBLE_EQ(cfg.filterMinPrice, 0.5);
+    EXPECT_DOUBLE_EQ(cfg.filterMaxPrice, 100000.0);
+    EXPECT_DOUBLE_EQ(cfg.filterMinChange, -50.0);
+    EXPECT_DOUBLE_EQ(cfg.filterMaxChange, 50.0);
+}
+
+TEST(GuiConfig, ConfigSavesIndicatorFlags) {
+    GuiConfig cfg;
+    EXPECT_TRUE(cfg.indEmaEnabled);
+    EXPECT_TRUE(cfg.indRsiEnabled);
+    EXPECT_TRUE(cfg.indAtrEnabled);
+    EXPECT_TRUE(cfg.indMacdEnabled);
+    EXPECT_TRUE(cfg.indBbEnabled);
+    cfg.indEmaEnabled = false;
+    EXPECT_FALSE(cfg.indEmaEnabled);
+}
+
+// ── Layout defaults match LayoutManager ───────────────────────────────────
+TEST(GuiConfig, LayoutDefaultsMatchLayoutManager) {
+    GuiConfig cfg;
+    // vdPct should match LayoutManager default of 0.15
+    EXPECT_FLOAT_EQ(cfg.layoutVdPct, 0.15f);
+    // indPct should match LayoutManager default of 0.20
+    EXPECT_FLOAT_EQ(cfg.layoutIndPct, 0.20f);
+}

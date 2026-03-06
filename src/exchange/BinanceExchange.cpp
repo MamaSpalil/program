@@ -777,4 +777,74 @@ FuturesBalanceInfo BinanceExchange::getFuturesBalance() {
 #endif
 }
 
+bool BinanceExchange::cancelOrder(const std::string& symbol, const std::string& orderId) {
+#ifndef USE_CURL
+    (void)symbol; (void)orderId;
+    return false;
+#else
+    try {
+        std::string path;
+        if (marketType_ == "futures")
+            path = "/fapi/v1/order";
+        else
+            path = "/api/v3/order";
+
+        std::ostringstream body;
+        body << "symbol=" << symbol << "&orderId=" << orderId;
+        auto resp = httpPost(path, body.str());
+        auto j = nlohmann::json::parse(resp);
+        if (j.contains("code")) {
+            Logger::get()->warn("[Binance] cancelOrder error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[Binance] cancelOrder success: {} {}", symbol, orderId);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] cancelOrder failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+bool BinanceExchange::setLeverage(const std::string& symbol, int leverage) {
+#ifndef USE_CURL
+    (void)symbol; (void)leverage;
+    return false;
+#else
+    try {
+        std::ostringstream body;
+        body << "symbol=" << symbol << "&leverage=" << leverage;
+        auto resp = httpPost("/fapi/v1/leverage", body.str());
+        auto j = nlohmann::json::parse(resp);
+        if (j.contains("code") && j["code"].get<int>() != 200) {
+            Logger::get()->warn("[Binance] setLeverage error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[Binance] setLeverage: {} = {}x", symbol, leverage);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Binance] setLeverage failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+int BinanceExchange::getLeverage(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return 1;
+#else
+    try {
+        auto positions = getPositionRisk(symbol);
+        for (auto& p : positions) {
+            if (p.symbol == symbol && p.leverage > 0)
+                return static_cast<int>(p.leverage);
+        }
+        return 1;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
 } // namespace crypto

@@ -487,4 +487,106 @@ OrderBook BitgetExchange::getOrderBook(const std::string& symbol, int depth) {
     return ob;
 }
 
+std::vector<PositionInfo> BitgetExchange::getPositionRisk(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        rateLimit();
+        std::string path = "/api/v2/mix/position/all-position?productType=USDT-FUTURES";
+        if (!symbol.empty()) path += "&symbol=" + symbol;
+        auto resp = httpGet(path);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<PositionInfo> result;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& p : j["data"]) {
+                PositionInfo info;
+                info.symbol           = p.value("symbol", "");
+                info.positionAmt      = std::stod(p.value("total", "0"));
+                info.entryPrice       = std::stod(p.value("openPriceAvg", "0"));
+                info.unrealizedProfit = std::stod(p.value("unrealizedPL", "0"));
+                info.marginType       = p.value("marginMode", "");
+                info.leverage         = std::stod(p.value("leverage", "1"));
+                result.push_back(std::move(info));
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] getPositionRisk failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+bool BitgetExchange::cancelOrder(const std::string& symbol, const std::string& orderId) {
+#ifndef USE_CURL
+    (void)symbol; (void)orderId;
+    return false;
+#else
+    try {
+        rateLimit();
+        nlohmann::json body;
+        body["symbol"]  = symbol;
+        body["orderId"] = orderId;
+        auto resp = httpPost("/api/v2/spot/trade/cancel-order", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("code", "") != "00000") {
+            Logger::get()->warn("[Bitget] cancelOrder error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[Bitget] cancelOrder success: {} {}", symbol, orderId);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] cancelOrder failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+bool BitgetExchange::setLeverage(const std::string& symbol, int leverage) {
+#ifndef USE_CURL
+    (void)symbol; (void)leverage;
+    return false;
+#else
+    try {
+        rateLimit();
+        nlohmann::json body;
+        body["symbol"]      = symbol;
+        body["productType"] = "USDT-FUTURES";
+        body["marginCoin"]  = "USDT";
+        body["leverage"]    = std::to_string(leverage);
+        auto resp = httpPost("/api/v2/mix/account/set-leverage", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("code", "") != "00000") {
+            Logger::get()->warn("[Bitget] setLeverage error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[Bitget] setLeverage: {} = {}x", symbol, leverage);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bitget] setLeverage failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+int BitgetExchange::getLeverage(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return 1;
+#else
+    try {
+        auto positions = getPositionRisk(symbol);
+        for (auto& p : positions) {
+            if (p.symbol == symbol && p.leverage > 0)
+                return static_cast<int>(p.leverage);
+        }
+        return 1;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
 } // namespace crypto

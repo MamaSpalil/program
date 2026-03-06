@@ -427,4 +427,109 @@ OrderBook BybitExchange::getOrderBook(const std::string& symbol, int depth) {
     return ob;
 }
 
+std::vector<PositionInfo> BybitExchange::getPositionRisk(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        rateLimit();
+        std::string path = "/v5/position/list?category=linear";
+        if (!symbol.empty()) path += "&symbol=" + symbol;
+        auto resp = httpGet(path);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<PositionInfo> result;
+        if (j.contains("result") && j["result"].contains("list") && j["result"]["list"].is_array()) {
+            for (auto& p : j["result"]["list"]) {
+                PositionInfo info;
+                info.symbol           = p.value("symbol", "");
+                info.positionAmt      = std::stod(p.value("size", "0"));
+                info.entryPrice       = std::stod(p.value("avgPrice", "0"));
+                info.unrealizedProfit = std::stod(p.value("unrealisedPnl", "0"));
+                info.realizedProfit   = std::stod(p.value("cumRealisedPnl", "0"));
+                info.marginType       = p.value("tradeMode", "");
+                info.leverage         = std::stod(p.value("leverage", "1"));
+                result.push_back(std::move(info));
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] getPositionRisk failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+bool BybitExchange::cancelOrder(const std::string& symbol, const std::string& orderId) {
+#ifndef USE_CURL
+    (void)symbol; (void)orderId;
+    return false;
+#else
+    try {
+        rateLimit();
+        nlohmann::json body;
+        body["category"] = "spot";
+        body["symbol"]   = symbol;
+        body["orderId"]  = orderId;
+        auto resp = httpPost("/v5/order/cancel", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("retCode", -1) != 0) {
+            Logger::get()->warn("[Bybit] cancelOrder error: {}", j.value("retMsg", ""));
+            return false;
+        }
+        Logger::get()->info("[Bybit] cancelOrder success: {} {}", symbol, orderId);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] cancelOrder failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+bool BybitExchange::setLeverage(const std::string& symbol, int leverage) {
+#ifndef USE_CURL
+    (void)symbol; (void)leverage;
+    return false;
+#else
+    try {
+        rateLimit();
+        nlohmann::json body;
+        body["category"]     = "linear";
+        body["symbol"]       = symbol;
+        body["buyLeverage"]  = std::to_string(leverage);
+        body["sellLeverage"] = std::to_string(leverage);
+        auto resp = httpPost("/v5/position/set-leverage", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        int code = j.value("retCode", -1);
+        if (code != 0 && code != 110043) { // 110043 = leverage not modified
+            Logger::get()->warn("[Bybit] setLeverage error: {}", j.value("retMsg", ""));
+            return false;
+        }
+        Logger::get()->info("[Bybit] setLeverage: {} = {}x", symbol, leverage);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] setLeverage failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+int BybitExchange::getLeverage(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return 1;
+#else
+    try {
+        auto positions = getPositionRisk(symbol);
+        for (auto& p : positions) {
+            if (p.symbol == symbol && p.leverage > 0)
+                return static_cast<int>(p.leverage);
+        }
+        return 1;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
 } // namespace crypto

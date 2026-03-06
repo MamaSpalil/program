@@ -489,4 +489,103 @@ OrderBook KuCoinExchange::getOrderBook(const std::string& symbol, int depth) {
     return ob;
 }
 
+std::vector<PositionInfo> KuCoinExchange::getPositionRisk(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return {};
+#else
+    try {
+        rateLimit();
+        std::string path = "/api/v1/positions";
+        if (!symbol.empty()) path += "?symbol=" + symbol;
+        auto resp = httpGet(path);
+        auto j = nlohmann::json::parse(resp);
+        std::vector<PositionInfo> result;
+        if (j.contains("data") && j["data"].is_array()) {
+            for (auto& p : j["data"]) {
+                PositionInfo info;
+                info.symbol           = p.value("symbol", "");
+                info.positionAmt      = std::stod(p.value("currentQty", "0"));
+                info.entryPrice       = std::stod(p.value("avgEntryPrice", "0"));
+                info.unrealizedProfit = std::stod(p.value("unrealisedPnl", "0"));
+                info.realizedProfit   = std::stod(p.value("realisedGrossPnl", "0"));
+                info.marginType       = p.value("crossMode", "");
+                info.leverage         = std::stod(p.value("realLeverage", "1"));
+                result.push_back(std::move(info));
+            }
+        }
+        return result;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] getPositionRisk failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
+bool KuCoinExchange::cancelOrder(const std::string& symbol, const std::string& orderId) {
+#ifndef USE_CURL
+    (void)symbol; (void)orderId;
+    return false;
+#else
+    try {
+        rateLimit();
+        (void)symbol;  // KuCoin cancel uses orderId in the URL
+        auto resp = httpPost("/api/v1/orders/" + orderId, "");
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("code", "") != "200000") {
+            Logger::get()->warn("[KuCoin] cancelOrder error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[KuCoin] cancelOrder success: {}", orderId);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] cancelOrder failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+bool KuCoinExchange::setLeverage(const std::string& symbol, int leverage) {
+#ifndef USE_CURL
+    (void)symbol; (void)leverage;
+    return false;
+#else
+    try {
+        rateLimit();
+        nlohmann::json body;
+        body["symbol"]   = symbol;
+        body["leverage"] = std::to_string(leverage);
+        auto resp = httpPost("/api/v2/changeLeverage", body.dump());
+        auto j = nlohmann::json::parse(resp);
+        if (j.value("code", "") != "200000") {
+            Logger::get()->warn("[KuCoin] setLeverage error: {}", j.value("msg", ""));
+            return false;
+        }
+        Logger::get()->info("[KuCoin] setLeverage: {} = {}x", symbol, leverage);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] setLeverage failed: {}", e.what());
+        return false;
+    }
+#endif
+}
+
+int KuCoinExchange::getLeverage(const std::string& symbol) {
+#ifndef USE_CURL
+    (void)symbol;
+    return 1;
+#else
+    try {
+        auto positions = getPositionRisk(symbol);
+        for (auto& p : positions) {
+            if (p.symbol == symbol && p.leverage > 0)
+                return static_cast<int>(p.leverage);
+        }
+        return 1;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
 } // namespace crypto
