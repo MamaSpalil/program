@@ -125,12 +125,12 @@ TEST(LayoutManager, WindowsDoNotOverlap) {
     // Left column: Pair List above Volume Delta
     EXPECT_LT(pl.pos.y + pl.size.y, vd.pos.y + 1);
 
-    // Center column: Market Data above Indicators
-    EXPECT_LT(md.pos.y + md.size.y, ind.pos.y + 1);
+    // Center column (v2.7.0): Indicators above Market Data
+    EXPECT_LT(ind.pos.y + ind.size.y, md.pos.y + 1);
 
-    // Logs is at bottom, below the center column
+    // Logs is at bottom of center column, below Market Data
     auto log = mgr.get("Logs");
-    EXPECT_GT(log.pos.y, ind.pos.y);
+    EXPECT_GT(log.pos.y, md.pos.y);
 
     // Pair List / VD is left of center column
     EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 1);
@@ -192,8 +192,8 @@ TEST(LayoutManager, WindowsAreFullWidth) {
     EXPECT_FLOAT_EQ(vd.size.x, pl.size.x);
     EXPECT_FLOAT_EQ(vd.size.x, 200.0f);
 
-    // Logs and Main Toolbar are full screen width
-    EXPECT_GT(log.size.x, 1900.0f);
+    // v2.7.0: Logs is center column width (same as Market Data)
+    EXPECT_FLOAT_EQ(log.size.x, md.size.x);
     EXPECT_GT(tb.size.x, 1900.0f);
 
     // Center column width = screenW - pairListW(200) - userPanelW(290) - 2px gaps

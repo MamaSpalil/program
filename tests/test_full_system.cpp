@@ -2325,9 +2325,9 @@ TEST(LayoutV200, MarketDataStartsAtTopOfCenter) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto md = mgr.get("Market Data");
-    auto fb = mgr.get("Filters Bar");
-    // Market Data starts right after Filters Bar (no VD above it)
-    EXPECT_NEAR(md.pos.y, fb.pos.y + fb.size.y, 1.0f);
+    auto ind = mgr.get("Indicators");
+    // v2.7.0: Indicators is at top of center, Market Data starts after Indicators
+    EXPECT_NEAR(md.pos.y, ind.pos.y + ind.size.y, 1.0f);
 }
 
 TEST(LayoutV200, CenterColumnOnlyMarketDataAndIndicators) {
@@ -2517,7 +2517,9 @@ TEST(LayoutV210, LogsHeightUsesPercentage) {
     mgr.setLogPct(0.15f);
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
-    float expectedH = std::floor(1080.0f * 0.15f);
+    // v2.7.0: Logs height based on content height (Hvp - toolbar - filters)
+    float Hcontent = 1080.0f - 32.0f - 28.0f;
+    float expectedH = std::floor(Hcontent * 0.15f);
     EXPECT_FLOAT_EQ(log.size.y, expectedH);
 }
 
@@ -2534,8 +2536,9 @@ TEST(LayoutV210, LogsHeightDefault10Percent) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
-    // Default logPct = 0.10, so 1080 * 0.10 = 108
-    EXPECT_FLOAT_EQ(log.size.y, std::floor(1080.0f * 0.10f));
+    // v2.7.0: Default logPct = 0.10, based on content height
+    float Hcontent = 1080.0f - 32.0f - 28.0f;
+    EXPECT_FLOAT_EQ(log.size.y, std::floor(Hcontent * 0.10f));
 }
 
 TEST(LayoutV210, MarketDataGetsEnoughSpace) {
@@ -2565,10 +2568,9 @@ TEST(LayoutV210, WindowsNoOverlapAfterLogPctChange) {
     auto md  = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
     auto log = mgr.get("Logs");
-    // Indicators bottom ≤ Logs top
-    EXPECT_LE(ind.pos.y + ind.size.y, log.pos.y + 0.5f);
-    // Market Data bottom ≤ Indicators top (or equal if Indicators starts at MD bottom)
-    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f);
+    // v2.7.0: Indicators top → Market Data → Logs bottom
+    EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + 0.5f);
+    EXPECT_LE(md.pos.y + md.size.y, log.pos.y + 0.5f);
 }
 
 // ── TelegramBot v2.1.0: Command callbacks ───────────────────────────────────
@@ -2963,9 +2965,11 @@ TEST(LayoutV220, AllWindowsStrictlyOrdered) {
     auto up = mgr.get("User Panel");
     auto logs = mgr.get("Logs");
 
-    // Toolbar → Filters → Content → Logs (vertical order)
+    // Toolbar → Filters → Content (vertical order)
     EXPECT_LE(toolbar.pos.y + toolbar.size.y, filters.pos.y + 1.0f);
-    EXPECT_LE(filters.pos.y + filters.size.y, md.pos.y + 1.0f);
+    EXPECT_LE(filters.pos.y + filters.size.y, ind.pos.y + 1.0f);
+    // v2.7.0: center column = Indicators → Market Data → Logs
+    EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + 1.0f);
     EXPECT_LE(md.pos.y + md.size.y, logs.pos.y + 1.0f);
 
     // Pair List (left) → Market Data (center) → User Panel (right)
@@ -2976,9 +2980,9 @@ TEST(LayoutV220, AllWindowsStrictlyOrdered) {
     EXPECT_NEAR(vd.pos.y, pl.pos.y + pl.size.y, 1.0f);
     EXPECT_NEAR(vd.pos.x, pl.pos.x, 1.0f);
 
-    // Indicators below Market Data
-    EXPECT_NEAR(ind.pos.y, md.pos.y + md.size.y, 1.0f);
-    EXPECT_NEAR(ind.pos.x, md.pos.x, 1.0f);
+    // v2.7.0: Market Data below Indicators
+    EXPECT_NEAR(md.pos.y, ind.pos.y + ind.size.y, 1.0f);
+    EXPECT_NEAR(md.pos.x, ind.pos.x, 1.0f);
 }
 
 TEST(LayoutV220, WindowsDontTouchEachOther) {
@@ -3614,8 +3618,8 @@ TEST(LayoutResetV250, IndicatorsBelowMarketData) {
                     true, true, true, true, true);
     auto ind = mgr.get("Indicators");
     auto md = mgr.get("Market Data");
-    // Indicators should be below Market Data
-    EXPECT_GE(ind.pos.y, md.pos.y + md.size.y - kLayoutTolerance);
+    // v2.7.0: Indicators is ABOVE Market Data
+    EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, LogsBelowIndicators) {
@@ -3623,9 +3627,9 @@ TEST(LayoutResetV250, LogsBelowIndicators) {
     mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
                     true, true, true, true, true);
     auto logs = mgr.get("Logs");
-    auto ind = mgr.get("Indicators");
-    // Logs should be below Indicators
-    EXPECT_GE(logs.pos.y, ind.pos.y + ind.size.y - kLayoutTolerance);
+    auto md = mgr.get("Market Data");
+    // v2.7.0: Logs should be below Market Data (not Indicators)
+    EXPECT_GE(logs.pos.y, md.pos.y + md.size.y - kLayoutTolerance);
 }
 
 TEST(LayoutResetV250, MarketDataCentered) {
@@ -3658,8 +3662,8 @@ TEST(LayoutResetV250, NoWindowOverlap) {
 
     // Vertical left: PairList -> VolumeDelta
     EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + kLayoutTolerance);
-    // Vertical center: MarketData -> Indicators
-    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + kLayoutTolerance);
+    // Vertical center (v2.7.0): Indicators -> MarketData
+    EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + kLayoutTolerance);
 }
 
 // ── Config: layout visibility flags persistence ─────────────────────────────
@@ -3740,9 +3744,9 @@ TEST(LayoutV260, VerticalGapBetweenMarketDataAndIndicators) {
     mgr.recalculate(1920, 1080);
     auto md = mgr.get("Market Data");
     auto ind = mgr.get("Indicators");
-    // Indicators Y should be at least 1px below Market Data bottom
-    float mdBottom = md.pos.y + md.size.y;
-    EXPECT_GE(ind.pos.y, mdBottom + 0.5f);
+    // v2.7.0: Indicators is ABOVE Market Data, gap between them
+    float indBottom = ind.pos.y + ind.size.y;
+    EXPECT_GE(md.pos.y, indBottom + 0.5f);
 }
 
 TEST(LayoutV260, VerticalGapBetweenPairListAndVolumeDelta) {
