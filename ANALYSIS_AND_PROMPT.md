@@ -31,7 +31,7 @@
 | 2 | Exchange | OKXExchange.cpp:225-273 | placeOrder() — заглушка | ✅ Done |
 | 3 | Exchange | KuCoinExchange.cpp:207-258 | placeOrder() — заглушка | ✅ Done |
 | 4 | Exchange | BitgetExchange.cpp:214-260 | placeOrder() — заглушка | ✅ Done |
-| 5 | Exchange | KuCoinExchange.cpp:179-188 | Kline high/low перепутаны (данные OHLC невалидны) | ✅ Done — Код корректен: KuCoin API формат [time, open, close, high, low, volume] подтверждён |
+| 5 | Exchange | KuCoinExchange.cpp:179-188 | Kline high/low перепутаны (данные OHLC невалидны) | ✅ Done — Ложное срабатывание: KuCoin API формат [time, open, close, high, low, volume] подтверждён, код корректен |
 | 6 | Exchange | Bybit/OKX/KuCoin/Bitget subscribeKline() | symbol и interval игнорируются — подписка не работает | ✅ Done |
 | 7 | Trading | PaperTrading.cpp:124 | Двойной подсчёт equity (posValue += qty * entryPrice + pnl) | ✅ Done — Исправлено: qty * currentPrice |
 | 8 | Backtest | BacktestEngine.cpp:108 | Некорректный расчёт equity при SHORT позициях | ✅ Done — Исправлено: posQty * (2*entryPrice - price) |
@@ -628,7 +628,7 @@ else totalLosses += std::abs(t.pnl); // pnl==0 → 0 добавляется (м�
 
 | Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых проблем |
 |-----------|--------------|--------------|-----------|---------------|
-| Биржи | 14 | 8 | 4 | 4 (leverage, cancelOrder, getPositionRisk, getFuturesBalance) |
+| Биржи | 14 | 8 | 4 | 4 (setLeverage+getLeverage, cancelOrder, getPositionRisk×3, getFuturesBalance×4) |
 | Торговые модули | 10 | 5 | 4 | 0 |
 | ML/AI | 18 | 4 | 12 | 0 |
 | UI/Настройки | 8 | 0 | 8 | 0 |

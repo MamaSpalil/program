@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✅ **placeOrder() для KuCoin** — полная реализация: POST `/api/v1/orders`, clientOid, подпись (KuCoinExchange.cpp:207-258)
 - ✅ **placeOrder() для Bitget** — полная реализация: POST `/api/v2/spot/trade/place-order`, JSON body (BitgetExchange.cpp:214-260)
 - ✅ **subscribeKline() для всех 4 бирж** — полная реализация с корректными подписками: Bybit (`kline.{interval}.{symbol}`), OKX (`candle{interval}`), KuCoin (`/market/candles:{symbol}_{interval}`), Bitget (`candle{interval}`)
-- ✅ **KuCoin getKlines()** — формат [time, open, close, high, low, volume] подтверждён через официальную документацию KuCoin API; текущий код корректен (k[1]=open, k[2]=close, k[3]=high, k[4]=low)
+- ✅ **KuCoin getKlines()** — формат [time, open, close, high, low, volume] подтверждён через официальную документацию KuCoin API; текущий код корректен (k[1]=open, k[2]=close, k[3]=high, k[4]=low). Ранее ошибочно классифицировано как баг (ложное срабатывание).
 
 **Торговые модули (5 исправлений подтверждены):**
 - ✅ **PaperTrading equity** — исправлен: `posValue += p.quantity * p.currentPrice` (PaperTrading.cpp:124)
