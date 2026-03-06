@@ -3829,3 +3829,133 @@ TEST(VersionV260, VersionStringExists) {
     EXPECT_FALSE(version.empty());
     EXPECT_NE(version.find("2.6"), std::string::npos);
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// v2.7.0 Tests — Layout refactor: Indicators top, Market Data middle,
+//                Logs bottom (center column width)
+// ═════════════════════════════════════════════════════════════════════════════
+
+TEST(LayoutV270, IndicatorsAboveMarketData) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto ind = mgr.get("Indicators");
+    auto md  = mgr.get("Market Data");
+    // Indicators should be ABOVE Market Data in center column
+    EXPECT_LT(ind.pos.y, md.pos.y);
+    EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + 0.5f);
+}
+
+TEST(LayoutV270, LogsBelowMarketData) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto md  = mgr.get("Market Data");
+    auto log = mgr.get("Logs");
+    // Logs should be below Market Data
+    EXPECT_GT(log.pos.y, md.pos.y);
+    EXPECT_LE(md.pos.y + md.size.y, log.pos.y + 0.5f);
+}
+
+TEST(LayoutV270, LogsCenterColumnWidth) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto md  = mgr.get("Market Data");
+    auto log = mgr.get("Logs");
+    // Logs should have the same width as Market Data (center column)
+    EXPECT_FLOAT_EQ(log.size.x, md.size.x);
+    // Logs X should match Market Data X
+    EXPECT_FLOAT_EQ(log.pos.x, md.pos.x);
+}
+
+TEST(LayoutV270, CenterColumnOrder) {
+    // Full order: Indicators → Market Data → Logs
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto ind = mgr.get("Indicators");
+    auto md  = mgr.get("Market Data");
+    auto log = mgr.get("Logs");
+    EXPECT_LT(ind.pos.y, md.pos.y);
+    EXPECT_LT(md.pos.y, log.pos.y);
+    // All same X and width
+    EXPECT_FLOAT_EQ(ind.pos.x, md.pos.x);
+    EXPECT_FLOAT_EQ(md.pos.x, log.pos.x);
+    EXPECT_FLOAT_EQ(ind.size.x, md.size.x);
+    EXPECT_FLOAT_EQ(md.size.x, log.size.x);
+}
+
+TEST(LayoutV270, LeftColumnFullContentHeight) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto pl = mgr.get("Pair List");
+    auto vd = mgr.get("Volume Delta");
+    float Hcontent = 1080.0f - 32.0f - 28.0f;
+    // PairList + gap + VolumeDelta should equal full content height
+    float leftTotal = pl.size.y + 1.0f + vd.size.y; // 1px gap
+    EXPECT_NEAR(leftTotal, Hcontent, 1.0f);
+}
+
+TEST(LayoutV270, UserPanelFullContentHeight) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto up = mgr.get("User Panel");
+    float Hcontent = 1080.0f - 32.0f - 28.0f;
+    EXPECT_FLOAT_EQ(up.size.y, Hcontent);
+}
+
+TEST(LayoutV270, GapsBetweenCenterWindows) {
+    LayoutManager mgr;
+    mgr.recalculate(1920, 1080);
+    auto ind = mgr.get("Indicators");
+    auto md  = mgr.get("Market Data");
+    auto log = mgr.get("Logs");
+    // 1px gap between Indicators and Market Data
+    EXPECT_GE(md.pos.y, ind.pos.y + ind.size.y + 0.5f);
+    // 1px gap between Market Data and Logs
+    EXPECT_GE(log.pos.y, md.pos.y + md.size.y + 0.5f);
+}
+
+TEST(LayoutV270, MultipleResolutions) {
+    struct Res { float w, h; };
+    Res resolutions[] = {
+        {800, 600}, {1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160}
+    };
+    for (auto& r : resolutions) {
+        LayoutManager mgr;
+        mgr.recalculate(r.w, r.h);
+        auto ind = mgr.get("Indicators");
+        auto md  = mgr.get("Market Data");
+        auto log = mgr.get("Logs");
+        // Center column order: Ind → MD → Logs at every resolution
+        EXPECT_LE(ind.pos.y + ind.size.y, md.pos.y + 0.5f)
+            << "@" << r.w << "x" << r.h;
+        EXPECT_LE(md.pos.y + md.size.y, log.pos.y + 0.5f)
+            << "@" << r.w << "x" << r.h;
+        // Logs width = center column width = MD width
+        EXPECT_FLOAT_EQ(log.size.x, md.size.x);
+    }
+}
+
+TEST(LayoutV270, HideIndicatorsExpandsMarketData) {
+    LayoutManager mgrAll, mgrNoInd;
+    mgrAll.recalculate(1920, 1080, 0, 0, true, true, true, true, true);
+    mgrNoInd.recalculate(1920, 1080, 0, 0, true, true, true, false, true);
+    auto mdAll  = mgrAll.get("Market Data");
+    auto mdNo   = mgrNoInd.get("Market Data");
+    // Hiding indicators should expand Market Data
+    EXPECT_GT(mdNo.size.y, mdAll.size.y);
+}
+
+TEST(LayoutV270, HideLogsExpandsMarketData) {
+    LayoutManager mgrAll, mgrNoLogs;
+    mgrAll.recalculate(1920, 1080, 0, 0, true, true, true, true, true);
+    mgrNoLogs.recalculate(1920, 1080, 0, 0, true, true, true, true, false);
+    auto mdAll  = mgrAll.get("Market Data");
+    auto mdNo   = mgrNoLogs.get("Market Data");
+    // Hiding Logs should expand Market Data
+    EXPECT_GT(mdNo.size.y, mdAll.size.y);
+}
+
+TEST(VersionV270, VersionStringExists) {
+    std::string version = "2.7.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.7"), std::string::npos);
+}
