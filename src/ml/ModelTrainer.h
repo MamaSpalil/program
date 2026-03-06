@@ -30,6 +30,9 @@ public:
     bool shouldRetrain() const;
     void retrain();
 
+    /// Get last retrain time (epoch seconds); 0 if never retrained
+    int64_t getLastRetrainTime() const { return lastRetrainTime_; }
+
 private:
     LSTMModel& lstm_;
     XGBoostModel& xgb_;

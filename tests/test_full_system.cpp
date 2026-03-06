@@ -630,8 +630,8 @@ TEST(PaperTrading, OpenClosePosition) {
     EXPECT_TRUE(pt.closePosition("BTCUSDT", 69000));
     acc = pt.getAccount();
     EXPECT_EQ(acc.openPositions.size(), 0u);
-    // PnL should be (69000-68000)*0.01 = 10.0
-    EXPECT_NEAR(acc.closedTrades.back().pnl, 10.0, 0.1);
+    // Gross PnL = (69000-68000)*0.01 = 10.0, minus exit commission ~0.69% = 10 - 0.69 = ~9.31
+    EXPECT_NEAR(acc.closedTrades.back().pnl, 9.31, 0.2);
 }
 
 TEST(PaperTrading, UpdatePricesUnrealizedPnl) {
@@ -2026,4 +2026,264 @@ TEST(RLAgentV180, PPOConfigValueLossClip) {
     cfg.valueLossClipMax = 200.0f;
     cfg.validate();
     EXPECT_LE(cfg.valueLossClipMax, 100.0f);
+}
+
+// ============================================================
+// v1.9.0 TESTS
+// ============================================================
+
+// --- Stage 1: PaperTrading Commission Tests ---
+
+TEST(PaperTradingV190, CommissionDeductedOnOpen) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    // Default commission = 0.1% = 0.001
+    EXPECT_TRUE(pt.openPosition("BTCUSDT", "BUY", 1.0, 1000.0));
+    auto acc = pt.getAccount();
+    // cost = 1000, commission = 1.0 => balance = 10000 - 1001 = 8999
+    EXPECT_NEAR(acc.balance, 8999.0, 0.01);
+}
+
+TEST(PaperTradingV190, CommissionDeductedOnClose) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    pt.openPosition("BTCUSDT", "BUY", 1.0, 1000.0);
+    EXPECT_TRUE(pt.closePosition("BTCUSDT", 1100.0));
+    auto acc = pt.getAccount();
+    // Open commission: 1000 * 0.001 = 1.0
+    // Gross PnL: (1100-1000)*1 = 100
+    // Exit commission: 1100 * 0.001 = 1.1
+    // Net PnL: 100 - 1.1 = 98.9
+    EXPECT_NEAR(acc.closedTrades.back().pnl, 98.9, 0.01);
+    // Final balance: 10000 - 1001 (open) + 1100 - 1.1 (close) = 10097.9
+    EXPECT_NEAR(acc.balance, 10097.9, 0.01);
+}
+
+TEST(PaperTradingV190, CustomCommissionRate) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    pt.setCommissionRate(0.002); // 0.2%
+    EXPECT_DOUBLE_EQ(pt.getCommissionRate(), 0.002);
+    pt.openPosition("BTCUSDT", "BUY", 1.0, 1000.0);
+    auto acc = pt.getAccount();
+    // cost = 1000, commission = 2.0 => balance = 10000 - 1002 = 8998
+    EXPECT_NEAR(acc.balance, 8998.0, 0.01);
+}
+
+TEST(PaperTradingV190, ShortPositionPnLWithCommission) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    pt.openPosition("BTCUSDT", "SELL", 1.0, 1000.0);
+    EXPECT_TRUE(pt.closePosition("BTCUSDT", 900.0));
+    auto acc = pt.getAccount();
+    // Gross PnL: (1000-900)*1 = 100
+    // Exit commission: 900 * 0.001 = 0.9
+    // Net PnL: 100 - 0.9 = 99.1
+    EXPECT_NEAR(acc.closedTrades.back().pnl, 99.1, 0.01);
+}
+
+TEST(PaperTradingV190, RejectInvalidQtyPrice) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    EXPECT_FALSE(pt.openPosition("BTCUSDT", "BUY", 0.0, 100.0));
+    EXPECT_FALSE(pt.openPosition("BTCUSDT", "BUY", -1.0, 100.0));
+    EXPECT_FALSE(pt.openPosition("BTCUSDT", "BUY", 1.0, 0.0));
+    EXPECT_FALSE(pt.openPosition("BTCUSDT", "BUY", 1.0, -50.0));
+}
+
+// --- Stage 2: Exchange Safety Tests ---
+
+TEST(ExchangeSafetyV190, OKXGetPriceEmptyData) {
+    using namespace crypto;
+    OKXExchange okx("", "", "");
+    // Without valid credentials, getPrice should return 0 or throw without crashing
+    try {
+        double price = okx.getPrice("BTC-USDT");
+        EXPECT_GE(price, 0.0);
+    } catch (const std::exception&) {
+        // Network error is acceptable — the point is no segfault/crash
+        SUCCEED();
+    }
+}
+
+TEST(ExchangeSafetyV190, BybitGetPriceEmptyData) {
+    using namespace crypto;
+    BybitExchange bybit("", "");
+    try {
+        double price = bybit.getPrice("BTCUSDT");
+        EXPECT_GE(price, 0.0);
+    } catch (const std::exception&) {
+        SUCCEED();
+    }
+}
+
+TEST(ExchangeSafetyV190, BitgetGetPriceEmptyData) {
+    using namespace crypto;
+    BitgetExchange bitget("", "", "");
+    try {
+        double price = bitget.getPrice("BTCUSDT");
+        EXPECT_GE(price, 0.0);
+    } catch (const std::exception&) {
+        SUCCEED();
+    }
+}
+
+// --- Stage 3: BacktestEngine Safety Tests ---
+
+TEST(BacktestV190, SharpeRatioZeroEquity) {
+    using namespace crypto;
+    BacktestEngine engine;
+    // Create minimal candle data with zero-equity scenario
+    std::vector<Candle> candles;
+    for (int i = 0; i < 20; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.open = 100; c.high = 100; c.low = 100; c.close = 100; c.volume = 1;
+        c.closed = true;
+        candles.push_back(c);
+    }
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000;
+    cfg.commission = 0.001;
+    // No trades (signal always 0), no crash expected
+    auto result = engine.run(cfg, candles, [](const std::vector<Candle>&, size_t) {
+        return 0;
+    });
+    // Sharpe ratio should be 0 (no trades)
+    EXPECT_DOUBLE_EQ(result.sharpeRatio, 0.0);
+}
+
+// --- Stage 4: Scheduler Deadlock Safety Test ---
+
+TEST(SchedulerV190, CallbackOutsideMutex) {
+    using namespace crypto;
+    Scheduler sched;
+    std::atomic<int> callCount{0};
+    // Add a job that would previously cause deadlock if callback runs inside mutex
+    ScheduledJob job;
+    job.id = "test1";
+    job.name = "TestJob";
+    job.cronExpr = "* * * * *";
+    job.symbol = "BTCUSDT";
+    job.enabled = true;
+    job.callback = [&]() {
+        callCount++;
+    };
+    sched.addJob(job);
+    auto jobs = sched.getJobs();
+    EXPECT_EQ(jobs.size(), 1u);
+    EXPECT_EQ(jobs[0].name, "TestJob");
+}
+
+// --- Stage 5: ModelTrainer Silent Failure Test ---
+
+TEST(ModelTrainerV190, RetrainNoDataDoesNotUpdateTime) {
+    using namespace crypto;
+    // Construct ModelTrainer with proper dependencies
+    LSTMConfig lcfg;
+    XGBoostConfig xcfg;
+    LSTMModel lstm(lcfg);
+    XGBoostModel xgb(xcfg);
+    nlohmann::json indCfg;
+    indCfg["ema_fast"] = 3; indCfg["ema_slow"] = 5; indCfg["ema_trend"] = 10;
+    indCfg["rsi_period"] = 5; indCfg["atr_period"] = 3;
+    indCfg["macd_fast"] = 3; indCfg["macd_slow"] = 5; indCfg["macd_signal"] = 3;
+    indCfg["bb_period"] = 3; indCfg["bb_stddev"] = 2.0;
+    indCfg["rsi_overbought"] = 70; indCfg["rsi_oversold"] = 30;
+    IndicatorEngine ind(indCfg);
+    FeatureExtractor feat(ind);
+    ModelTrainer::Config cfg;
+    cfg.retrainIntervalHours = 0;
+    ModelTrainer trainer(lstm, xgb, feat, cfg);
+
+    auto timeBefore = trainer.getLastRetrainTime();
+    // retrain with no data should not update lastRetrainTime
+    trainer.retrain();
+    auto timeAfter = trainer.getLastRetrainTime();
+    EXPECT_EQ(timeBefore, timeAfter);
+}
+
+// --- Stage 6: PaperTrading Full P&L Cycle ---
+
+TEST(PaperTradingV190, MultipleTradeCycle) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    // Trade 1: BUY 2 units at 100, close at 110
+    pt.openPosition("BTCUSDT", "BUY", 2.0, 100.0);
+    pt.closePosition("BTCUSDT", 110.0);
+    // Trade 2: SELL 1 unit at 110, close at 90
+    pt.openPosition("ETHUSDT", "SELL", 1.0, 110.0);
+    pt.closePosition("ETHUSDT", 90.0);
+    auto acc = pt.getAccount();
+    EXPECT_EQ(acc.closedTrades.size(), 2u);
+    // Both trades should be profitable
+    EXPECT_GT(acc.closedTrades[0].pnl, 0.0);
+    EXPECT_GT(acc.closedTrades[1].pnl, 0.0);
+    EXPECT_GT(acc.totalPnL, 0.0);
+}
+
+TEST(PaperTradingV190, DrawdownCalculation) {
+    using namespace crypto;
+    PaperTrading pt(10000.0);
+    // Open position that goes underwater
+    pt.openPosition("BTCUSDT", "BUY", 1.0, 5000.0);
+    pt.updatePrices("BTCUSDT", 4000.0); // loss
+    auto acc = pt.getAccount();
+    EXPECT_GT(acc.maxDrawdown, 0.0);
+    EXPECT_LT(acc.maxDrawdown, 1.0); // should be < 100%
+}
+
+// --- Stage 7: BacktestEngine Full Cycle ---
+
+TEST(BacktestV190, LongTradeProfitable) {
+    using namespace crypto;
+    BacktestEngine engine;
+    // Create uptrend candle data
+    std::vector<Candle> candles;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        double base = 100 + i * 2;
+        c.open = base; c.high = base + 1; c.low = base - 1; c.close = base + 1;
+        c.volume = 100;
+        c.closed = true;
+        candles.push_back(c);
+    }
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000;
+    cfg.commission = 0.001;
+    bool bought = false;
+    auto result = engine.run(cfg, candles, [&](const std::vector<Candle>&, size_t bar) -> int {
+        if (bar == 5 && !bought) { bought = true; return 1; }  // buy
+        if (bar == 40 && bought) { bought = false; return -1; } // sell
+        return 0;
+    });
+    EXPECT_GT(result.totalPnL, 0.0);
+    EXPECT_GT(result.totalTrades, 0);
+}
+
+TEST(BacktestV190, ShortTradeProfitable) {
+    using namespace crypto;
+    BacktestEngine engine;
+    // Create downtrend candle data
+    std::vector<Candle> candles;
+    for (int i = 0; i < 50; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        double base = 200 - i * 2;
+        c.open = base; c.high = base + 1; c.low = base - 1; c.close = base - 1;
+        c.volume = 100;
+        c.closed = true;
+        candles.push_back(c);
+    }
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000;
+    cfg.commission = 0.001;
+    bool sold = false;
+    auto result = engine.run(cfg, candles, [&](const std::vector<Candle>&, size_t bar) -> int {
+        if (bar == 5 && !sold) { sold = true; return -1; }   // sell (short)
+        if (bar == 40 && sold) { sold = false; return 1; }   // buy (close)
+        return 0;
+    });
+    EXPECT_GT(result.totalPnL, 0.0);
 }

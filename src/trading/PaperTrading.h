@@ -64,12 +64,17 @@ public:
 
     void setPositionRepository(PositionRepository* repo) { posRepo_ = repo; }
 
+    /// Commission rate (default 0.1% = taker fee)
+    void setCommissionRate(double rate) { commissionRate_ = rate; }
+    double getCommissionRate() const { return commissionRate_; }
+
 private:
     void recalcEquity();
 
     mutable std::mutex mutex_;
     PaperAccount account_;
     double initialBalance_;
+    double commissionRate_{0.001}; // 0.1% default taker fee
     PositionRepository* posRepo_{nullptr};
 };
 

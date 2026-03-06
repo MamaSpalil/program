@@ -19,8 +19,10 @@ bool PaperTrading::openPosition(const std::string& symbol, const std::string& si
                                  double qty, double price)
 {
     std::lock_guard<std::mutex> lk(mutex_);
+    if (qty <= 0.0 || price <= 0.0) return false;
     double cost = qty * price;
-    if (cost > account_.balance) return false;
+    double commission = cost * commissionRate_;
+    if (cost + commission > account_.balance) return false;
 
     PaperPosition pos;
     pos.symbol = symbol;
@@ -30,7 +32,7 @@ bool PaperTrading::openPosition(const std::string& symbol, const std::string& si
     pos.currentPrice = price;
     pos.pnl = 0.0;
     account_.openPositions.push_back(pos);
-    account_.balance -= cost;
+    account_.balance -= (cost + commission);
 
     // Persist to database
     if (posRepo_) {
@@ -66,6 +68,10 @@ bool PaperTrading::closePosition(const std::string& symbol, double currentPrice)
     else
         pnl = (it->entryPrice - currentPrice) * it->quantity;
 
+    double exitValue = it->quantity * currentPrice;
+    double commission = exitValue * commissionRate_;
+    pnl -= commission; // deduct exit commission
+
     PaperTrade trade;
     trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
@@ -77,7 +83,7 @@ bool PaperTrading::closePosition(const std::string& symbol, double currentPrice)
     trade.pnl = pnl;
     account_.closedTrades.push_back(trade);
 
-    account_.balance += it->quantity * currentPrice;
+    account_.balance += (exitValue - commission);
     account_.totalPnL += pnl;
     account_.openPositions.erase(it);
 

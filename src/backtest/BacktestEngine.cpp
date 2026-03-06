@@ -153,7 +153,9 @@ void BacktestEngine::computeMetrics(Result& result, double initialBalance) {
     if (result.equityCurve.size() > 1) {
         std::vector<double> returns;
         for (size_t i = 1; i < result.equityCurve.size(); ++i) {
-            double r = (result.equityCurve[i] - result.equityCurve[i-1]) / result.equityCurve[i-1];
+            double prev = result.equityCurve[i-1];
+            if (prev <= 0.0) continue; // skip if equity was zero/negative
+            double r = (result.equityCurve[i] - prev) / prev;
             returns.push_back(r);
         }
         double avgRet = std::accumulate(returns.begin(), returns.end(), 0.0) / returns.size();

@@ -115,6 +115,8 @@ void Scheduler::loop() {
 #else
         localtime_r(&t, &tm_now);
 #endif
+        // Collect callbacks to run outside the mutex to avoid deadlocks
+        std::vector<std::pair<std::string, std::function<void()>>> pendingCallbacks;
         {
             std::lock_guard<std::mutex> lk(mutex_);
             for (auto& job : jobs_) {
@@ -125,14 +127,18 @@ void Scheduler::loop() {
                     Logger::get()->info("[Scheduler] Triggered job: {} ({})",
                                         job.name, job.symbol);
                     if (job.callback) {
-                        try {
-                            job.callback();
-                        } catch (const std::exception& e) {
-                            Logger::get()->warn("[Scheduler] Job {} failed: {}",
-                                                job.name, e.what());
-                        }
+                        pendingCallbacks.emplace_back(job.name, job.callback);
                     }
                 }
+            }
+        }
+        // Execute callbacks outside the lock
+        for (auto& [name, cb] : pendingCallbacks) {
+            try {
+                cb();
+            } catch (const std::exception& e) {
+                Logger::get()->warn("[Scheduler] Job {} failed: {}",
+                                    name, e.what());
             }
         }
         // Sleep 30 seconds between checks

@@ -206,6 +206,10 @@ double BitgetExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[Bitget] getPrice API error: code={}", json["code"].get<std::string>());
         return 0.0;
     }
+    if (!json.contains("data") || !json["data"].is_array() || json["data"].empty()) {
+        Logger::get()->warn("[Bitget] getPrice: empty data array");
+        return 0.0;
+    }
     double price = safeStod(json["data"][0]["lastPr"].get<std::string>());
     Logger::get()->debug("[Bitget] getPrice result={}", price);
     return price;
