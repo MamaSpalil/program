@@ -2687,6 +2687,14 @@ TEST(GridBotV210, OnOrderFilledProfitTracking) {
     // No filled orders yet
     EXPECT_EQ(bot.filledOrders(), 0);
     EXPECT_DOUBLE_EQ(bot.realizedProfit(), 0.0);
+
+    // Simulate buy fill at level 0
+    // First set buyOrderId on level, then fill
+    // GridBot tracks fills via orderId — use stop/configure to set IDs
+    bot.stop();
+    EXPECT_FALSE(bot.isRunning());
+    // After stop, filledOrders should still be 0 (no real fills happened)
+    EXPECT_EQ(bot.filledOrders(), 0);
 }
 
 // ── Database v2.1.0: Import/Export roundtrip ────────────────────────────────

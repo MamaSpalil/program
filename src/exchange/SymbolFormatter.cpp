@@ -4,6 +4,11 @@
 
 namespace crypto {
 
+namespace {
+// Common quote assets for base/quote extraction (longest first for greedy match)
+static const std::string kQuoteAssets[] = {"USDT", "USDC", "BUSD", "BTC", "ETH"};
+} // namespace
+
 std::string SymbolFormatter::toUpper(const std::string& s) {
     std::string r = s;
     std::transform(r.begin(), r.end(), r.begin(),
@@ -82,9 +87,7 @@ std::string SymbolFormatter::toUnified(const std::string& exchange,
 std::string SymbolFormatter::extractBase(const std::string& unified) {
     std::string s = toUpper(unified);
 
-    // Check common quote suffixes (longest first)
-    static const std::string quotes[] = {"USDT", "USDC", "BUSD", "BTC", "ETH"};
-    for (const auto& q : quotes) {
+    for (const auto& q : kQuoteAssets) {
         if (s.size() > q.size() &&
             s.compare(s.size() - q.size(), q.size(), q) == 0) {
             return s.substr(0, s.size() - q.size());
@@ -96,8 +99,7 @@ std::string SymbolFormatter::extractBase(const std::string& unified) {
 std::string SymbolFormatter::extractQuote(const std::string& unified) {
     std::string s = toUpper(unified);
 
-    static const std::string quotes[] = {"USDT", "USDC", "BUSD", "BTC", "ETH"};
-    for (const auto& q : quotes) {
+    for (const auto& q : kQuoteAssets) {
         if (s.size() > q.size() &&
             s.compare(s.size() - q.size(), q.size(), q) == 0) {
             return q;
