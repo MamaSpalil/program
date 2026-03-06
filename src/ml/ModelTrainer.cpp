@@ -57,9 +57,7 @@ void ModelTrainer::retrain() {
     std::vector<int> y;
     buildDataset(X, y);
     if (X.empty()) {
-        Logger::get()->debug("ModelTrainer: not enough data to retrain");
-        lastRetrainTime_ = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+        Logger::get()->warn("ModelTrainer: not enough data to retrain, skipping");
         return;
     }
     Logger::get()->info("Retraining on {} samples", X.size());

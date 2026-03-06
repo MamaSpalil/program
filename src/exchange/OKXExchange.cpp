@@ -217,6 +217,10 @@ double OKXExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[OKX] getPrice API error: code={}", json["code"].get<std::string>());
         return 0.0;
     }
+    if (!json.contains("data") || !json["data"].is_array() || json["data"].empty()) {
+        Logger::get()->warn("[OKX] getPrice: empty data array");
+        return 0.0;
+    }
     double price = safeStod(json["data"][0]["last"].get<std::string>());
     Logger::get()->debug("[OKX] getPrice result={}", price);
     return price;
@@ -494,6 +498,10 @@ OrderBook OKXExchange::getOrderBook(const std::string& symbol, int depth) {
         auto json = nlohmann::json::parse(response);
         if (json["code"].get<std::string>() != "0") {
             Logger::get()->warn("[OKX] getOrderBook API error: code={}", json["code"].get<std::string>());
+            return ob;
+        }
+        if (!json.contains("data") || !json["data"].is_array() || json["data"].empty()) {
+            Logger::get()->warn("[OKX] getOrderBook: empty data array");
             return ob;
         }
         auto& data = json["data"][0];

@@ -108,7 +108,8 @@ TEST(PaperTrading, OpenPosition) {
     EXPECT_TRUE(ok);
     auto acc = pt.getAccount();
     EXPECT_EQ(acc.openPositions.size(), 1u);
-    EXPECT_DOUBLE_EQ(acc.balance, 9900.0);
+    // balance = 10000 - 100 (cost) - 0.1 (0.1% commission) = 9899.9
+    EXPECT_NEAR(acc.balance, 9899.9, 0.01);
 }
 
 TEST(PaperTrading, OpenPositionInsufficientBalance) {

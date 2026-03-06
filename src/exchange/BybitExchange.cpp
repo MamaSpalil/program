@@ -140,6 +140,11 @@ double BybitExchange::getPrice(const std::string& symbol) {
         Logger::get()->warn("[Bybit] getPrice API error: retCode={}", json["retCode"].get<int>());
         return 0.0;
     }
+    if (!json.contains("result") || !json["result"].contains("list") ||
+        !json["result"]["list"].is_array() || json["result"]["list"].empty()) {
+        Logger::get()->warn("[Bybit] getPrice: empty result list");
+        return 0.0;
+    }
     double price = safeStod(json["result"]["list"][0]["lastPrice"].get<std::string>());
     Logger::get()->debug("[Bybit] getPrice result={}", price);
     return price;
