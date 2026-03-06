@@ -348,6 +348,7 @@ AccountBalance OKXExchange::getBalance() {
                         bal.availableUSDT = safeStod(d.value("availBal", "0"));
                     }
                     if (ccy == "BTC") {
+                        // cashBal = total balance (available + frozen), unlike availBal
                         bal.btcBalance = safeStod(d.value("cashBal", "0"));
                     }
                 }
