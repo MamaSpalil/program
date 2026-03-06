@@ -5,6 +5,65 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: Визуал окон программы — Исправлено расположение окон (ГЛАВНОЕ)
+- **AppGui.h GuiConfig** — `layoutLocked` по умолчанию изменён с `false` на `true`. Ранее окна при запуске использовали `lockWindowOnce()` (ImGuiCond_FirstUseEver), что позволяло imgui.ini перезаписывать корректные позиции из LayoutManager. Теперь окна ВСЕГДА принудительно размещаются по расчёту LayoutManager (ImGuiCond_Always).
+- **AppGui.cpp loadConfig()** — значение по умолчанию для `locked` в секции layout изменено с `false` на `true` для согласованности с новым поведением.
+- **AppGui.cpp drawSettingsPanel() "Reset Layout to Defaults"** — при сбросе layout теперь устанавливается `layoutLocked = true` (было `false`), чтобы после сброса окна оставались в корректных позициях.
+
+#### Этап 2: Промежутки между окнами — окна больше не касаются друг друга
+- **LayoutManager.cpp recalculate()** — добавлен параметр `gap = 1.0f` (1 пиксель) между соседними окнами:
+  - ✅ `gapLR` — горизонтальный зазор между левой колонкой (Pair List) и центральной колонкой (Market Data)
+  - ✅ `gapRC` — горизонтальный зазор между центральной колонкой и правой колонкой (User Panel)
+  - ✅ `gapLog` — вертикальный зазор над панелью Logs
+  - ✅ `gapVD` — вертикальный зазор между Pair List и Volume Delta
+  - ✅ `gapInd` — вертикальный зазор между Market Data и Indicators
+  - ✅ Зазоры автоматически учитываются в расчёте размеров (`Wcenter`, `Hcenter`, `Hmarket`, `HpairList`) и позиций всех окон
+  - ✅ При скрытии панелей (showPairList=false, showUserPanel=false и т.д.) соответствующие зазоры обнуляются
+
+### Added
+
+#### Этап 3: PineConverter — Поддержка DMI, highestbars, lowestbars, pivothigh, pivotlow
+- **PineConverter.cpp generateCpp()** — расширен C++ генератор для новых функций Pine Script v6:
+  - ✅ `ta.dmi(diLength, adxSmoothing)` → генерирует полный расчёт DMI: +DI, -DI, ADX с Smoothed Directional Movement и True Range. Генерирует private members `highs_`, `lows_` (deque).
+  - ✅ `ta.highestbars(source, length)` → генерирует расчёт количества баров до максимального значения (возвращает отрицательное смещение)
+  - ✅ `ta.lowestbars(source, length)` → генерирует расчёт количества баров до минимального значения
+  - ✅ `ta.pivothigh(source, leftbars, rightbars)` → генерирует определение точки поворота вверх (NaN если нет pivot)
+  - ✅ `ta.pivotlow(source, leftbars, rightbars)` → генерирует определение точки поворота вниз
+  - ✅ `isKnownVar()` обновлён для поддержки DMI переменных в plot resolution
+  - ✅ Обратная совместимость: существующие скрипты без новых функций работают без изменений
+
+#### Этап 4: PineConverter — Исправлен парсинг направления strategy.entry
+- **PineConverter.cpp** — стратегические вызовы `strategy.entry()` теперь парсят аргумент `direction` (второй параметр):
+  - ✅ Поддержка `strategy.long` и `strategy.short` как позиционных аргументов
+  - ✅ Поддержка named argument `direction=strategy.long`
+  - ✅ Fallback на эвристику по ID строке (`"Long"`, `"Buy"` → long) когда direction не указан
+  - ✅ Генератор C++ использует распознанное направление вместо только эвристики
+
+#### Этап 5: Версия приложения обновлена
+- **AppGui.cpp** — версия обновлена с "v2.5.0" на "v2.6.0" в welcome log, About menu и status bar.
+- **main.cpp** — версия обновлена с "v2.5.0" на "v2.6.0" в startup log.
+
+#### Этап 6: Тестирование v2.6.0 (10 новых тестов)
+- **test_full_system.cpp** — 10 новых тестов:
+  - `LayoutV260` (5): DefaultLayoutLockedIsTrue — проверка нового значения по умолчанию; WindowGapsBetweenColumns — горизонтальные зазоры; VerticalGapBetweenMarketDataAndIndicators — зазор MD/Ind; VerticalGapBetweenPairListAndVolumeDelta — зазор PL/VD; NoGapsWhenPanelsHidden — зазоры обнуляются при скрытии панелей
+  - `PineConverterV260` (4): DmiGeneratesCppCode — DMI генерация; HighestBarsGeneratesCppCode — highestbars; LowestBarsGeneratesCppCode — lowestbars; PivotHighGeneratesCppCode — pivothigh/pivotlow
+  - `VersionV260` (1): VersionStringExists — проверка наличия строки "2.6.0"
+- **Обновлены существующие тесты:**
+  - `LayoutManager.ThreeColumnLayout` — учтены 2px зазоры (1430 → 1428)
+  - `LayoutManager.VisibilityHidesWindow` — аналогичное обновление
+  - `LayoutManager.WindowsAreFullWidth` — аналогичное обновление
+  - `LayoutLockV220.DefaultLayoutLockedIsTrue` — переименован и обновлён (было DefaultLayoutLockedIsFalse)
+  - `LayoutStress.MarketDataWidthWminus490` — учтены зазоры (490 → 492)
+- **Итого тестов:** 599 (595 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.6.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.6.0: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v2.7.0.
+
 ## [2.5.0] - 2026-03-06
 
 ### Fixed
