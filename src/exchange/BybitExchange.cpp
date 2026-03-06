@@ -532,4 +532,46 @@ int BybitExchange::getLeverage(const std::string& symbol) {
 #endif
 }
 
+FuturesBalanceInfo BybitExchange::getFuturesBalance() {
+#ifndef USE_CURL
+    return {};
+#else
+    try {
+        rateLimit();
+        std::string path = "/v5/account/wallet-balance?accountType=CONTRACT";
+        auto resp = httpGet(path);
+        auto j = nlohmann::json::parse(resp);
+
+        if (j.value("retCode", -1) != 0) {
+            Logger::get()->warn("[Bybit] getFuturesBalance error: {}", j.value("retMsg", ""));
+            return {};
+        }
+
+        FuturesBalanceInfo info;
+        if (j.contains("result") && j["result"].contains("list") && j["result"]["list"].is_array()) {
+            for (auto& acct : j["result"]["list"]) {
+                info.totalWalletBalance    = safeStod(acct.value("totalWalletBalance", "0"));
+                info.totalUnrealizedProfit = safeStod(acct.value("totalPerpUPL", "0"));
+                info.totalMarginBalance    = safeStod(acct.value("totalMarginBalance", "0"));
+                if (acct.contains("coin") && acct["coin"].is_array()) {
+                    for (auto& c : acct["coin"]) {
+                        if (c.value("coin", "") == "USDT") {
+                            info.totalWalletBalance    = safeStod(c.value("walletBalance", "0"));
+                            info.totalUnrealizedProfit = safeStod(c.value("unrealisedPnl", "0"));
+                            info.totalMarginBalance    = safeStod(c.value("equity", "0"));
+                            break;
+                        }
+                    }
+                }
+                break; // first account
+            }
+        }
+        return info;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[Bybit] getFuturesBalance failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
 } // namespace crypto

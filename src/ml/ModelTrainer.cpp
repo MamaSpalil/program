@@ -13,7 +13,7 @@ ModelTrainer::ModelTrainer(LSTMModel& lstm, XGBoostModel& xgb,
 
 void ModelTrainer::addCandle(const Candle& c) {
     candleHistory_.push_back(c);
-    size_t maxCandles = cfg_.lookbackDays * 96UL;  // 96 × 15-min candles/day
+    size_t maxCandles = cfg_.lookbackDays * static_cast<size_t>(1440 / std::max(1, cfg_.timeframeMinutes));
     if (candleHistory_.size() > maxCandles) candleHistory_.pop_front();
 
     feat_.update(c);

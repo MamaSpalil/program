@@ -24,6 +24,7 @@ public:
         std::string interval;
         double      initialBalance{10000.0};
         double      commission{0.001};   // 0.1%
+        double      positionSizePct{0.95}; // fraction of balance to use for position (default 95%)
         std::string startDate;           // "2024-01-01" (informational)
         std::string endDate;             // "2024-12-31" (informational)
     };

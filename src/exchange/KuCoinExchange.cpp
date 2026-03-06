@@ -643,4 +643,34 @@ int KuCoinExchange::getLeverage(const std::string& symbol) {
 #endif
 }
 
+FuturesBalanceInfo KuCoinExchange::getFuturesBalance() {
+#ifndef USE_CURL
+    return {};
+#else
+    try {
+        rateLimit();
+        auto resp = httpGet("/api/v1/account-overview?currency=USDT", true);
+        auto j = nlohmann::json::parse(resp);
+
+        if (j.value("code", "") != "200000") {
+            Logger::get()->warn("[KuCoin] getFuturesBalance error: code={} msg={}",
+                                j.value("code", ""), j.value("msg", ""));
+            return {};
+        }
+
+        FuturesBalanceInfo info;
+        if (j.contains("data") && j["data"].is_object()) {
+            auto& d = j["data"];
+            info.totalWalletBalance    = safeStod(d.value("accountEquity", "0"));
+            info.totalUnrealizedProfit = safeStod(d.value("unrealisedPNL", "0"));
+            info.totalMarginBalance    = safeStod(d.value("marginBalance", "0"));
+        }
+        return info;
+    } catch (const std::exception& e) {
+        Logger::get()->warn("[KuCoin] getFuturesBalance failed: {}", e.what());
+        return {};
+    }
+#endif
+}
+
 } // namespace crypto

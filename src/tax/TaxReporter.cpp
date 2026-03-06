@@ -30,6 +30,7 @@ std::vector<TaxReporter::TaxEvent> TaxReporter::calculate(
         if (t.side == "BUY") {
             TaxLot lot;
             lot.qty = t.qty;
+            lot.unitCost = t.entryPrice;
             lot.costBasis = t.entryPrice * t.qty;
             lot.acquireTime = t.entryTime;
             lots[t.symbol].push_back(lot);
@@ -44,7 +45,7 @@ std::vector<TaxReporter::TaxEvent> TaxReporter::calculate(
                 ev.symbol    = t.symbol;
                 ev.qty       = used;
                 ev.proceeds  = used * t.exitPrice;
-                ev.costBasis = used * (lot.costBasis / lot.qty);
+                ev.costBasis = used * lot.unitCost; // use per-unit cost for precision
                 ev.gainLoss  = ev.proceeds - ev.costBasis;
                 ev.openTime  = lot.acquireTime;
                 ev.closeTime = t.exitTime;

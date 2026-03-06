@@ -20,6 +20,7 @@ public:
         int futureCandles{5};
         double returnThreshold{0.003};  // 0.3%
         int retrainIntervalHours{24};
+        int timeframeMinutes{15};       // candle interval in minutes (default 15m)
     };
 
     ModelTrainer(LSTMModel& lstm, XGBoostModel& xgb,

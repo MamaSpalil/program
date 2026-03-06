@@ -24,12 +24,20 @@ double SignalEnhancer::enhance(int indicatorSignal,
     auto pLstm = lstm_.ready()  ? lstm_.predict(features)  : std::vector<double>{0.333,0.334,0.333};
     auto pXgb  = xgb_.ready()   ? xgb_.predict(features)   : std::vector<double>{0.333,0.334,0.333};
 
-    // Weighted ensemble
+    // Weighted ensemble (read weights under lock)
+    double wInd, wLstm, wXgb;
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        wInd  = weightInd_;
+        wLstm = weightLstm_;
+        wXgb  = weightXgb_;
+    }
+
     std::vector<double> ensemble(3);
     for (int i = 0; i < 3; ++i) {
-        ensemble[i] = weightInd_  * pInd[i]
-                    + weightLstm_ * pLstm[i]
-                    + weightXgb_  * pXgb[i];
+        ensemble[i] = wInd   * pInd[i]
+                    + wLstm  * pLstm[i]
+                    + wXgb   * pXgb[i];
     }
 
     // Winning class
@@ -42,6 +50,7 @@ double SignalEnhancer::enhance(int indicatorSignal,
 }
 
 void SignalEnhancer::recordOutcome(int predicted, int actual) {
+    std::lock_guard<std::mutex> lock(mtx_);
     outcomes_.push_back({predicted, actual});
     if (static_cast<int>(outcomes_.size()) > cfg_.rollingWindow) {
         outcomes_.pop_front();
