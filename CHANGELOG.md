@@ -5,6 +5,16 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-03-06
+
+### Fixed
+#### Исправление ошибок компиляции Windows 10 Pro x64 (VS2019)
+- **CMakeLists.txt** — исправлена ошибка «Недопустимое число параметров» (`xcopy`) при копировании LibTorch DLL в каталог сборки. Команда `xcopy /Y /D` заменена на кроссплатформенный `cmake -E copy_if_different` с предварительным `file(GLOB *.dll)` на этапе configure. Путь к DLL теперь определяется динамически из переменной `Torch_DIR` вместо жёстко заданного `C:\libs\libtorch\lib`.
+- **src/ml/FeatureExtractor.cpp** — устранено предупреждение C4005 (переопределение макроса `_USE_MATH_DEFINES`). Макрос уже определяется глобально через `add_definitions(-D_USE_MATH_DEFINES)` в CMakeLists.txt; добавлена защита `#ifndef _USE_MATH_DEFINES` перед повторным `#define`.
+
+### Verified
+- **Compile_Error_06_03_2026** — полный анализ лога сборки (6262 строки). Идентифицировано: 1 критическая ошибка (xcopy POST_BUILD), 1 предупреждение проекта (C4005), прочие предупреждения — из заголовков LibTorch и стандартной библиотеки MSVC (C4244, C4267, C4324), не требующие исправления.
+
 ## [1.7.0] - 2026-03-05
 
 ### Added
