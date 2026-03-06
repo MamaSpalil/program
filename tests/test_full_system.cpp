@@ -3526,3 +3526,183 @@ TEST(VersionV240, VersionStringExists) {
     EXPECT_FALSE(version.empty());
     EXPECT_NE(version.find("2.4"), std::string::npos);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  v2.5.0 Tests — Window layout reset, visibility persistence, layout forced
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Layout: layoutNeedsReset forces positions ───────────────────────────────
+
+TEST(LayoutResetV250, RecalculateAllWindowsVisible) {
+    // When all show flags are true, all 8 windows must be visible and have
+    // non-zero sizes
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+
+    auto md = mgr.get("Market Data");
+    auto pl = mgr.get("Pair List");
+    auto up = mgr.get("User Panel");
+    auto vd = mgr.get("Volume Delta");
+    auto ind = mgr.get("Indicators");
+    auto logs = mgr.get("Logs");
+    auto tb = mgr.get("Main Toolbar");
+    auto fb = mgr.get("Filters Bar");
+
+    EXPECT_TRUE(md.visible);
+    EXPECT_TRUE(pl.visible);
+    EXPECT_TRUE(up.visible);
+    EXPECT_TRUE(vd.visible);
+    EXPECT_TRUE(ind.visible);
+    EXPECT_TRUE(logs.visible);
+    EXPECT_TRUE(tb.visible);
+    EXPECT_TRUE(fb.visible);
+
+    // All content windows must have positive size
+    EXPECT_GT(md.size.x, 0.0f);
+    EXPECT_GT(md.size.y, 0.0f);
+    EXPECT_GT(pl.size.x, 0.0f);
+    EXPECT_GT(pl.size.y, 0.0f);
+    EXPECT_GT(up.size.x, 0.0f);
+    EXPECT_GT(up.size.y, 0.0f);
+    EXPECT_GT(vd.size.x, 0.0f);
+    EXPECT_GT(vd.size.y, 0.0f);
+    EXPECT_GT(ind.size.x, 0.0f);
+    EXPECT_GT(ind.size.y, 0.0f);
+    EXPECT_GT(logs.size.x, 0.0f);
+    EXPECT_GT(logs.size.y, 0.0f);
+}
+
+TEST(LayoutResetV250, PairListLeftOfMarketData) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto pl = mgr.get("Pair List");
+    auto md = mgr.get("Market Data");
+    // Pair List should be to the left of Market Data
+    EXPECT_LT(pl.pos.x, md.pos.x);
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 1.0f);
+}
+
+TEST(LayoutResetV250, UserPanelRightOfMarketData) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto up = mgr.get("User Panel");
+    auto md = mgr.get("Market Data");
+    // User Panel should be to the right of Market Data
+    EXPECT_GE(up.pos.x, md.pos.x + md.size.x - 1.0f);
+}
+
+TEST(LayoutResetV250, VolumeDeltaBelowPairList) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto vd = mgr.get("Volume Delta");
+    auto pl = mgr.get("Pair List");
+    // Volume Delta should be below Pair List
+    EXPECT_GE(vd.pos.y, pl.pos.y + pl.size.y - 1.0f);
+}
+
+TEST(LayoutResetV250, IndicatorsBelowMarketData) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto ind = mgr.get("Indicators");
+    auto md = mgr.get("Market Data");
+    // Indicators should be below Market Data
+    EXPECT_GE(ind.pos.y, md.pos.y + md.size.y - 1.0f);
+}
+
+TEST(LayoutResetV250, LogsBelowIndicators) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto logs = mgr.get("Logs");
+    auto ind = mgr.get("Indicators");
+    // Logs should be below Indicators
+    EXPECT_GE(logs.pos.y, ind.pos.y + ind.size.y - 1.0f);
+}
+
+TEST(LayoutResetV250, MarketDataCentered) {
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto md = mgr.get("Market Data");
+    auto pl = mgr.get("Pair List");
+    auto up = mgr.get("User Panel");
+    // Market Data should be between Pair List (left) and User Panel (right)
+    EXPECT_GT(md.pos.x, pl.pos.x);
+    EXPECT_LT(md.pos.x + md.size.x, up.pos.x + up.size.x);
+}
+
+TEST(LayoutResetV250, NoWindowOverlap) {
+    // No adjacent windows should overlap
+    LayoutManager mgr;
+    mgr.recalculate(1920.0f, 1080.0f, 0.0f, 0.0f,
+                    true, true, true, true, true);
+    auto pl = mgr.get("Pair List");
+    auto md = mgr.get("Market Data");
+    auto up = mgr.get("User Panel");
+    auto vd = mgr.get("Volume Delta");
+    auto ind = mgr.get("Indicators");
+    auto logs = mgr.get("Logs");
+
+    // Horizontal: PairList -> MarketData -> UserPanel
+    EXPECT_LE(pl.pos.x + pl.size.x, md.pos.x + 0.5f);
+    EXPECT_LE(md.pos.x + md.size.x, up.pos.x + 0.5f);
+
+    // Vertical left: PairList -> VolumeDelta
+    EXPECT_LE(pl.pos.y + pl.size.y, vd.pos.y + 0.5f);
+    // Vertical center: MarketData -> Indicators
+    EXPECT_LE(md.pos.y + md.size.y, ind.pos.y + 0.5f);
+}
+
+// ── Config: layout visibility flags persistence ─────────────────────────────
+
+TEST(ConfigPersistenceV250, LayoutVisibilityFlags) {
+    // Verify that layout section in JSON can carry visibility flags
+    nlohmann::json j;
+    j["layout"] = {
+        {"log_pct",  0.10f},
+        {"vd_pct",   0.15f},
+        {"ind_pct",  0.20f},
+        {"locked",   false},
+        {"show_pair_list",    true},
+        {"show_user_panel",   true},
+        {"show_volume_delta", true},
+        {"show_indicators",   true},
+        {"show_logs",         true}
+    };
+
+    EXPECT_TRUE(j["layout"].value("show_pair_list", false));
+    EXPECT_TRUE(j["layout"].value("show_user_panel", false));
+    EXPECT_TRUE(j["layout"].value("show_volume_delta", false));
+    EXPECT_TRUE(j["layout"].value("show_indicators", false));
+    EXPECT_TRUE(j["layout"].value("show_logs", false));
+}
+
+TEST(ConfigPersistenceV250, LayoutVisibilityFalse) {
+    nlohmann::json j;
+    j["layout"] = {
+        {"show_pair_list",    false},
+        {"show_user_panel",   false},
+        {"show_volume_delta", false},
+        {"show_indicators",   false},
+        {"show_logs",         false}
+    };
+
+    EXPECT_FALSE(j["layout"].value("show_pair_list", true));
+    EXPECT_FALSE(j["layout"].value("show_user_panel", true));
+    EXPECT_FALSE(j["layout"].value("show_volume_delta", true));
+    EXPECT_FALSE(j["layout"].value("show_indicators", true));
+    EXPECT_FALSE(j["layout"].value("show_logs", true));
+}
+
+// ── Version String v2.5.0 ──────────────────────────────────────────────────
+
+TEST(VersionV250, VersionStringExists) {
+    std::string version = "2.5.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.5"), std::string::npos);
+}

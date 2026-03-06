@@ -519,7 +519,7 @@ int main(int argc, char* argv[]) {
             }).detach();
         });
 
-        gui->addLog("[Info] Crypto ML Trader v2.4.0 ready");
+        gui->addLog("[Info] Crypto ML Trader v2.5.0 ready");
         gui->addLog("[Info] Configure exchange settings and press Connect");
 
         // Run the GUI event loop (blocks until window close)

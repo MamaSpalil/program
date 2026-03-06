@@ -456,6 +456,11 @@ void AppGui::loadConfig(const std::string& path) {
         config_.layoutVdPct  = ly.value("vd_pct",   0.15f);
         config_.layoutIndPct = ly.value("ind_pct",  0.20f);
         config_.layoutLocked = ly.value("locked",   false);
+        showPairList_    = ly.value("show_pair_list",    true);
+        showUserPanel_   = ly.value("show_user_panel",   true);
+        showVolumeDelta_ = ly.value("show_volume_delta", true);
+        showIndicators_  = ly.value("show_indicators",   true);
+        showLogs_        = ly.value("show_logs",         true);
     }
 
     if (j.contains("filters")) {
@@ -544,7 +549,12 @@ nlohmann::json AppGui::configToJson() const {
         {"log_pct",  config_.layoutLogPct},
         {"vd_pct",   config_.layoutVdPct},
         {"ind_pct",  config_.layoutIndPct},
-        {"locked",   config_.layoutLocked}
+        {"locked",   config_.layoutLocked},
+        {"show_pair_list",    showPairList_},
+        {"show_user_panel",   showUserPanel_},
+        {"show_volume_delta", showVolumeDelta_},
+        {"show_indicators",   showIndicators_},
+        {"show_logs",         showLogs_}
     };
     j["filters"] = {
         {"min_volume", config_.filterMinVolume},
@@ -617,10 +627,8 @@ void AppGui::renderFrame() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // Full-screen dockable window (invisible — hosts menu bar only)
+    // Viewport dimensions for layout calculation
     ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->WorkPos);
-    ImGui::SetNextWindowSize(vp->WorkSize);
 
     // Sync layout proportions from config
     layoutMgr_.setLogPct(config_.layoutLogPct);
@@ -721,7 +729,7 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About")) {
-                addLog("[Info] Crypto ML Trader v2.4.0 — Algorithmic Trading System");
+                addLog("[Info] Crypto ML Trader v2.5.0 — Algorithmic Trading System");
             }
             ImGui::EndMenu();
         }
@@ -979,7 +987,7 @@ void AppGui::drawMarketDataWindow() {
 
     // ── Window: fixed position/size via LayoutManager ──
     auto layout = layoutMgr_.get("Market Data");
-    if (config_.layoutLocked)
+    if (config_.layoutLocked || layoutNeedsReset_)
         LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
     else
         LayoutManager::lockWindowOnce("Market Data", layout.pos, layout.size);
@@ -1640,7 +1648,7 @@ void AppGui::drawIndicatorsPanel() {
     }
 
     auto layout = layoutMgr_.get("Indicators");
-    if (config_.layoutLocked)
+    if (config_.layoutLocked || layoutNeedsReset_)
         LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
     else
         LayoutManager::lockWindowOnce("Indicators", layout.pos, layout.size);
@@ -2403,11 +2411,7 @@ void AppGui::drawSettingsPanel() {
             ImGui::Spacing();
             if (ImGui::Button("Apply Layout")) {
                 layoutNeedsReset_ = true;
-                // Save imgui.ini with updated window positions
-                ImGuiIO& io = ImGui::GetIO();
-                if (io.IniFilename)
-                    ImGui::SaveIniSettingsToDisk(io.IniFilename);
-                // Save config
+                // Save config (imgui.ini will auto-save after positions are applied)
                 saveConfigToFile(configPath_);
                 addLog("[Config] Layout applied and saved");
                 if (onSaveConfig_) onSaveConfig_(config_);
@@ -2419,9 +2423,12 @@ void AppGui::drawSettingsPanel() {
                 config_.layoutIndPct = 0.20f;
                 config_.layoutLocked = false;
                 layoutNeedsReset_ = true;
-                ImGuiIO& io = ImGui::GetIO();
-                if (io.IniFilename)
-                    ImGui::SaveIniSettingsToDisk(io.IniFilename);
+                // Reset visibility to defaults
+                showPairList_    = true;
+                showUserPanel_   = true;
+                showVolumeDelta_ = true;
+                showIndicators_  = true;
+                showLogs_        = true;
                 saveConfigToFile(configPath_);
                 addLog("[Config] Layout reset to defaults and saved");
                 if (onSaveConfig_) onSaveConfig_(config_);
@@ -2492,7 +2499,7 @@ void AppGui::drawLogPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawLogWindow() {
     auto layout = layoutMgr_.get("Logs");
-    if (config_.layoutLocked)
+    if (config_.layoutLocked || layoutNeedsReset_)
         LayoutManager::lockWindow("Logs", layout.pos, layout.size);
     else
         LayoutManager::lockWindowOnce("Logs", layout.pos, layout.size);
@@ -2582,7 +2589,7 @@ void AppGui::drawFilterPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
     auto layout = layoutMgr_.get("Volume Delta");
-    if (config_.layoutLocked)
+    if (config_.layoutLocked || layoutNeedsReset_)
         LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
     else
         LayoutManager::lockWindowOnce("Volume Delta", layout.pos, layout.size);
@@ -2817,7 +2824,7 @@ void AppGui::drawStatusBar() {
     ImGui::TextColored(statusColor, "%s", snap.statusMessage.c_str());
     ImGui::SameLine(ImGui::GetWindowWidth() - 200);
     ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.47f, 1.0f),
-                       "Crypto ML Trader v2.4.0");
+                       "Crypto ML Trader v2.5.0");
 }
 
 // ---------------------------------------------------------------------------
@@ -2825,7 +2832,7 @@ void AppGui::drawStatusBar() {
 // ---------------------------------------------------------------------------
 void AppGui::drawPairListPanel() {
     auto layout = layoutMgr_.get("Pair List");
-    if (config_.layoutLocked)
+    if (config_.layoutLocked || layoutNeedsReset_)
         LayoutManager::lockWindow("Pair List", layout.pos, layout.size);
     else
         LayoutManager::lockWindowOnce("Pair List", layout.pos, layout.size);
@@ -3066,7 +3073,7 @@ void AppGui::drawPairSelector() {
 // ---------------------------------------------------------------------------
 void AppGui::drawUserPanel() {
     auto layout = layoutMgr_.get("User Panel");
-    if (config_.layoutLocked)
+    if (config_.layoutLocked || layoutNeedsReset_)
         LayoutManager::lockWindow("User Panel", layout.pos, layout.size);
     else
         LayoutManager::lockWindowOnce("User Panel", layout.pos, layout.size);
