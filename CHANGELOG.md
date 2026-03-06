@@ -5,6 +5,53 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-03-06
+
+### Fixed
+
+#### Этап 1: UI — Layout Lock теперь функциональный
+- **AppGui.cpp** — 6 контентных окон (Market Data, Indicators, Logs, Volume Delta, Pair List, User Panel) теперь используют `lockWindow()` (фиксация позиции каждый кадр) **только** при `config_.layoutLocked == true`. При `layoutLocked == false` используется `lockWindowOnce()` (позиция задаётся один раз, далее окна свободно перемещаемы). Ранее все окна были жёстко зафиксированы вне зависимости от настройки "Lock Windows".
+- **AppGui.cpp** — Флаги окон (NoMove, NoResize) теперь также условны: при разблокированном layout используются только NoCollapse и NoBringToFrontOnFocus.
+- **Main Toolbar и Filters Bar** — всегда зафиксированы (фиксированная структура).
+
+#### Этап 2: Engine — SymbolFormatter интеграция
+- **Engine.h** — добавлен `#include "../exchange/SymbolFormatter.h"` и метод `getExchangeName()` → возвращает raw имя биржи (binance/bybit/okx/kucoin/bitget).
+- **Engine.cpp** — добавлено поле `exchangeNameQualified` (name_mode) для изоляции кеша свечей. Raw имя биржи хранится в `exchangeName`. Все вызовы CandleCache теперь используют `exchangeNameQualified` для корректной изоляции данных между режимами (paper/live).
+
+#### Этап 3: Версия приложения обновлена
+- **AppGui.cpp** — версия обновлена с "v1.0.0" на "v2.2.0" в трёх местах: About menu, status bar, welcome log.
+- **main.cpp** — версия обновлена с "v1.0.0" на "v2.2.0" в startup log.
+
+### Added
+
+#### Этап 4: TelegramBot — Интеграция в Engine через main.cpp
+- **main.cpp** — TelegramBot теперь инициализируется при запуске GUI:
+  - Читает конфигурацию из `config["telegram"]["token"]` и `config["telegram"]["chat_id"]`
+  - Автоматически регистрирует 4 реальных callback-команды:
+    - `/balance` → `engine->getFuturesBalance()` → totalWalletBalance, totalMarginBalance, totalUnrealizedProfit
+    - `/status` → текущее состояние: биржа, символ, интервал, режим, тип рынка
+    - `/positions` → `engine->getPositionRisk()` → символ, qty, entry, unrealized PnL
+    - `/pnl` → `engine->totalPnl()` + `engine->winRate()` → общий P&L и win rate
+  - Polling запускается при подключении, останавливается при отключении и при завершении программы
+  - Graceful fallback при отсутствии конфигурации (без token — бот не запускается)
+
+#### Этап 5: Database — Автосоздание директории при первом запуске
+- **main.cpp** (GUI и Console mode) — перед инициализацией TradingDatabase проверяется наличие директории конфигурации. Если директория не существует (первый запуск), она создаётся через `std::filesystem::create_directories()`. Ранее отсутствие директории приводило к ошибке SQLite при создании файла БД.
+
+#### Этап 6: Тестирование v2.2.0 (18 новых тестов)
+- **test_full_system.cpp** — 18 новых тестов:
+  - `LayoutLockV220` (3): LockedWindowsUseCorrectFlags — проверка NoMove+NoResize+NoCollapse, LockedScrollFlagsIncludeHScroll — проверка HorizontalScrollbar, DefaultLayoutLockedIsFalse — дефолт layoutLocked=false
+  - `SymbolFormatterV220` (5): EmptyInputsReturnEmpty — пустые base/quote → пустой результат, UnknownExchangeDefaultsBehavior — неизвестная биржа → concatenation, CaseInsensitiveExchange — нечувствительность к регистру, ExtractBaseBUSD — BUSD quote, ExtractBaseETHQuote — ETH quote
+  - `TelegramBotV220` (4): BalanceCallbackReturnsData, StatusCallbackReturnsData, PositionsCallbackReturnsData, PnlCallbackReturnsData — проверка реальных callback-ов через processCommand
+  - `DatabaseV220` (3): InitCreatesDbFileFromScratch — DB создаётся на пустом месте, DirectoryCreationForDb — автосоздание директории, RepeatedInitIdempotent — повторный init не ломает DB
+  - `LayoutV220` (2): AllWindowsStrictlyOrdered — полная проверка вертикального/горизонтального порядка окон, WindowsDontTouchEachOther — колонки не перекрываются
+  - `VersionV220` (1): VersionStringExists — проверка наличия строки "2.2.0"
+- **Итого тестов:** 555 (551 пройдено, 4 пропущено — LibTorch/XGBoost)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.2.0 со всеми исправлениями и новыми функциями.
+- **ANALYSIS_AND_PROMPT.md** — обновлён на основе v2.2.0: исправленные проблемы отмечены ✅ Done, обновлён промт для следующего этапа v2.3.0.
+
 ## [2.1.0] - 2026-03-06
 
 ### Fixed

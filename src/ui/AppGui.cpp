@@ -721,7 +721,7 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About")) {
-                addLog("[Info] Crypto ML Trader v1.0.0 — Algorithmic Trading System");
+                addLog("[Info] Crypto ML Trader v2.2.0 — Algorithmic Trading System");
             }
             ImGui::EndMenu();
         }
@@ -979,9 +979,12 @@ void AppGui::drawMarketDataWindow() {
 
     // ── Window: fixed position/size via LayoutManager ──
     auto layout = layoutMgr_.get("Market Data");
-    LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
+    if (config_.layoutLocked)
+        LayoutManager::lockWindow("Market Data", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Market Data", layout.pos, layout.size);
 
-    int mdFlags = LayoutManager::lockedFlags();
+    int mdFlags = config_.layoutLocked ? LayoutManager::lockedFlags() : (ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
     mdFlags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
     ImGui::Begin("Market Data", nullptr, mdFlags);
@@ -1637,9 +1640,13 @@ void AppGui::drawIndicatorsPanel() {
     }
 
     auto layout = layoutMgr_.get("Indicators");
-    LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
+    if (config_.layoutLocked)
+        LayoutManager::lockWindow("Indicators", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Indicators", layout.pos, layout.size);
 
-    int wflags = LayoutManager::lockedScrollFlags();
+    int wflags = config_.layoutLocked ? LayoutManager::lockedScrollFlags()
+                 : (ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_HorizontalScrollbar);
 
     if (!ImGui::Begin("Indicators", nullptr, wflags)) {
         ImGui::End();
@@ -2485,9 +2492,13 @@ void AppGui::drawLogPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawLogWindow() {
     auto layout = layoutMgr_.get("Logs");
-    LayoutManager::lockWindow("Logs", layout.pos, layout.size);
+    if (config_.layoutLocked)
+        LayoutManager::lockWindow("Logs", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Logs", layout.pos, layout.size);
 
-    int wflags = LayoutManager::lockedScrollFlags();
+    int wflags = config_.layoutLocked ? LayoutManager::lockedScrollFlags()
+                 : (ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_HorizontalScrollbar);
 
     if (!ImGui::Begin("Logs", nullptr, wflags)) {
         ImGui::End();
@@ -2571,9 +2582,13 @@ void AppGui::drawFilterPanel() {
 // ---------------------------------------------------------------------------
 void AppGui::drawVolumeDeltaPanel() {
     auto layout = layoutMgr_.get("Volume Delta");
-    LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
+    if (config_.layoutLocked)
+        LayoutManager::lockWindow("Volume Delta", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Volume Delta", layout.pos, layout.size);
 
-    int wflags = LayoutManager::lockedFlags();
+    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags()
+                 : (ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
     wflags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
     if (!ImGui::Begin("Volume Delta", nullptr, wflags)) {
@@ -2802,7 +2817,7 @@ void AppGui::drawStatusBar() {
     ImGui::TextColored(statusColor, "%s", snap.statusMessage.c_str());
     ImGui::SameLine(ImGui::GetWindowWidth() - 200);
     ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.47f, 1.0f),
-                       "Crypto ML Trader v1.0.0");
+                       "Crypto ML Trader v2.2.0");
 }
 
 // ---------------------------------------------------------------------------
@@ -2810,9 +2825,13 @@ void AppGui::drawStatusBar() {
 // ---------------------------------------------------------------------------
 void AppGui::drawPairListPanel() {
     auto layout = layoutMgr_.get("Pair List");
-    LayoutManager::lockWindow("Pair List", layout.pos, layout.size);
+    if (config_.layoutLocked)
+        LayoutManager::lockWindow("Pair List", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Pair List", layout.pos, layout.size);
 
-    int wflags = LayoutManager::lockedFlags();
+    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags()
+                 : (ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     if (!ImGui::Begin("Pair List", nullptr, wflags)) {
         ImGui::End();
@@ -3047,9 +3066,13 @@ void AppGui::drawPairSelector() {
 // ---------------------------------------------------------------------------
 void AppGui::drawUserPanel() {
     auto layout = layoutMgr_.get("User Panel");
-    LayoutManager::lockWindow("User Panel", layout.pos, layout.size);
+    if (config_.layoutLocked)
+        LayoutManager::lockWindow("User Panel", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("User Panel", layout.pos, layout.size);
 
-    int wflags = LayoutManager::lockedFlags();
+    int wflags = config_.layoutLocked ? LayoutManager::lockedFlags()
+                 : (ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     if (!ImGui::Begin("User Panel", &showUserPanel_, wflags)) {
         ImGui::End();
