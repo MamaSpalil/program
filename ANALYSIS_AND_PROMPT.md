@@ -1,10 +1,10 @@
 # 🔍 ПОЛНЫЙ АНАЛИЗ И ПРОМТ ДЛЯ ИСПРАВЛЕНИЯ ПРОГРАММЫ CryptoTrader (VT)
 
 > **Дата анализа:** 2026-03-06
-> **Версия:** 2.3.0
+> **Версия:** 2.4.0
 > **Платформа сборки:** Linux (GCC 13.3) + Windows 10 Pro x64 (VS2019)
-> **Результаты тестирования:** 568 тестов, 564 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
-> **Обновление v2.3.0:** BacktestEngine сохраняет все метаданные в БД (symbol, timeframe, initialBalance, finalBalance, strategy, commission, dateFrom, dateTo). PineConverter C++ генератор поддерживает SMA, MACD, BB, crossover, crossunder, highest, lowest, stdev, change, VWAP. Version v2.3.0. 13 новых тестов. Все 88 проблем исправлены.
+> **Результаты тестирования:** 578 тестов, 574 пройдено, 4 пропущено (LibTorch/XGBoost отсутствуют)
+> **Обновление v2.4.0:** BacktestEngine поддерживает leverage (1-125x) и slippage (configurable %). PineConverter C++ генератор поддерживает strategy.entry/exit/close. Исправлен парсер strategy.* вызовов. Version v2.4.0. 10 новых тестов. Все 89 проблем исправлены.
 
 ---
 
@@ -108,6 +108,10 @@
 | **v2.3.0** | Backtest | BacktestEngine.cpp:172-203 | Метаданные (symbol, timeframe, balance, strategy) не сохраняются в БД | ✅ Done (v2.3.0) — все поля Config теперь сохраняются |
 | **v2.3.0** | Indicators | PineConverter.cpp generateCpp() | C++ генератор поддерживает только EMA/RSI/ATR | ✅ Done (v2.3.0) — добавлены SMA/MACD/BB/crossover/crossunder/highest/lowest/stdev/change/VWAP |
 | **v2.3.0** | UI | AppGui.cpp/main.cpp | Версия "v2.2.0" вместо "v2.3.0" | ✅ Done (v2.3.0) — обновлено |
+| **v2.4.0** | Backtest | BacktestEngine.h/cpp | Нет поддержки leverage и slippage в бэктесте | ✅ Done (v2.4.0) — leverage (1-125x), slippage (configurable %), liquidation check |
+| **v2.4.0** | Indicators | PineConverter.cpp parseStmt() | strategy.entry/exit/close ошибочно парсятся как strategy() declaration | ✅ Done (v2.4.0) — проверка LPAREN после strategy/indicator, rewind при DOT |
+| **v2.4.0** | Indicators | PineConverter.cpp generateCpp() | C++ генератор не поддерживает strategy.entry/exit/close | ✅ Done (v2.4.0) — signal_ field + signal() method для strategy.* вызовов |
+| **v2.4.0** | UI | AppGui.cpp/main.cpp | Версия "v2.3.0" вместо "v2.4.0" | ✅ Done (v2.4.0) — обновлено |
 
 ---
 
@@ -196,11 +200,12 @@ info.leverage         = safeStod(p.value("leverage", "1"));   // ✅
 ### 3.1 PaperTrading — ✅ Done (v1.7.2)
 Equity: `posValue += p.quantity * p.currentPrice` — корректно.
 
-### 3.2 BacktestEngine — ✅ Done (v1.7.2 + v1.7.4 + v2.0.0 + v2.3.0)
+### 3.2 BacktestEngine — ✅ Done (v1.7.2 + v1.7.4 + v2.0.0 + v2.3.0 + v2.4.0)
 - Equity SHORT: `posQty * (2.0 * entryPrice - price)` ✅
 - Sharpe ratio: sample stddev `sqrt(sq_sum / (n-1))` ✅ Done (v1.7.4)
 - Sharpe ratio: empty returns guard `!returns.empty()` ✅ Done (v2.0.0)
-- ✅ **DB metadata (v2.3.0):** computeMetrics() теперь принимает полный Config и сохраняет symbol, timeframe, initialBalance, finalBalance, strategy, commission, dateFrom, dateTo. BtTradeRecord также включает symbol и commission. Ранее сохранялись только метрики производительности.
+- ✅ **DB metadata (v2.3.0):** computeMetrics() теперь принимает полный Config и сохраняет symbol, timeframe, initialBalance, finalBalance, strategy, commission, dateFrom, dateTo. BtTradeRecord также включает symbol и commission.
+- ✅ **Leverage & Slippage (v2.4.0):** Config теперь содержит `leverage` (default 1.0) и `slippagePct` (default 0.0001). Entry/exit цены корректируются на slippage. Позиция qty *= leverage. PnL делится на leverage. Liquidation check при leverage > 1.0 (движение цены > 1/leverage). Equity = balance + margin + unrealizedPnl.
 
 ### 3.3 RiskManager — ✅ Done (v1.7.3)
 Параметр `priceSinceEntry` (было `highSince`).
@@ -366,7 +371,7 @@ escapeCsvField() добавлена.
 ## 7. АНАЛИЗ ТЕСТОВОГО ПОКРЫТИЯ
 
 ### 7.1 Статистика (v2.3.0)
-- **Всего тестов:** 568 (564 pass, 4 skip — LibTorch/XGBoost)
+- **Всего тестов:** 578 (574 pass, 4 skip — LibTorch/XGBoost)
 - **Файлов тестов:** 15
 - **Новых тестов v2.3.0:** 13
 - **Оценка покрытия:** ~56% кода
@@ -420,14 +425,14 @@ escapeCsvField() добавлена.
 КОНТЕКСТ ПРОЕКТА:
 - Репозиторий: /home/runner/work/program/program
 - Основной код: src/ (69 .cpp файлов, 94 .h файлов)
-- Тесты: tests/ (15 файлов, 568 тестов, 564 pass, 4 skip)
+- Тесты: tests/ (15 файлов, 578 тестов, 574 pass, 4 skip)
 - Конфиг: config/settings.json, config/profiles.json
 - Сборка: cmake -B build/test -DCMAKE_BUILD_TYPE=Debug && cmake --build build/test -j$(nproc)
 - Запуск тестов: cd build/test && ./crypto_trader_tests --gtest_brief=1
 - Зависимости: nlohmann-json, spdlog, Boost, CURL, SQLite3, OpenSSL, GTest, GLFW, ImGui
 - Опциональные: LibTorch 2.6.0, XGBoost 2.1.3
 
-=== СТАТУС ПРОЕКТА (v2.3.0) ===
+=== СТАТУС ПРОЕКТА (v2.4.0) ===
 
 ВСЕ КРИТИЧЕСКИЕ И ВЫСОКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ (✅ Done — НЕ ТРОГАТЬ):
 - Все 5 бирж: placeOrder, cancelOrder, setLeverage, getLeverage, getPositionRisk, getFuturesBalance
@@ -443,13 +448,14 @@ escapeCsvField() добавлена.
 - PaperTrading: commission, validation, equity calc
 - Scheduler: deadlock fix, GridBot: profit tracking
 - Все FeatureExtractor, SignalEnhancer, WebhookServer, CSVExporter, TaxReporter fixes
-- Version strings updated to v2.3.0
-- BacktestEngine: все метаданные сохраняются в БД (symbol, timeframe, balance, strategy, commission, dates)
-- PineConverter: C++ генератор поддерживает SMA, MACD, BB, crossover, crossunder, highest, lowest, stdev, change, VWAP
+- Version strings updated to v2.4.0
+- BacktestEngine: все метаданные сохраняются в БД + leverage/slippage/liquidation поддержка
+- PineConverter: C++ генератор поддерживает SMA, MACD, BB, crossover, crossunder, highest, lowest, stdev, change, VWAP + strategy.entry/exit/close
+- PineConverter parser: исправлен для strategy.* вызовов (не путает с strategy() declaration)
 
-=== ЗАДАЧА v2.4.0: UX + ML/AI IMPROVEMENTS + PERFORMANCE ===
+=== ЗАДАЧА v2.5.0: UX + ML/AI IMPROVEMENTS + PERFORMANCE ===
 
-Программа стабильна (88 исправлений, 568 тестов). Следующий этап — углубление функциональности.
+Программа стабильна (89 исправлений, 578 тестов). Следующий этап — углубление функциональности.
 
 === ЭТАП 1: SymbolFormatter — Полная интеграция в PairList ===
 
@@ -500,11 +506,11 @@ escapeCsvField() добавлена.
 
 === ЭТАП 4: BacktestEngine — Расширение ===
 
-4.1. Добавь поддержку leverage в бэктесте:
+4.1. ✅ Done (v2.4.0) Добавь поддержку leverage в бэктесте:
    - BacktestEngine::Config::leverage (default 1x)
    - PnL *= leverage, liquidation price check
    
-4.2. Добавь slippage simulation:
+4.2. ✅ Done (v2.4.0) Добавь slippage simulation:
    - BacktestEngine::Config::slippagePct (default 0.01%)
    - Коррекция entry/exit price на slippage
 
@@ -517,7 +523,7 @@ escapeCsvField() добавлена.
 5.1. Добавь генерацию для ta.dmi (DMI/ADX)
 5.2. Добавь генерацию для ta.pivothigh / ta.pivotlow
 5.3. Добавь генерацию для ta.highestbars / ta.lowestbars
-5.4. Добавь генерацию для strategy.* (entry/exit/close)
+5.4. ✅ Done (v2.4.0) Добавь генерацию для strategy.* (entry/exit/close)
 5.5. Добавь генерацию для if/else конструкций в C++
 
 === ЭТАП 6: ТЕСТОВОЕ ПОКРЫТИЕ (увеличить с ~56% до ~65%) ===
@@ -571,46 +577,46 @@ escapeCsvField() добавлена.
 
 ---
 
-## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.3.0)
+## 📊 ИТОГОВАЯ СТАТИСТИКА АНАЛИЗА (v2.4.0)
 
-| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.3.0) |
+| Категория | Всего найдено | ✅ Исправлено | ❌ Открыто | Новых (v2.4.0) |
 |-----------|--------------|--------------|-----------|---------------|
 | Биржи | 24 | 24 | 0 | 0 |
 | Торговые модули | 14 | 14 | 0 | 0 |
 | ML/AI | 19 | 19 | 0 | 0 |
-| UI/Настройки | 20 | 20 | 0 | +1 (version update v2.3.0) |
+| UI/Настройки | 21 | 21 | 0 | +1 (version update v2.4.0) |
 | Интеграции | 12 | 12 | 0 | 0 |
-| Backtest | 6 | 6 | 0 | +1 (DB metadata: symbol/timeframe/balance/strategy/commission/dates) |
+| Backtest | 7 | 7 | 0 | +1 (leverage/slippage/liquidation) |
 | Data | 2 | 2 | 0 | 0 |
-| Indicators | 1 | 1 | 0 | +1 (PineConverter C++ generator: SMA/MACD/BB/crossover/crossunder/highest/lowest/stdev/change/VWAP) |
-| **ИТОГО** | **88** | **88** | **0** | **+3 исправления (v2.3.0)** |
+| Indicators | 3 | 3 | 0 | +2 (parser fix + strategy.entry/exit/close C++ generation) |
+| **ИТОГО** | **92** | **92** | **0** | **+4 исправления (v2.4.0)** |
 
 ### Прогресс исправлений:
-- **v2.2.0 → v2.3.0:** 3 новых исправления (всего 85→88) + 13 новых тестов
-- **Тесты:** 568 (564 pass, 4 skip) — +13 новых тестов
-- **Новые улучшения:** BacktestEngine DB metadata, PineConverter C++ generator expanded
-- **Общий статус:** 88 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
+- **v2.3.0 → v2.4.0:** 4 новых исправления (всего 88→92) + 10 новых тестов
+- **Тесты:** 578 (574 pass, 4 skip) — +10 новых тестов
+- **Новые улучшения:** BacktestEngine leverage/slippage, PineConverter strategy.* support, parser fix
+- **Общий статус:** 92 Done, 0 Open = **ВСЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ ИСПРАВЛЕНЫ** ✅
 
-### Направления развития (v2.4.0):
+### Направления развития (v2.5.0):
 1. SymbolFormatter полная интеграция в PairList для автоматического отображения унифицированных символов
 2. UX: equity curve мини-график, order book heatmap, drag-and-drop ордеров, keyboard shortcuts
-3. BacktestEngine: leverage, slippage simulation, backtest history comparison UI
-4. PineConverter: DMI, pivothigh/pivotlow, highestbars/lowestbars, strategy.*, if/else в C++
+3. BacktestEngine: backtest history comparison UI
+4. PineConverter: DMI, pivothigh/pivotlow, highestbars/lowestbars, if/else C++ generation
 5. ML: LR scheduler, feature importance, RAII wrappers, multi-timeframe features
-6. Тестовое покрытие (56% → 65%): GridBot execute, WebSocket mock, BacktestEngine leverage/slippage
+6. Тестовое покрытие (57% → 65%): GridBot execute, WebSocket mock, PineConverter DMI/pivots
 7. Производительность: RAII curl wrapper, connection pooling, exponential backoff
 8. Безопасность: API key audit, SQL injection check, TelegramBot rate limiting + input validation
 
 ### Обнаруженные проблемы для будущего исправления:
 1. **XGBoostModel** — нет RAII wrapper для DMatrix/booster (утечка при исключениях)
-2. **BacktestEngine** — нет поддержки leverage и slippage в бэктесте
+2. ~~**BacktestEngine** — нет поддержки leverage и slippage в бэктесте~~ ✅ Done (v2.4.0)
 3. **Curl headers** — нет RAII wrapper для curl_slist* (утечка при исключениях в HTTP-запросах)
 4. **TelegramBot** — нет rate limiting для команд (потенциальный спам)
 5. **TelegramBot** — нет input validation для /buy и /sell (потенциально опасные ордера без валидации)
 6. **OnlineLearningLoop** — batch сделки могут получать одинаковый nextState
-7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.4.0)
-8. **PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции (v2.4.0)
+7. **SymbolFormatter** — ещё не интегрирован в PairList для унифицированного отображения (v2.5.0)
+8. ~~**PineConverter C++ generator** — не генерирует DMI, pivothigh/pivotlow, strategy.*, if/else конструкции~~ ✅ Частично Done (v2.4.0: strategy.* done; DMI, pivots, if/else → v2.5.0)
 
 ---
 
-*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.3.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 568 тестов подтверждены. Все 88 найденных проблем исправлены.*
+*Документ обновлён на основе полного анализа кодовой базы CryptoTrader v2.4.0, включая все 69 исходных файлов, 15 тестовых файлов, конфигурационные файлы и CHANGELOG. Полная сборка и запуск 578 тестов подтверждены. Все 92 найденных проблемы исправлены.*
