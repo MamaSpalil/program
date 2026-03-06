@@ -24,6 +24,7 @@ public:
     void stop();
     bool isRunning() const { return running_; }
 
+    void setApiKey(const std::string& key) { apiKey_ = key; }
     void addItem(const NewsItem& item); // For testing / manual injection
     std::vector<NewsItem> getItems(int n = 50) const;
     int itemCount() const;
@@ -37,6 +38,7 @@ private:
     mutable std::mutex     mutex_;
     std::thread            pollThread_;
     std::atomic<bool>      running_{false};
+    std::string            apiKey_;
 };
 
 } // namespace crypto

@@ -61,7 +61,8 @@ TEST(OrderManagement, ValidateSuccess) {
 }
 
 TEST(OrderManagement, EstimateCost) {
-    EXPECT_DOUBLE_EQ(OrderManagement::estimateCost(0.5, 100.0), 50.0);
+    // estimateCost includes 0.1% taker commission
+    EXPECT_NEAR(OrderManagement::estimateCost(0.5, 100.0), 50.05, 0.01);
     EXPECT_DOUBLE_EQ(OrderManagement::estimateCost(1.0, 0.0), 0.0);
 }
 

@@ -85,6 +85,7 @@ struct RLTradingAgent::ActorCriticImpl : torch::nn::Module {
 RLTradingAgent::RLTradingAgent(const PPOConfig& cfg)
     : cfg_(cfg),
       device_(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU) {
+    cfg_.validate();  // Clamp hyper-parameters to safe bounds
     net_ = std::make_shared<ActorCriticImpl>(
         cfg_.stateDim, cfg_.hiddenDim, cfg_.numActions);
     net_->to(device_);
@@ -240,8 +241,9 @@ RLTradingAgent::train_step(const ExperienceBatch& batch) {
                               1.0f + cfg_.epsilon) * mbAdv;
             auto policyLoss = -torch::min(surr1, surr2).mean();
 
-            // ── Value loss (MSE) ─────────────────────────────────────────────
+            // ── Value loss (MSE) with clipping ─────────────────────────────────
             auto valueLoss = torch::mse_loss(values.squeeze(1), mbRet);
+            valueLoss = torch::clamp(valueLoss, 0.0f, cfg_.valueLossClipMax);
 
             // ── Entropy bonus S[π_θ] = -Σ π log π ──────────────────────────
             auto entropy = -(probs * logProbs).sum(1).mean();
@@ -353,6 +355,7 @@ bool RLTradingAgent::load(const std::string& path) {
 #else
 
 RLTradingAgent::RLTradingAgent(const PPOConfig& cfg) : cfg_(cfg) {
+    cfg_.validate();  // Clamp hyper-parameters to safe bounds
     Logger::get()->warn("[RLAgent] LibTorch not available — using stub");
 }
 

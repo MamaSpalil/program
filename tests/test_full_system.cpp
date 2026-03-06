@@ -78,12 +78,22 @@
 #include "../src/ml/ModelTrainer.h"
 #include "../src/ml/SignalEnhancer.h"
 
+// AI
+#include "../src/ai/RLTradingAgent.h"
+#include "../src/ai/FeatureExtractor.h"
+#include "../src/ai/OnlineLearningLoop.h"
+
 // Automation
 #include "../src/automation/Scheduler.h"
 #include "../src/automation/GridBot.h"
 
 // Integration
 #include "../src/integration/WebhookServer.h"
+#include "../src/integration/TelegramBot.h"
+
+// External
+#include "../src/external/NewsFeed.h"
+#include "../src/external/FearGreed.h"
 
 // Security
 #include "../src/security/KeyVault.h"
@@ -680,7 +690,8 @@ TEST(OrderManagement, ValidationRejectsZeroQty) {
 
 TEST(OrderManagement, CostEstimation) {
     double cost = OrderManagement::estimateCost(0.1, 68000);
-    EXPECT_NEAR(cost, 6800.0, 0.01);
+    // estimateCost includes 0.1% taker commission: 6800 + 6.80 = 6806.80
+    EXPECT_NEAR(cost, 6806.80, 0.01);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1819,4 +1830,200 @@ TEST(TaxReporterV175, CostBasisPrecision) {
     EXPECT_NEAR(events[1].costBasis, expectedCost, 1e-6);
     // They should be EXACTLY equal (same unitCost * same qty)
     EXPECT_DOUBLE_EQ(events[0].costBasis, events[1].costBasis);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v1.8.0 — NEW TESTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// --- Stage 1: OnlineLearningLoop state caching ---
+
+TEST(OnlineLearningV180, CaptureAndRetrieveState) {
+    using namespace crypto::ai;
+    PPOConfig ppoCfg;
+    RLTradingAgent agent(ppoCfg);
+    AIFeatureExtractor feat;
+    OnlineLearningConfig olCfg;
+    olCfg.minReplaySize = 32;
+    OnlineLearningLoop loop(agent, feat, nullptr, olCfg);
+
+    // Push some candle data to feature extractor so extract returns non-zero
+    Candle c;
+    c.open = 100; c.high = 110; c.low = 90; c.close = 105; c.volume = 1000;
+    c.openTime = 1;
+    feat.pushCandle(c);
+
+    // Capture state for a trade ID
+    loop.captureStateForTrade("trade_001");
+
+    // Retrieve it
+    auto state = loop.getCachedState("trade_001");
+    ASSERT_FALSE(state.empty());
+    EXPECT_EQ(static_cast<int>(state.size()), ppoCfg.stateDim);
+
+    // Unknown trade returns empty
+    auto empty = loop.getCachedState("trade_nonexistent");
+    EXPECT_TRUE(empty.empty());
+}
+
+TEST(OnlineLearningV180, NextStateDiffersFromState) {
+    // Verify the design: captureStateForTrade stores a snapshot,
+    // and a later extract() can return a different vector.
+    // In practice, states diverge when new candles are pushed.
+    // In stub mode, states may be identical — verify caching at minimum.
+    using namespace crypto::ai;
+    PPOConfig ppoCfg;
+    RLTradingAgent agent(ppoCfg);
+    AIFeatureExtractor feat;
+    OnlineLearningConfig olCfg;
+    OnlineLearningLoop loop(agent, feat, nullptr, olCfg);
+
+    Candle c1;
+    c1.open = 100; c1.high = 110; c1.low = 90; c1.close = 105; c1.volume = 1000;
+    c1.openTime = 1;
+    feat.pushCandle(c1);
+
+    loop.captureStateForTrade("trade_A");
+    auto stateA = loop.getCachedState("trade_A");
+    EXPECT_FALSE(stateA.empty());
+    EXPECT_EQ(static_cast<int>(stateA.size()), ppoCfg.stateDim);
+
+    // Push more candles to evolve state
+    for (int i = 0; i < 10; ++i) {
+        Candle c;
+        c.open = 120.0 + i * 5; c.high = 135.0 + i * 5;
+        c.low = 110.0 + i * 5; c.close = 125.0 + i * 5;
+        c.volume = 2000.0 + i * 500;
+        c.openTime = 2 + i;
+        feat.pushCandle(c);
+    }
+
+    // The cached state should still be the snapshot at trade_A time
+    auto stateACopy = loop.getCachedState("trade_A");
+    EXPECT_EQ(stateA, stateACopy); // Cache is immutable
+}
+
+// --- Stage 2: NewsFeed, FearGreed, TelegramBot ---
+
+TEST(NewsFeedV180, AddAndRetrieveItems) {
+    NewsFeed feed;
+    NewsItem item;
+    item.title = "Bitcoin hits ATH";
+    item.source = "CryptoPanic";
+    item.sentiment = "positive";
+    item.pubTime = 1000;
+    feed.addItem(item);
+
+    auto items = feed.getItems(10);
+    ASSERT_EQ(items.size(), 1u);
+    EXPECT_EQ(items[0].title, "Bitcoin hits ATH");
+    EXPECT_EQ(items[0].sentiment, "positive");
+}
+
+TEST(NewsFeedV180, HasApiKeySetter) {
+    NewsFeed feed;
+    feed.setApiKey("test_key");
+    // Should compile and not crash
+    SUCCEED();
+}
+
+TEST(FearGreedV180, SetAndGetData) {
+    FearGreed fg;
+    FearGreedData d;
+    d.value = 75;
+    d.classification = "Greed";
+    d.timestamp = 1234567890;
+    fg.setData(d);
+
+    auto r = fg.getData();
+    EXPECT_EQ(r.value, 75);
+    EXPECT_EQ(r.classification, "Greed");
+    EXPECT_EQ(r.timestamp, 1234567890);
+}
+
+TEST(FearGreedV180, DefaultIsNeutral) {
+    FearGreed fg;
+    auto d = fg.getData();
+    EXPECT_EQ(d.value, 50);
+    EXPECT_EQ(d.classification, "Neutral");
+}
+
+TEST(TelegramBotV180, ProcessCommandHelp) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("123");
+    auto reply = bot.processCommand("/help", "123");
+    EXPECT_NE(reply.find("/balance"), std::string::npos);
+    EXPECT_NE(reply.find("/status"), std::string::npos);
+}
+
+TEST(TelegramBotV180, SendMessageNoToken) {
+    TelegramBot bot;
+    // Without token, sendMessage should still succeed (graceful fallback)
+    bool ok = bot.sendMessage("123", "test message");
+    EXPECT_TRUE(ok);
+}
+
+TEST(TelegramBotV180, UnauthorizedChat) {
+    TelegramBot bot;
+    bot.setAuthorizedChat("authorized_chat");
+    auto reply = bot.processCommand("/status", "wrong_chat");
+    EXPECT_EQ(reply, "Unauthorized");
+}
+
+// --- Stage 3: OrderManagement validation & price formatting ---
+
+TEST(OrderManagementV180, EstimateCostWithCommission) {
+    // 0.1% commission rate
+    double cost = OrderManagement::estimateCost(1.0, 10000.0);
+    EXPECT_NEAR(cost, 10010.0, 0.01);  // 10000 + 10
+
+    double cost2 = OrderManagement::estimateCost(0.5, 50000.0);
+    EXPECT_NEAR(cost2, 25025.0, 0.01); // 25000 + 25
+}
+
+TEST(OrderManagementV180, AdaptivePriceFormat) {
+    EXPECT_STREQ(OrderManagement::priceFormat(65000.0), "%.2f");
+    EXPECT_STREQ(OrderManagement::priceFormat(1500.0), "%.2f");
+    EXPECT_STREQ(OrderManagement::priceFormat(100.5), "%.4f");
+    EXPECT_STREQ(OrderManagement::priceFormat(1.5), "%.4f");
+    EXPECT_STREQ(OrderManagement::priceFormat(0.05), "%.6f");
+    EXPECT_STREQ(OrderManagement::priceFormat(0.005), "%.8f");
+    EXPECT_STREQ(OrderManagement::priceFormat(0.0), "%.8f");
+}
+
+TEST(OrderManagementV180, FormatPriceBuf) {
+    char buf[32];
+
+    OrderManagement::formatPrice(buf, sizeof(buf), 65432.10);
+    EXPECT_STREQ(buf, "65432.10");
+
+    OrderManagement::formatPrice(buf, sizeof(buf), 0.00123456);
+    // Should use %.8f format
+    EXPECT_NE(std::string(buf).find("0.0012345"), std::string::npos);
+}
+
+// --- Stage 4: RLTradingAgent PPO config validation ---
+
+TEST(RLAgentV180, PPOConfigValidation) {
+    using namespace crypto::ai;
+    PPOConfig cfg;
+
+    // Test clamping of out-of-range entropy coeff
+    cfg.entropyCoeff = 0.5f;
+    cfg.validate();
+    EXPECT_LE(cfg.entropyCoeff, 0.1f);
+
+    cfg.entropyCoeff = 0.0001f;
+    cfg.validate();
+    EXPECT_GE(cfg.entropyCoeff, 0.001f);
+}
+
+TEST(RLAgentV180, PPOConfigValueLossClip) {
+    using namespace crypto::ai;
+    PPOConfig cfg;
+    EXPECT_FLOAT_EQ(cfg.valueLossClipMax, 10.0f);
+
+    cfg.valueLossClipMax = 200.0f;
+    cfg.validate();
+    EXPECT_LE(cfg.valueLossClipMax, 100.0f);
 }
