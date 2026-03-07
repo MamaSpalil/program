@@ -37,16 +37,24 @@ int BacktestEngine::emaSignalParameterized(const std::vector<Candle>& bars, size
     return 0;
 }
 
+// Compute a composite score from backtest result metrics (higher = better).
+// Uses profit factor, win rate, PnL, and drawdown to evaluate R:R quality.
+static double computeCompositeScore(double profitFactor, double winRate,
+                                     double pnlPct, double maxDrawdownPct) {
+    double pf = std::max(profitFactor, 0.0);
+    double wr = winRate;
+    double ddPenalty = maxDrawdownPct / 100.0;  // normalize to 0..1
+    // Use log1p(100 + pnlPct) for consistent scaling of both positive and negative returns.
+    // This produces ~4.6 at 0% and grows logarithmically for gains, shrinks for losses.
+    double pnlScore = std::log1p(100.0 + pnlPct) - std::log1p(100.0);
+    return pf * 0.3 + wr * 0.3 + pnlScore * 0.3 - ddPenalty * 0.1;
+}
+
 double BacktestEngine::scoreResult(const Result& r) {
-    // Composite score: profit factor weighted by win rate minus drawdown penalty
-    // Higher is better. Considers R:R improvement via profit factor and risk via drawdown.
-    double pf = std::max(r.profitFactor, 0.0);
-    double wr = r.winRate;
-    double ddPenalty = r.maxDrawdownPct / 100.0;  // 0..1 range
-    double pnlScore = (r.totalPnLPct > 0) ? std::log1p(r.totalPnLPct) : r.totalPnLPct / 100.0;
     // Penalize strategies with no trades
     if (r.totalTrades == 0) return -1000.0;
-    return pf * 0.3 + wr * 0.3 + pnlScore * 0.3 - ddPenalty * 0.1;
+    return computeCompositeScore(r.profitFactor, r.winRate,
+                                  r.totalPnLPct, r.maxDrawdownPct);
 }
 
 bool BacktestEngine::optimizeParameters(Config& cfg, const std::vector<Candle>& bars) {
@@ -64,11 +72,8 @@ bool BacktestEngine::optimizeParameters(Config& cfg, const std::vector<Candle>& 
     if (btRepo_) {
         auto pastResults = btRepo_->getAll(cfg.symbol, 20);
         for (const auto& pr : pastResults) {
-            // Parse strategy for EMA params: "EMA_Crossover(F/S)"
-            double s = pr.profitFactor * 0.3 + pr.winRate * 0.3;
-            if (pr.pnlPct > 0) s += std::log1p(pr.pnlPct) * 0.3;
-            else s += pr.pnlPct / 100.0 * 0.3;
-            s -= (pr.maxDrawdown / 100.0) * 0.1;
+            double s = computeCompositeScore(pr.profitFactor, pr.winRate,
+                                              pr.pnlPct, pr.maxDrawdown);
             if (s > bestHistScore) {
                 bestHistScore = s;
                 // Try to extract periods from strategy name
@@ -90,7 +95,9 @@ bool BacktestEngine::optimizeParameters(Config& cfg, const std::vector<Candle>& 
         }
     }
 
-    // Generate candidate period pairs around the historical best and also explore
+    // Generate candidate period pairs around the historical best and also explore.
+    // Bounds: fast in [3..30] (3 = min meaningful EMA, 30 = max to avoid lag),
+    // slow must exceed fast by >2 for meaningful crossovers, max 80 to prevent overfitting.
     auto addCandidate = [&](int f, int s) {
         if (f >= 3 && f <= 30 && s > f + 2 && s <= 80
             && static_cast<size_t>(s) < bars.size()) {
@@ -98,13 +105,14 @@ bool BacktestEngine::optimizeParameters(Config& cfg, const std::vector<Candle>& 
         }
     };
 
-    // Explore neighborhood of historical best
+    // Explore neighborhood of historical best (fine-grained local search)
     for (int df = -3; df <= 3; ++df) {
         for (int ds = -5; ds <= 5; ++ds) {
             addCandidate(histFast + df, histSlow + ds);
         }
     }
-    // Also explore a broader grid with larger steps
+    // Broader grid with larger steps (coarse global search for diversity).
+    // Steps of 4/8 balance coverage vs computational cost (~50 candidates total).
     for (int f = 3; f <= 25; f += 4) {
         for (int s = f + 5; s <= 60; s += 8) {
             addCandidate(f, s);

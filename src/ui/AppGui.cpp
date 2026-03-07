@@ -3711,7 +3711,7 @@ void AppGui::drawBacktestWindow() {
     ImGui::Checkbox("AI Mode (ML Optimization)", &btAIMode_);
     if (btAIMode_) {
         ImGui::SameLine();
-        ImGui::TextDisabled("EMA(%d/%d) Run#%d", btFastPeriod_, btSlowPeriod_, btRunCount_);
+        ImGui::TextDisabled("EMA_Crossover(%d/%d) | Run #%d", btFastPeriod_, btSlowPeriod_, btRunCount_);
     }
 
     ImGui::Separator();
