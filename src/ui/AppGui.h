@@ -420,6 +420,10 @@ private:
     char   btEndDate_[16]{"2024-12-31"};
     bool   btRunning_{false};
     BacktestEngine::Result btResult_;
+    bool   btAIMode_{false};            // AI/ML adaptive optimization mode
+    int    btRunCount_{0};              // number of adaptive runs in current session
+    int    btFastPeriod_{9};            // current EMA fast period
+    int    btSlowPeriod_{21};           // current EMA slow period
 
     // M3 — Alerts state
     AlertManager alertManager_;

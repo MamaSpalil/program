@@ -19,22 +19,164 @@ double BacktestEngine::calcEMA(const std::vector<double>& prices, int period, si
 }
 
 int BacktestEngine::emaSignal(const std::vector<Candle>& bars, size_t idx) {
-    if (idx < 21) return 0;
+    return emaSignalParameterized(bars, idx, 9, 21);
+}
+
+int BacktestEngine::emaSignalParameterized(const std::vector<Candle>& bars, size_t idx,
+                                            int fastPeriod, int slowPeriod) {
+    if (idx < static_cast<size_t>(slowPeriod)) return 0;
     std::vector<double> closes;
     closes.reserve(idx + 1);
     for (size_t i = 0; i <= idx; ++i) closes.push_back(bars[i].close);
-    double fast = calcEMA(closes, 9, idx);
-    double slow = calcEMA(closes, 21, idx);
-    double prevFast = calcEMA(closes, 9, idx - 1);
-    double prevSlow = calcEMA(closes, 21, idx - 1);
+    double fast = calcEMA(closes, fastPeriod, idx);
+    double slow = calcEMA(closes, slowPeriod, idx);
+    double prevFast = calcEMA(closes, fastPeriod, idx - 1);
+    double prevSlow = calcEMA(closes, slowPeriod, idx - 1);
     if (prevFast <= prevSlow && fast > slow) return 1;   // buy
     if (prevFast >= prevSlow && fast < slow) return -1;  // sell
     return 0;
 }
 
+// Compute a composite score from backtest result metrics (higher = better).
+// Uses profit factor, win rate, PnL, and drawdown to evaluate R:R quality.
+static double computeCompositeScore(double profitFactor, double winRate,
+                                     double pnlPct, double maxDrawdownPct) {
+    double pf = std::max(profitFactor, 0.0);
+    double wr = winRate;
+    double ddPenalty = maxDrawdownPct / 100.0;  // normalize to 0..1
+    // Use log1p(100 + pnlPct) for consistent scaling of both positive and negative returns.
+    // This produces ~4.6 at 0% and grows logarithmically for gains, shrinks for losses.
+    double pnlScore = std::log1p(100.0 + pnlPct) - std::log1p(100.0);
+    return pf * 0.3 + wr * 0.3 + pnlScore * 0.3 - ddPenalty * 0.1;
+}
+
+double BacktestEngine::scoreResult(const Result& r) {
+    // Penalize strategies with no trades
+    if (r.totalTrades == 0) return -1000.0;
+    return computeCompositeScore(r.profitFactor, r.winRate,
+                                  r.totalPnLPct, r.maxDrawdownPct);
+}
+
+bool BacktestEngine::optimizeParameters(Config& cfg, const std::vector<Candle>& bars) {
+    if (bars.size() < 50) return false;  // Not enough data to optimize
+
+    // Candidate EMA period pairs: fast in [3..20], slow in [fast+5..60]
+    struct Candidate { int fast; int slow; double score; };
+    std::vector<Candidate> candidates;
+
+    // Load historical bias from DB if available
+    double bestHistScore = -1e9;
+    int histFast = cfg.emaPeriodFast;
+    int histSlow = cfg.emaPeriodSlow;
+
+    if (btRepo_) {
+        auto pastResults = btRepo_->getAll(cfg.symbol, 20);
+        for (const auto& pr : pastResults) {
+            double s = computeCompositeScore(pr.profitFactor, pr.winRate,
+                                              pr.pnlPct, pr.maxDrawdown);
+            if (s > bestHistScore) {
+                bestHistScore = s;
+                // Try to extract periods from strategy name
+                auto pos = pr.strategy.find('(');
+                if (pos != std::string::npos) {
+                    auto end = pr.strategy.find(')', pos);
+                    if (end != std::string::npos) {
+                        auto params = pr.strategy.substr(pos + 1, end - pos - 1);
+                        auto sep = params.find('/');
+                        if (sep != std::string::npos) {
+                            try {
+                                histFast = std::stoi(params.substr(0, sep));
+                                histSlow = std::stoi(params.substr(sep + 1));
+                            } catch (...) {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Generate candidate period pairs around the historical best and also explore.
+    // Bounds: fast in [3..30] (3 = min meaningful EMA, 30 = max to avoid lag),
+    // slow must exceed fast by >2 for meaningful crossovers, max 80 to prevent overfitting.
+    auto addCandidate = [&](int f, int s) {
+        if (f >= 3 && f <= 30 && s > f + 2 && s <= 80
+            && static_cast<size_t>(s) < bars.size()) {
+            candidates.push_back({f, s, 0.0});
+        }
+    };
+
+    // Explore neighborhood of historical best (fine-grained local search)
+    for (int df = -3; df <= 3; ++df) {
+        for (int ds = -5; ds <= 5; ++ds) {
+            addCandidate(histFast + df, histSlow + ds);
+        }
+    }
+    // Broader grid with larger steps (coarse global search for diversity).
+    // Steps of 4/8 balance coverage vs computational cost (~50 candidates total).
+    for (int f = 3; f <= 25; f += 4) {
+        for (int s = f + 5; s <= 60; s += 8) {
+            addCandidate(f, s);
+        }
+    }
+
+    // Remove duplicates
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+        return (a.fast < b.fast) || (a.fast == b.fast && a.slow < b.slow);
+    });
+    candidates.erase(std::unique(candidates.begin(), candidates.end(),
+        [](const Candidate& a, const Candidate& b) {
+            return a.fast == b.fast && a.slow == b.slow;
+        }), candidates.end());
+
+    // Score each candidate by running a lightweight backtest (no DB save)
+    BacktestEngine scorer;  // no repository — don't persist scoring runs
+    Config scoreCfg = cfg;
+    double bestScore = -1e9;
+    int bestFast = cfg.emaPeriodFast;
+    int bestSlow = cfg.emaPeriodSlow;
+
+    for (auto& c : candidates) {
+        auto sigFn = [f = c.fast, s = c.slow](const std::vector<Candle>& b, size_t idx) -> int {
+            return emaSignalParameterized(b, idx, f, s);
+        };
+        auto r = scorer.run(scoreCfg, bars, sigFn);
+        c.score = scoreResult(r);
+        if (c.score > bestScore) {
+            bestScore = c.score;
+            bestFast = c.fast;
+            bestSlow = c.slow;
+        }
+    }
+
+    bool improved = (bestFast != cfg.emaPeriodFast || bestSlow != cfg.emaPeriodSlow);
+    cfg.emaPeriodFast = bestFast;
+    cfg.emaPeriodSlow = bestSlow;
+    return improved;
+}
+
+BacktestEngine::Result BacktestEngine::runAdaptive(Config& cfg, const std::vector<Candle>& bars) {
+    // Step 1: Optimize EMA parameters
+    optimizeParameters(cfg, bars);
+
+    // Step 2: Run backtest with optimized parameters
+    int fast = cfg.emaPeriodFast;
+    int slow = cfg.emaPeriodSlow;
+    auto sigFn = [fast, slow](const std::vector<Candle>& b, size_t idx) -> int {
+        return emaSignalParameterized(b, idx, fast, slow);
+    };
+    auto result = run(cfg, bars, sigFn);
+    result.strategyName = "EMA_Crossover(" + std::to_string(fast) + "/" + std::to_string(slow) + ")";
+    return result;
+}
+
 BacktestEngine::Result BacktestEngine::run(const Config& cfg,
                                             const std::vector<Candle>& bars) {
-    return run(cfg, bars, emaSignal);
+    int fast = cfg.emaPeriodFast;
+    int slow = cfg.emaPeriodSlow;
+    auto sigFn = [fast, slow](const std::vector<Candle>& b, size_t idx) -> int {
+        return emaSignalParameterized(b, idx, fast, slow);
+    };
+    return run(cfg, bars, sigFn);
 }
 
 BacktestEngine::Result BacktestEngine::run(const Config& cfg,
@@ -207,7 +349,9 @@ void BacktestEngine::computeMetrics(Result& result, const Config& cfg) {
         dbResult.winningTrades = result.winTrades;
         dbResult.losingTrades = result.lossTrades;
         dbResult.profitFactor = result.profitFactor;
-        dbResult.strategy = "EMA_Crossover";
+        dbResult.strategy = result.strategyName.empty()
+            ? "EMA_Crossover(" + std::to_string(cfg.emaPeriodFast) + "/" + std::to_string(cfg.emaPeriodSlow) + ")"
+            : result.strategyName;
         dbResult.commission = cfg.commission;
         dbResult.dateFrom = (!result.trades.empty()) ? result.trades.front().entryTime : 0;
         dbResult.dateTo = (!result.trades.empty()) ? result.trades.back().exitTime : 0;

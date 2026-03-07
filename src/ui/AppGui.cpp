@@ -3708,6 +3708,12 @@ void AppGui::drawBacktestWindow() {
     ImGui::SetNextItemWidth(80);
     ImGui::InputDouble("Comm%##BT", &btCommission_, 0.01, 0.1, "%.2f");
 
+    ImGui::Checkbox("AI Mode (ML Optimization)", &btAIMode_);
+    if (btAIMode_) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("EMA_Crossover(%d/%d) | Run #%d", btFastPeriod_, btSlowPeriod_, btRunCount_);
+    }
+
     ImGui::Separator();
 
     if (ImGui::Button("Run Backtest", ImVec2(140, 30)) && !btRunning_) {
@@ -3727,12 +3733,27 @@ void AppGui::drawBacktestWindow() {
         cfg.commission = btCommission_ / 100.0;
         cfg.startDate = btStartDate_;
         cfg.endDate = btEndDate_;
+        cfg.emaPeriodFast = btFastPeriod_;
+        cfg.emaPeriodSlow = btSlowPeriod_;
 
         std::vector<Candle> bars(snap.candleHistory.begin(), snap.candleHistory.end());
-        btResult_ = bt.run(cfg, bars);
+
+        if (btAIMode_) {
+            // Adaptive run: optimizes parameters using DB history
+            btResult_ = bt.runAdaptive(cfg, bars);
+            btFastPeriod_ = cfg.emaPeriodFast;
+            btSlowPeriod_ = cfg.emaPeriodSlow;
+            btRunCount_++;
+            addLog("[Backtest AI] Run #" + std::to_string(btRunCount_) +
+                   " EMA(" + std::to_string(btFastPeriod_) + "/" + std::to_string(btSlowPeriod_) +
+                   ") Trades: " + std::to_string(btResult_.totalTrades) +
+                   " PnL: $" + std::to_string(btResult_.totalPnL));
+        } else {
+            btResult_ = bt.run(cfg, bars);
+            addLog("[Backtest] Completed: " + std::to_string(btResult_.totalTrades) + " trades, PnL: $" +
+                   std::to_string(btResult_.totalPnL));
+        }
         btRunning_ = false;
-        addLog("[Backtest] Completed: " + std::to_string(btResult_.totalTrades) + " trades, PnL: $" +
-               std::to_string(btResult_.totalPnL));
     }
     ImGui::SameLine();
     if (ImGui::Button("Export CSV##BT", ImVec2(120, 30))) {
@@ -3744,6 +3765,9 @@ void AppGui::drawBacktestWindow() {
     if (ImGui::Button("Reset##BT", ImVec2(80, 30))) {
         btResult_ = BacktestEngine::Result{};
         btRunning_ = false;
+        btRunCount_ = 0;
+        btFastPeriod_ = 9;
+        btSlowPeriod_ = 21;
         addLog("[Backtest] Reset");
     }
 
@@ -3751,6 +3775,9 @@ void AppGui::drawBacktestWindow() {
 
     // Results
     if (btResult_.totalTrades > 0) {
+        if (!btResult_.strategyName.empty()) {
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Strategy: %s", btResult_.strategyName.c_str());
+        }
         ImVec4 pnlCol = btResult_.totalPnL >= 0
             ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f) : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
         ImGui::TextColored(pnlCol, "PnL: $%.8f (%.1f%%)", btResult_.totalPnL, btResult_.totalPnLPct);

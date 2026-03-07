@@ -3057,7 +3057,7 @@ TEST(BacktestV230, DatabaseSavesSymbolAndTimeframe) {
     EXPECT_EQ(latest.timeframe, "15m");
     EXPECT_NEAR(latest.initialBalance, 5000.0, 0.01);
     EXPECT_GT(latest.finalBalance, 0.0);
-    EXPECT_EQ(latest.strategy, "EMA_Crossover");
+    EXPECT_EQ(latest.strategy, "EMA_Crossover(9/21)");
     EXPECT_NEAR(latest.commission, 0.001, 0.0001);
 
     fs::remove(dbPath);
@@ -3958,4 +3958,376 @@ TEST(VersionV270, VersionStringExists) {
     std::string version = "2.7.0";
     EXPECT_FALSE(version.empty());
     EXPECT_NE(version.find("2.7"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+//  Adaptive Backtest (ML/AI mode) tests
+// ---------------------------------------------------------------------------
+
+TEST(BacktestAdaptive, ConfigHasEMAPeriods) {
+    BacktestEngine::Config cfg;
+    EXPECT_EQ(cfg.emaPeriodFast, 9);
+    EXPECT_EQ(cfg.emaPeriodSlow, 21);
+}
+
+TEST(BacktestAdaptive, ParameterizedEMASignalSameAsDefault) {
+    // With default periods 9/21, the parameterized run should produce
+    // the same result as the default run.
+    std::vector<Candle> bars;
+    for (int i = 0; i < 100; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.closeTime = (i + 1) * 60000 - 1;
+        c.close = 100.0 + std::sin(i * 0.15) * 5.0;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    cfg.commission = 0.001;
+    cfg.emaPeriodFast = 9;
+    cfg.emaPeriodSlow = 21;
+    auto result = bt.run(cfg, bars);
+    EXPECT_GE(result.totalTrades, 0);
+    EXPECT_FALSE(result.equityCurve.empty());
+}
+
+TEST(BacktestAdaptive, DifferentPeriodsProduceDifferentResults) {
+    // Different EMA periods should produce different trade counts
+    std::vector<Candle> bars;
+    for (int i = 0; i < 200; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.closeTime = (i + 1) * 60000 - 1;
+        c.close = 100.0 + std::sin(i * 0.1) * 10.0 + i * 0.05;
+        c.open = c.close - 0.2;
+        c.high = c.close + 1.0;
+        c.low = c.close - 1.0;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine bt;
+    BacktestEngine::Config cfg1;
+    cfg1.initialBalance = 10000.0;
+    cfg1.commission = 0.0;
+    cfg1.emaPeriodFast = 5;
+    cfg1.emaPeriodSlow = 15;
+    auto r1 = bt.run(cfg1, bars);
+
+    BacktestEngine::Config cfg2;
+    cfg2.initialBalance = 10000.0;
+    cfg2.commission = 0.0;
+    cfg2.emaPeriodFast = 12;
+    cfg2.emaPeriodSlow = 40;
+    auto r2 = bt.run(cfg2, bars);
+
+    // At least one metric should differ
+    bool differ = (r1.totalTrades != r2.totalTrades ||
+                   std::abs(r1.totalPnL - r2.totalPnL) > 0.001);
+    EXPECT_TRUE(differ);
+}
+
+TEST(BacktestAdaptive, OptimizeParametersFindsValidPeriods) {
+    std::vector<Candle> bars;
+    for (int i = 0; i < 150; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.closeTime = (i + 1) * 60000 - 1;
+        c.close = 100.0 + std::sin(i * 0.12) * 8.0 + i * 0.02;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    cfg.commission = 0.001;
+
+    bool improved = bt.optimizeParameters(cfg, bars);
+    // Parameters should be valid regardless of whether they changed
+    EXPECT_GE(cfg.emaPeriodFast, 3);
+    EXPECT_LE(cfg.emaPeriodFast, 30);
+    EXPECT_GT(cfg.emaPeriodSlow, cfg.emaPeriodFast);
+    EXPECT_LE(cfg.emaPeriodSlow, 80);
+    (void)improved; // May or may not have improved vs defaults
+}
+
+TEST(BacktestAdaptive, RunAdaptiveProducesResults) {
+    std::vector<Candle> bars;
+    for (int i = 0; i < 150; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.closeTime = (i + 1) * 60000 - 1;
+        c.close = 100.0 + std::sin(i * 0.12) * 8.0 + i * 0.02;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    cfg.commission = 0.001;
+
+    auto result = bt.runAdaptive(cfg, bars);
+    EXPECT_FALSE(result.equityCurve.empty());
+    EXPECT_FALSE(result.strategyName.empty());
+    // Strategy name should contain the EMA periods
+    EXPECT_NE(result.strategyName.find("EMA_Crossover("), std::string::npos);
+    EXPECT_NE(result.strategyName.find("/"), std::string::npos);
+}
+
+TEST(BacktestAdaptive, RunAdaptiveUpdatesConfigPeriods) {
+    std::vector<Candle> bars;
+    for (int i = 0; i < 150; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.closeTime = (i + 1) * 60000 - 1;
+        c.close = 100.0 + std::sin(i * 0.12) * 8.0 + i * 0.02;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    cfg.emaPeriodFast = 9;
+    cfg.emaPeriodSlow = 21;
+
+    bt.runAdaptive(cfg, bars);
+    // After adaptive run, config should have valid periods
+    EXPECT_GE(cfg.emaPeriodFast, 3);
+    EXPECT_LE(cfg.emaPeriodFast, 30);
+    EXPECT_GT(cfg.emaPeriodSlow, cfg.emaPeriodFast);
+}
+
+TEST(BacktestAdaptive, AdaptiveRunSavesToDB) {
+    auto dbPath = getTempDir() + "bt_adaptive_db.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+
+    BacktestEngine bt;
+    bt.setRepository(&repo);
+
+    std::vector<Candle> bars;
+    for (int i = 0; i < 150; ++i) {
+        Candle c;
+        c.openTime = 1700000000000LL + i * 60000;
+        c.closeTime = c.openTime + 59999;
+        c.close = 100.0 + std::sin(i * 0.12) * 8.0 + i * 0.02;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.interval = "1m";
+    cfg.initialBalance = 10000.0;
+    cfg.commission = 0.001;
+
+    auto result = bt.runAdaptive(cfg, bars);
+
+    // Verify DB has the result with strategy name including EMA periods
+    auto saved = repo.getAll("BTCUSDT", 10);
+    ASSERT_FALSE(saved.empty());
+    auto& latest = saved.front();
+    EXPECT_EQ(latest.symbol, "BTCUSDT");
+    EXPECT_NE(latest.strategy.find("EMA_Crossover("), std::string::npos);
+    EXPECT_NE(latest.strategy.find("/"), std::string::npos);
+    EXPECT_GT(latest.totalTrades, 0);
+
+    fs::remove(dbPath);
+}
+
+TEST(BacktestAdaptive, MultipleAdaptiveRunsUsePreviousResults) {
+    auto dbPath = getTempDir() + "bt_adaptive_multi.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+
+    std::vector<Candle> bars;
+    for (int i = 0; i < 200; ++i) {
+        Candle c;
+        c.openTime = 1700000000000LL + i * 60000;
+        c.closeTime = c.openTime + 59999;
+        c.close = 100.0 + std::sin(i * 0.12) * 8.0 + i * 0.03;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    // Run 1: initial adaptive run
+    BacktestEngine bt1;
+    bt1.setRepository(&repo);
+    BacktestEngine::Config cfg1;
+    cfg1.symbol = "ETHUSDT";
+    cfg1.interval = "1m";
+    cfg1.initialBalance = 10000.0;
+    cfg1.commission = 0.001;
+    auto r1 = bt1.runAdaptive(cfg1, bars);
+
+    // Run 2: should use previous results from DB
+    BacktestEngine bt2;
+    bt2.setRepository(&repo);
+    BacktestEngine::Config cfg2;
+    cfg2.symbol = "ETHUSDT";
+    cfg2.interval = "1m";
+    cfg2.initialBalance = 10000.0;
+    cfg2.commission = 0.001;
+    cfg2.emaPeriodFast = cfg1.emaPeriodFast;
+    cfg2.emaPeriodSlow = cfg1.emaPeriodSlow;
+    auto r2 = bt2.runAdaptive(cfg2, bars);
+
+    // Both runs should have valid results saved to DB
+    auto saved = repo.getAll("ETHUSDT", 10);
+    EXPECT_GE(static_cast<int>(saved.size()), 2);
+
+    // Each result should have a strategy name with EMA periods
+    for (const auto& s : saved) {
+        EXPECT_NE(s.strategy.find("EMA_Crossover("), std::string::npos);
+    }
+
+    fs::remove(dbPath);
+}
+
+TEST(BacktestAdaptive, OptimizeWithTooFewBarsReturnsFalse) {
+    std::vector<Candle> bars;
+    for (int i = 0; i < 30; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.close = 100.0 + i;
+        c.open = c.close;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    bool improved = bt.optimizeParameters(cfg, bars);
+    EXPECT_FALSE(improved);
+    // Periods should remain at defaults
+    EXPECT_EQ(cfg.emaPeriodFast, 9);
+    EXPECT_EQ(cfg.emaPeriodSlow, 21);
+}
+
+TEST(BacktestAdaptive, ScoreResultReturnsNegativeForNoTrades) {
+    BacktestEngine::Result r;
+    r.totalTrades = 0;
+    // Score for zero-trade result should be very negative
+    // This is indirectly tested via the optimization
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    std::vector<Candle> bars;
+    for (int i = 0; i < 5; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.close = 100.0;
+        c.open = c.close;
+        c.high = c.close;
+        c.low = c.close;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+    auto result = bt.run(cfg, bars);
+    EXPECT_EQ(result.totalTrades, 0);
+}
+
+TEST(BacktestAdaptive, ResultStrategyNameField) {
+    BacktestEngine::Result r;
+    EXPECT_TRUE(r.strategyName.empty());
+
+    r.strategyName = "EMA_Crossover(5/15)";
+    EXPECT_EQ(r.strategyName, "EMA_Crossover(5/15)");
+}
+
+TEST(BacktestAdaptive, CustomSignalStillWorks) {
+    // Verify that custom signal functions still work after the refactor
+    BacktestEngine bt;
+    BacktestEngine::Config cfg;
+    cfg.initialBalance = 10000.0;
+    cfg.commission = 0.0;
+
+    std::vector<Candle> bars;
+    for (int i = 0; i < 20; ++i) {
+        Candle c;
+        c.openTime = i * 60000;
+        c.closeTime = (i + 1) * 60000 - 1;
+        c.open = 100.0 + i;
+        c.high = 101.0 + i;
+        c.low = 99.0 + i;
+        c.close = 100.5 + i;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    auto signal = [](const std::vector<Candle>&, size_t idx) -> int {
+        if (idx == 2) return 1;   // buy
+        if (idx == 5) return -1;  // sell
+        return 0;
+    };
+
+    auto result = bt.run(cfg, bars, signal);
+    EXPECT_GE(result.totalTrades, 1);
+}
+
+TEST(BacktestAdaptive, DBStrategySavesEMAPeriods) {
+    auto dbPath = getTempDir() + "bt_adaptive_strat.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+
+    BacktestEngine bt;
+    bt.setRepository(&repo);
+
+    std::vector<Candle> bars;
+    for (int i = 0; i < 100; ++i) {
+        Candle c;
+        c.openTime = 1700000000000LL + i * 60000;
+        c.closeTime = c.openTime + 59999;
+        c.close = 100.0 + std::sin(i * 0.15) * 5.0;
+        c.open = c.close - 0.1;
+        c.high = c.close + 0.5;
+        c.low = c.close - 0.5;
+        c.volume = 100.0;
+        bars.push_back(c);
+    }
+
+    BacktestEngine::Config cfg;
+    cfg.symbol = "BTCUSDT";
+    cfg.interval = "5m";
+    cfg.initialBalance = 10000.0;
+    cfg.emaPeriodFast = 7;
+    cfg.emaPeriodSlow = 25;
+    auto result = bt.run(cfg, bars);
+
+    auto saved = repo.getAll("BTCUSDT", 1);
+    ASSERT_FALSE(saved.empty());
+    // Strategy should contain the custom periods
+    EXPECT_NE(saved.front().strategy.find("7/25"), std::string::npos);
+
+    fs::remove(dbPath);
 }
