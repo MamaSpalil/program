@@ -658,8 +658,13 @@ void AppGui::loadLayoutIni(const std::string& path) {
         std::string key = line.substr(0, eq);
         std::string val = line.substr(eq + 1);
         // trim whitespace
-        while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.pop_back();
-        while (!val.empty() && (val.front() == ' ' || val.front() == '\t')) val.erase(val.begin());
+        {
+            auto kEnd = key.find_last_not_of(" \t");
+            if (kEnd != std::string::npos) key = key.substr(0, kEnd + 1);
+            auto vStart = val.find_first_not_of(" \t");
+            if (vStart != std::string::npos) val = val.substr(vStart);
+            else val.clear();
+        }
 
         try {
             if      (key == "log_pct")           config_.layoutLogPct  = std::stof(val);

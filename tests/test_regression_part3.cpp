@@ -331,7 +331,7 @@ TEST(LayoutManager, AutoResizeLayoutOrderPreserved) {
 
 TEST(LayoutIni, SaveAndLoadRoundTrip) {
     namespace fs = std::filesystem;
-    std::string tmpPath = "/tmp/test_layout_roundtrip.ini";
+    std::string tmpPath = (fs::temp_directory_path() / "test_layout_roundtrip.ini").string();
 
     // Cleanup
     fs::remove(tmpPath);
@@ -381,7 +381,7 @@ TEST(LayoutIni, SaveAndLoadRoundTrip) {
 
 TEST(LayoutIni, FileFormatIsReadable) {
     namespace fs = std::filesystem;
-    std::string tmpPath = "/tmp/test_layout_format.ini";
+    std::string tmpPath = (fs::temp_directory_path() / "test_layout_format.ini").string();
     fs::remove(tmpPath);
 
     {
@@ -417,7 +417,7 @@ TEST(LayoutIni, FileFormatIsReadable) {
 
 TEST(LayoutIni, MalformedFileDoesNotCrash) {
     namespace fs = std::filesystem;
-    std::string tmpPath = "/tmp/test_layout_malformed.ini";
+    std::string tmpPath = (fs::temp_directory_path() / "test_layout_malformed.ini").string();
     fs::remove(tmpPath);
 
     {
