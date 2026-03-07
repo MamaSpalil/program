@@ -451,6 +451,15 @@ private:
     // Layout reset flag: when true, force window positions to defaults on next frame
     bool layoutNeedsReset_{true};
 
+    // Auto-resize: track previous viewport size to detect fullscreen/windowed toggle
+    float prevViewportW_{0.0f};
+    float prevViewportH_{0.0f};
+
+    // Layout .ini persistence
+    std::string layoutIniPath_;
+    void loadLayoutIni(const std::string& path);
+    void saveLayoutIni(const std::string& path) const;
+
     // Volume Delta zoom/pan state
     float vdZoomX_{1.0f};
     float vdZoomY_{1.0f};
