@@ -37,6 +37,7 @@ public:
 
     void update(double currentBalance) {
         currentBalance_ = currentBalance;
+        if (startingBalance_ <= 0.0) return;  // guard against division by zero
         double lossPct = ((startingBalance_ - currentBalance) / startingBalance_) * 100.0;
         if (lossPct >= limitPct_) {
             triggered_ = true;

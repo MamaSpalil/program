@@ -513,7 +513,11 @@ AccountBalance BinanceExchange::getBalance() {
     for (auto& asset : json["balances"]) {
         std::string a = asset["asset"].get<std::string>();
         double free = safeStod(asset["free"].get<std::string>());
-        if (a == "USDT") bal.availableUSDT = bal.totalUSDT = free;
+        double locked = safeStod(asset["locked"].get<std::string>());
+        if (a == "USDT") {
+            bal.totalUSDT     = free + locked;
+            bal.availableUSDT = free;
+        }
         if (a == "BTC")  bal.btcBalance = free;
     }
     return bal;

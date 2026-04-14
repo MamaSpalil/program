@@ -24,7 +24,7 @@ int BacktestEngine::emaSignal(const std::vector<Candle>& bars, size_t idx) {
 
 int BacktestEngine::emaSignalParameterized(const std::vector<Candle>& bars, size_t idx,
                                             int fastPeriod, int slowPeriod) {
-    if (idx < static_cast<size_t>(slowPeriod)) return 0;
+    if (idx < static_cast<size_t>(slowPeriod) || idx < 1) return 0;
     std::vector<double> closes;
     closes.reserve(idx + 1);
     for (size_t i = 0; i <= idx; ++i) closes.push_back(bars[i].close);

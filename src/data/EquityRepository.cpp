@@ -40,7 +40,11 @@ void EquityRepository::flush() {
         sqlite3_bind_double(stmt, 3, s.balance);
         sqlite3_bind_double(stmt, 4, s.unrealizedPnl);
         sqlite3_bind_int(stmt, 5, s.isPaper ? 1 : 0);
-        sqlite3_step(stmt);
+        int stepRc = sqlite3_step(stmt);
+        if (stepRc != SQLITE_DONE) {
+            Logger::get()->error("EquityRepository: step failed: {}",
+                                 sqlite3_errmsg(db_.handle()));
+        }
         sqlite3_reset(stmt);
     }
 

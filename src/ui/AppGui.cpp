@@ -678,7 +678,7 @@ void AppGui::loadLayoutIni(const std::string& path) {
             else if (key == "show_logs")         showLogs_             = (std::stoi(val) != 0);
             else if (key == "window_width") {
                 int w = std::stoi(val);
-                if (window_ && w > 100) {
+                if (window_ && w > 100 && w <= 7680) {
                     int cw, ch;
                     glfwGetWindowSize(window_, &cw, &ch);
                     glfwSetWindowSize(window_, w, ch);
@@ -686,7 +686,7 @@ void AppGui::loadLayoutIni(const std::string& path) {
             }
             else if (key == "window_height") {
                 int h = std::stoi(val);
-                if (window_ && h > 100) {
+                if (window_ && h > 100 && h <= 4320) {
                     int cw, ch;
                     glfwGetWindowSize(window_, &cw, &ch);
                     glfwSetWindowSize(window_, cw, h);
@@ -1093,7 +1093,13 @@ static std::vector<double> calcRSIFromCandles(const std::deque<Candle>& bars, in
         double loss = d < 0 ? -d : 0;
         avgGain = (avgGain * (period - 1) + gain) / period;
         avgLoss = (avgLoss * (period - 1) + loss) / period;
-        rsi[i] = (avgLoss == 0.0) ? 100.0 : 100.0 - 100.0 / (1.0 + avgGain / avgLoss);
+
+        if (avgLoss < 1e-14 && avgGain < 1e-14)
+            rsi[i] = 50.0;   // no movement — neutral
+        else if (avgLoss < 1e-14)
+            rsi[i] = 100.0;  // all gains — fully overbought
+        else
+            rsi[i] = 100.0 - 100.0 / (1.0 + avgGain / avgLoss);
     }
     return rsi;
 }

@@ -141,7 +141,7 @@ double TradeHistory::maxDrawdown() const {
     for (auto& t : trades_) {
         equity += t.pnl;
         if (equity > peak) peak = equity;
-        double dd = (peak > 0) ? (peak - equity) / peak : 0.0;
+        double dd = (peak > 1e-12) ? (peak - equity) / peak : 0.0;
         if (dd > maxDD) maxDD = dd;
     }
     return maxDD;
