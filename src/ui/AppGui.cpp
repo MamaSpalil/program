@@ -1093,8 +1093,13 @@ static std::vector<double> calcRSIFromCandles(const std::deque<Candle>& bars, in
         double loss = d < 0 ? -d : 0;
         avgGain = (avgGain * (period - 1) + gain) / period;
         avgLoss = (avgLoss * (period - 1) + loss) / period;
-        rsi[i] = (avgLoss < 1e-14) ? ((avgGain < 1e-14) ? 50.0 : 100.0)
-                                    : 100.0 - 100.0 / (1.0 + avgGain / avgLoss);
+
+        if (avgLoss < 1e-14 && avgGain < 1e-14)
+            rsi[i] = 50.0;   // no movement — neutral
+        else if (avgLoss < 1e-14)
+            rsi[i] = 100.0;  // all gains — fully overbought
+        else
+            rsi[i] = 100.0 - 100.0 / (1.0 + avgGain / avgLoss);
     }
     return rsi;
 }
