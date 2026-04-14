@@ -231,15 +231,12 @@ bool AppGui::init(const std::string& configPath) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // Set imgui.ini path in config directory for persistent window layout
-    {
-        namespace fs = std::filesystem;
-        static std::string iniPath;
-        fs::path cfgDir = fs::path(configPath_).parent_path();
-        if (cfgDir.empty()) cfgDir = ".";
-        iniPath = (cfgDir / "imgui.ini").string();
-        io.IniFilename = iniPath.c_str();
-    }
+    // Disable ImGui's built-in ini file persistence for window positions.
+    // The program uses its own LayoutManager + layout.ini for layout management.
+    // Allowing imgui.ini to persist window positions causes conflicts where stale
+    // saved positions override the LayoutManager's calculated positions,
+    // leading to overlapping and mispositioned windows.
+    io.IniFilename = nullptr;
 
     // Apply dark-metal theme
     setupTheme();
