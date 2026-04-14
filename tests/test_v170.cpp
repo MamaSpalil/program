@@ -88,11 +88,11 @@ TEST(LayoutStress, MarketDataWidthWminus490) {
     EXPECT_FLOAT_EQ(md.size.x, 1920.0f - 492.0f);
 }
 
-TEST(LayoutStress, TopBarHeight32) {
+TEST(LayoutStress, TopBarHeight56) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto tb = mgr.get("Main Toolbar");
-    EXPECT_FLOAT_EQ(tb.size.y, 32.0f);
+    EXPECT_FLOAT_EQ(tb.size.y, 56.0f);
     EXPECT_FLOAT_EQ(tb.pos.y, 0.0f);
     EXPECT_FLOAT_EQ(tb.size.x, 1920.0f);
 }
@@ -102,7 +102,7 @@ TEST(LayoutStress, LogWindowHeightPercentage) {
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
     // v2.7.0: Logs height based on content height (Hvp - toolbar - filters)
-    float Hcontent = 1080.0f - 32.0f - 28.0f;
+    float Hcontent = 1080.0f - 56.0f - 42.0f;
     float expectedH = std::floor(Hcontent * 0.10f);
     EXPECT_FLOAT_EQ(log.size.y, expectedH);
     // v2.7.0: Logs width = center column width (not full viewport)
@@ -287,7 +287,7 @@ TEST(LayoutStress, HideLogsExpandsCenter) {
     // v2.7.0: Logs is in center column, hiding it should expand Market Data height
     auto mdAll = mgrAll.get("Market Data");
     auto mdNo  = mgrNo.get("Market Data");
-    float logsH = std::floor((1080.0f - 32.0f - 28.0f) * 0.10f);
+    float logsH = std::floor((1080.0f - 56.0f - 42.0f) * 0.10f);
     EXPECT_GT(mdNo.size.y, mdAll.size.y + logsH * 0.7f);
 }
 

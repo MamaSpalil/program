@@ -17,9 +17,11 @@ void LayoutManager::recalculate(float screenW, float screenH,
     const float Wvp = std::max(0.0f, screenW);
     const float Hvp = std::max(0.0f, screenH);
 
-    // Fixed constants
-    const float Htop     = 32.0f;   // Main Toolbar height
-    const float Hfilters = 28.0f;   // Filters Bar height
+    // Fixed constants — must match actual rendered sizes so windows don't overlap.
+    // Main Toolbar: menu bar (~22px) + toolbar buttons with FramePadding(10,6) (~25px) + spacing/separator (~9px)
+    const float Htop     = 56.0f;   // Main Toolbar height
+    // Filters Bar: window padding (~12px) + filter child (30px)
+    const float Hfilters = 42.0f;   // Filters Bar height
     const float gap      = 1.0f;    // Pixel gap between adjacent windows
 
     // Left column width: shown when either PairList or VD is visible
