@@ -19,7 +19,7 @@ double RiskManager::positionSize(double entryPrice, double stopLoss) const {
 }
 
 double RiskManager::kellySizing(double winRate, double avgWin, double avgLoss) const {
-    if (avgLoss <= 0.0) return 0.0;
+    if (avgLoss <= 0.0 || avgWin <= 0.0) return 0.0;
     double b = avgWin / avgLoss;
     double kelly = winRate - (1.0 - winRate) / b;
     kelly = std::max(0.0, std::min(kelly, cfg_.maxRiskPerTrade * 2.0));

@@ -22,7 +22,10 @@
       "testnet": false,
       "base_url": "https://www.okx.com",
       "ws_host": "ws.okx.com",
-      "ws_port": "8443"
+      "ws_port": "8443",
+      "futures_base_url": "https://www.okx.com",
+      "futures_ws_host": "ws.okx.com",
+      "futures_ws_port": "8443"
     }
   }
 }

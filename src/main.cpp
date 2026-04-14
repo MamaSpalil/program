@@ -291,7 +291,18 @@ int main(int argc, char* argv[]) {
                 static constexpr int kPricePollIntervalMs = 100;
                 static constexpr int kUserDataPollIntervalSec = 5;
 
-                engine->setOnUpdateCallback([&gui, &cfg, &engine](const crypto::EngineUpdate& upd) {
+                // Capture cfg fields by value to avoid dangling reference:
+                // cfg is a callback parameter that goes out of scope when the
+                // connect callback returns, but the onUpdate callback is invoked
+                // repeatedly from the engine thread long after that.
+                std::string cfgExchangeName  = cfg.exchangeName;
+                std::string cfgSymbol        = cfg.symbol;
+                std::string cfgInterval      = cfg.interval;
+                std::string cfgMarketType    = cfg.marketType;
+                double      cfgInitialCapital = cfg.initialCapital;
+
+                engine->setOnUpdateCallback([&gui, cfgExchangeName, cfgSymbol, cfgInterval,
+                                             cfgMarketType, cfgInitialCapital, &engine](const crypto::EngineUpdate& upd) {
                     static auto lastPriceTime = std::chrono::steady_clock::now();
                     static auto lastUserDataTime = std::chrono::steady_clock::time_point{};
                     auto now = std::chrono::steady_clock::now();
@@ -299,8 +310,8 @@ int main(int argc, char* argv[]) {
                     crypto::GuiState st;
                     st.connected = true;
                     st.trading   = true;
-                    st.statusMessage = "Connected to " + cfg.exchangeName +
-                                       " (" + cfg.symbol + " " + cfg.interval + ")";
+                    st.statusMessage = "Connected to " + cfgExchangeName +
+                                       " (" + cfgSymbol + " " + cfgInterval + ")";
                     st.lastCandle    = upd.candle;
                     st.candleHistory = upd.candleHistory;
                     st.emaFast  = upd.emaFast;
@@ -312,7 +323,7 @@ int main(int argc, char* argv[]) {
                     st.bb       = upd.bb;
                     st.lastSignal = upd.signal;
                     st.equity    = upd.equity;
-                    st.initialCapital = cfg.initialCapital;
+                    st.initialCapital = cfgInitialCapital;
                     st.drawdown  = upd.drawdown;
                     st.userIndicatorPlots = upd.userIndicatorPlots;
                     st.orderBook = upd.orderBook;
@@ -331,7 +342,7 @@ int main(int argc, char* argv[]) {
                         // Fetch precise price periodically (fast tick update)
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastPriceTime).count() >= kPricePollIntervalMs) {
                             try {
-                                double p = engine->getPrice(cfg.symbol);
+                                double p = engine->getPrice(cfgSymbol);
                                 if (p > 0) st.currentPrice = p;
                             } catch (const std::exception& e) {
                                 // Use candle close as fallback, no error display
@@ -345,11 +356,11 @@ int main(int argc, char* argv[]) {
                         // Fetch user data periodically
                         if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUserDataTime).count() >= kUserDataPollIntervalSec) {
                             try {
-                                st.openOrders = engine->getOpenOrders(cfg.symbol);
-                                st.userTrades = engine->getMyTrades(cfg.symbol, 20);
-                                if (cfg.marketType == "futures") {
+                                st.openOrders = engine->getOpenOrders(cfgSymbol);
+                                st.userTrades = engine->getMyTrades(cfgSymbol, 20);
+                                if (cfgMarketType == "futures") {
                                     st.futuresBalance = engine->getFuturesBalance();
-                                    st.futuresPositions = engine->getPositionRisk(cfg.symbol);
+                                    st.futuresPositions = engine->getPositionRisk(cfgSymbol);
                                 } else {
                                     st.accountBalanceDetails = engine->getAccountBalanceDetails();
                                 }

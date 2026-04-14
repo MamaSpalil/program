@@ -72,7 +72,7 @@ std::vector<double> LSTMModel::predict(const std::vector<double>& features) {
 void LSTMModel::train(const std::vector<std::vector<double>>& X,
                       const std::vector<int>& y,
                       int epochs, double lr) {
-    if (X.empty()) return;
+    if (X.empty() || X.size() != y.size()) return;
     net_->train();
     torch::optim::Adam opt(net_->parameters(),
         torch::optim::AdamOptions(lr).weight_decay(1e-5));
