@@ -203,8 +203,10 @@ public:
     AppGui();
     ~AppGui();
 
-    // Initialize window and ImGui context
-    bool init(const std::string& configPath);
+    // Initialize window and ImGui context.
+    // exeDir: directory of the executable — Config.ini is stored here.
+    //         If empty, falls back to configPath parent directory.
+    bool init(const std::string& configPath, const std::string& exeDir = "");
 
     // Main render loop (blocking)
     void run();
@@ -302,6 +304,7 @@ private:
     GLFWwindow* window_{nullptr};
     std::atomic<bool> shouldClose_{false};
     std::string configPath_;
+    std::string exeDir_;       // directory of the executable (for Config.ini)
 
     mutable std::mutex stateMutex_;
     GuiState state_;

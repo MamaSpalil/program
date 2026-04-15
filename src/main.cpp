@@ -89,6 +89,36 @@ int main(int argc, char* argv[]) {
     if (argc > 1) configPath = argv[1];
     configPath = resolveConfigPath(configPath, argv[0]);
 
+    // Compute executable directory for Config.ini placement
+    std::string exeDir;
+    {
+        namespace fs = std::filesystem;
+#ifdef _WIN32
+        // On Windows, use GetModuleFileName for a reliable absolute path
+        wchar_t exeBuf[4096]{};
+        DWORD len = GetModuleFileNameW(NULL, exeBuf, 4096);
+        if (len > 0 && len < 4096) {
+            exeDir = fs::path(exeBuf).parent_path().string();
+        }
+#else
+        // On Linux, resolve /proc/self/exe symlink
+        std::error_code ec;
+        auto selfExe = fs::read_symlink("/proc/self/exe", ec);
+        if (!ec) {
+            exeDir = selfExe.parent_path().string();
+        }
+#endif
+        // Fallback: derive from argv[0]
+        if (exeDir.empty()) {
+            fs::path p = fs::path(argv[0]).parent_path();
+            if (!p.empty()) {
+                std::error_code ec2;
+                auto canon = fs::weakly_canonical(p, ec2);
+                exeDir = ec2 ? p.string() : canon.string();
+            }
+        }
+    }
+
     std::signal(SIGINT,  signalHandler);
     std::signal(SIGTERM, signalHandler);
 
@@ -137,7 +167,7 @@ int main(int argc, char* argv[]) {
         maintenance->start();
 
         auto gui = std::make_unique<crypto::AppGui>();
-        if (!gui->init(configPath)) {
+        if (!gui->init(configPath, exeDir)) {
             std::cerr << "Failed to initialize GUI\n";
             return 1;
         }
