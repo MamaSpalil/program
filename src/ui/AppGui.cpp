@@ -258,6 +258,23 @@ bool AppGui::init(const std::string& configPath) {
             // First launch — create layout.ini with default settings
             saveLayoutIni(layoutIniPath_);
         }
+
+        // Config.ini — user-editable window position/size overrides
+        configIniPath_ = (cfgDir / "Config.ini").string();
+        if (fs::exists(configIniPath_)) {
+            loadConfigIni(configIniPath_);
+        } else {
+            // First launch — create Config.ini with calculated defaults
+            // (needs an initial recalculate so defaults are available)
+            layoutMgr_.setLogPct(config_.layoutLogPct);
+            layoutMgr_.setVdPct(config_.layoutVdPct);
+            layoutMgr_.setIndPct(config_.layoutIndPct);
+            layoutMgr_.recalculate(1920, 1080, 0, 0,
+                                   showPairList_, showUserPanel_,
+                                   showVolumeDelta_, showIndicators_, showLogs_);
+            saveConfigIni(configIniPath_);
+        }
+
         layoutNeedsReset_ = true;
     }
 
@@ -279,9 +296,12 @@ void AppGui::run() {
 // shutdown
 // ---------------------------------------------------------------------------
 void AppGui::shutdown() {
-    // Save layout.ini before destroying the window
+    // Save layout.ini and Config.ini before destroying the window
     if (!layoutIniPath_.empty() && window_) {
         try { saveLayoutIni(layoutIniPath_); } catch (...) {}
+    }
+    if (!configIniPath_.empty() && window_) {
+        try { saveConfigIni(configIniPath_); } catch (...) {}
     }
 
     if (!window_) return;
@@ -719,6 +739,121 @@ void AppGui::saveLayoutIni(const std::string& path) const {
         f << "\n[window]\n";
         f << "window_width=" << w << "\n";
         f << "window_height=" << h << "\n";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Config.ini — user-editable window position/size overrides
+// ---------------------------------------------------------------------------
+
+// Section-name → LayoutManager window-name mapping
+static const std::pair<const char*, const char*> kConfigIniSections[] = {
+    {"MainToolbar",  "Main Toolbar"},
+    {"FiltersBar",   "Filters Bar"},
+    {"PairList",     "Pair List"},
+    {"VolumeDelta",  "Volume Delta"},
+    {"Indicators",   "Indicators"},
+    {"MarketData",   "Market Data"},
+    {"Logs",         "Logs"},
+    {"UserPanel",    "User Panel"},
+};
+
+void AppGui::loadConfigIni(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return;
+
+    layoutMgr_.clearOverrides();
+
+    // Temporary per-section storage
+    struct Rect { float x{-1}, y{-1}, w{-1}, h{-1}; };
+    std::map<std::string, Rect> sections;
+    std::string currentSection;
+
+    std::string line;
+    while (std::getline(f, line)) {
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == ';' || line[0] == '#') continue;
+
+        // Section header
+        if (line.front() == '[') {
+            auto end = line.find(']');
+            if (end != std::string::npos)
+                currentSection = line.substr(1, end - 1);
+            continue;
+        }
+
+        if (currentSection.empty()) continue;
+
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        // Trim whitespace
+        {
+            auto kEnd = key.find_last_not_of(" \t");
+            if (kEnd != std::string::npos) key = key.substr(0, kEnd + 1);
+            auto vStart = val.find_first_not_of(" \t");
+            if (vStart != std::string::npos) val = val.substr(vStart);
+            else val.clear();
+        }
+
+        try {
+            float fval = std::stof(val);
+            auto& r = sections[currentSection];
+            if      (key == "x")      r.x = fval;
+            else if (key == "y")      r.y = fval;
+            else if (key == "width")  r.w = fval;
+            else if (key == "height") r.h = fval;
+        } catch (...) {
+            // Skip malformed values
+        }
+    }
+
+    // Apply parsed sections as overrides
+    for (auto& [iniName, layoutName] : kConfigIniSections) {
+        auto it = sections.find(iniName);
+        if (it == sections.end()) continue;
+        auto& r = it->second;
+        // Only apply if all four values are present and positive
+        if (r.x >= 0 && r.y >= 0 && r.w > 0 && r.h > 0) {
+            layoutMgr_.setOverride(layoutName,
+                                   LayoutManager::Vec2(r.x, r.y),
+                                   LayoutManager::Vec2(r.w, r.h));
+        }
+    }
+}
+
+void AppGui::saveConfigIni(const std::string& path) const {
+    std::ofstream f(path);
+    if (!f.is_open()) return;
+
+    f << "; ============================================================================\n";
+    f << "; Config.ini — Window Layout Configuration\n";
+    f << "; ============================================================================\n";
+    f << "; This file allows you to customize the position and size of each window\n";
+    f << "; inside the program. Edit the x, y, width, and height values to move\n";
+    f << "; and resize windows as desired.\n";
+    f << ";\n";
+    f << "; Coordinates:\n";
+    f << ";   x      — horizontal position (pixels from left edge)\n";
+    f << ";   y      — vertical position (pixels from top edge)\n";
+    f << ";   width  — window width in pixels\n";
+    f << ";   height — window height in pixels\n";
+    f << ";\n";
+    f << "; After editing, restart the program to apply changes.\n";
+    f << "; To reset to defaults, delete this file — it will be recreated automatically.\n";
+    f << "; ============================================================================\n\n";
+
+    for (auto& [iniName, layoutName] : kConfigIniSections) {
+        // Use current effective layout (override or calculated)
+        auto layout = layoutMgr_.get(layoutName);
+        f << "[" << iniName << "]\n";
+        f << "x=" << static_cast<int>(layout.pos.x) << "\n";
+        f << "y=" << static_cast<int>(layout.pos.y) << "\n";
+        f << "width=" << static_cast<int>(layout.size.x) << "\n";
+        f << "height=" << static_cast<int>(layout.size.y) << "\n";
+        f << "\n";
     }
 }
 
@@ -2537,6 +2672,7 @@ void AppGui::drawSettingsPanel() {
                 // Save config (imgui.ini will auto-save after positions are applied)
                 saveConfigToFile(configPath_);
                 if (!layoutIniPath_.empty()) saveLayoutIni(layoutIniPath_);
+                if (!configIniPath_.empty()) saveConfigIni(configIniPath_);
                 addLog("[Config] Layout applied and saved");
                 if (onSaveConfig_) onSaveConfig_(config_);
             }
@@ -2553,15 +2689,20 @@ void AppGui::drawSettingsPanel() {
                 showVolumeDelta_ = true;
                 showIndicators_  = true;
                 showLogs_        = true;
+                // Clear Config.ini overrides so calculated defaults are used
+                layoutMgr_.clearOverrides();
                 saveConfigToFile(configPath_);
                 if (!layoutIniPath_.empty()) saveLayoutIni(layoutIniPath_);
+                if (!configIniPath_.empty()) saveConfigIni(configIniPath_);
                 addLog("[Config] Layout reset to defaults and saved");
                 if (onSaveConfig_) onSaveConfig_(config_);
             }
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
-                "Tip: Window positions are saved in layout.ini.");
+                "Tip: Window positions are saved in Config.ini and layout.ini.");
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
+                "Edit Config.ini to customize window coordinates.");
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
                 "Unlock windows to drag and resize freely.");
 
@@ -2575,6 +2716,7 @@ void AppGui::drawSettingsPanel() {
     if (ImGui::Button("Save All Settings to File")) {
         saveConfigToFile(configPath_);
         if (!layoutIniPath_.empty()) saveLayoutIni(layoutIniPath_);
+        if (!configIniPath_.empty()) saveConfigIni(configIniPath_);
         addLog("[Config] Settings saved to " + configPath_);
         if (onSaveConfig_) onSaveConfig_(config_);
     }

@@ -125,17 +125,41 @@ public:
 
     // Get the layout for a specific window by name
     WindowLayout get(const std::string& name) const {
+        // Return user override if present, otherwise the calculated layout
+        auto ov = overrides_.find(name);
+        if (ov != overrides_.end()) return ov->second;
         auto it = layouts_.find(name);
         if (it != layouts_.end()) return it->second;
         return {name, Vec2(100, 100), Vec2(400, 300), true};
     }
 
     bool hasLayout(const std::string& name) const {
-        return layouts_.find(name) != layouts_.end();
+        return overrides_.find(name) != overrides_.end()
+            || layouts_.find(name) != layouts_.end();
+    }
+
+    // ── Config.ini overrides ───────────────────────────────────────────
+    // Allow the user to override individual window positions/sizes
+    // via Config.ini.  When set, get() returns the override instead of
+    // the calculated layout.
+
+    void setOverride(const std::string& name, Vec2 pos, Vec2 size, bool visible = true) {
+        overrides_[name] = {name, pos, size, visible};
+    }
+
+    void clearOverrides() { overrides_.clear(); }
+    bool hasOverrides() const { return !overrides_.empty(); }
+
+    // Access calculated layouts (ignoring overrides) for saving defaults
+    WindowLayout getCalculated(const std::string& name) const {
+        auto it = layouts_.find(name);
+        if (it != layouts_.end()) return it->second;
+        return {name, Vec2(100, 100), Vec2(400, 300), true};
     }
 
 private:
     std::map<std::string, WindowLayout> layouts_;
+    std::map<std::string, WindowLayout> overrides_;
     float logPct_ = 0.10f;
     float vdPct_  = 0.15f;
     float indPct_ = 0.20f;

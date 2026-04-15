@@ -2518,7 +2518,7 @@ TEST(LayoutV210, LogsHeightUsesPercentage) {
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
     // v2.7.0: Logs height based on content height (Hvp - toolbar - filters)
-    float Hcontent = 1080.0f - 56.0f - 42.0f;
+    float Hcontent = 1080.0f - 68.0f - 42.0f;
     float expectedH = std::floor(Hcontent * 0.15f);
     EXPECT_FLOAT_EQ(log.size.y, expectedH);
 }
@@ -2537,7 +2537,7 @@ TEST(LayoutV210, LogsHeightDefault10Percent) {
     mgr.recalculate(1920, 1080);
     auto log = mgr.get("Logs");
     // v2.7.0: Default logPct = 0.10, based on content height
-    float Hcontent = 1080.0f - 56.0f - 42.0f;
+    float Hcontent = 1080.0f - 68.0f - 42.0f;
     EXPECT_FLOAT_EQ(log.size.y, std::floor(Hcontent * 0.10f));
 }
 
@@ -2546,7 +2546,7 @@ TEST(LayoutV210, MarketDataGetsEnoughSpace) {
     mgr.recalculate(1920, 1080);
     auto md = mgr.get("Market Data");
     // Market Data should get at least 50% of center height
-    float Hcenter = 1080.0f - 56.0f - 42.0f - std::floor(1080.0f * 0.10f);
+    float Hcenter = 1080.0f - 68.0f - 42.0f - std::floor(1080.0f * 0.10f);
     float expectedMinMD = Hcenter * 0.5f;
     EXPECT_GT(md.size.y, expectedMinMD);
 }
@@ -3887,7 +3887,7 @@ TEST(LayoutV270, LeftColumnFullContentHeight) {
     mgr.recalculate(1920, 1080);
     auto pl = mgr.get("Pair List");
     auto vd = mgr.get("Volume Delta");
-    float Hcontent = 1080.0f - 56.0f - 42.0f;
+    float Hcontent = 1080.0f - 68.0f - 42.0f;
     // PairList + gap + VolumeDelta should equal full content height
     float leftTotal = pl.size.y + 1.0f + vd.size.y; // 1px gap
     EXPECT_NEAR(leftTotal, Hcontent, 1.0f);
@@ -3897,7 +3897,7 @@ TEST(LayoutV270, UserPanelFullContentHeight) {
     LayoutManager mgr;
     mgr.recalculate(1920, 1080);
     auto up = mgr.get("User Panel");
-    float Hcontent = 1080.0f - 56.0f - 42.0f;
+    float Hcontent = 1080.0f - 68.0f - 42.0f;
     EXPECT_FLOAT_EQ(up.size.y, Hcontent);
 }
 
