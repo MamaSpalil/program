@@ -167,8 +167,9 @@ AppGui::~AppGui() { shutdown(); }
 // ---------------------------------------------------------------------------
 // init
 // ---------------------------------------------------------------------------
-bool AppGui::init(const std::string& configPath) {
+bool AppGui::init(const std::string& configPath, const std::string& exeDir) {
     configPath_ = configPath;
+    exeDir_ = exeDir;
 
     // Load settings from JSON
     try {
@@ -259,8 +260,22 @@ bool AppGui::init(const std::string& configPath) {
             saveLayoutIni(layoutIniPath_);
         }
 
-        // Config.ini — user-editable window position/size overrides
-        configIniPath_ = (cfgDir / "Config.ini").string();
+        // Config.ini — user-editable window position/size overrides.
+        // Stored next to the executable so users can find and edit it easily.
+        fs::path iniDir;
+        if (!exeDir_.empty()) {
+            iniDir = fs::path(exeDir_);
+        } else {
+            // Fallback: same directory as config file
+            iniDir = cfgDir;
+        }
+        if (iniDir.empty()) iniDir = ".";
+        // Ensure the directory exists (it should for the exe dir)
+        if (!fs::exists(iniDir)) {
+            std::error_code ec;
+            fs::create_directories(iniDir, ec);
+        }
+        configIniPath_ = (iniDir / "Config.ini").string();
         if (fs::exists(configIniPath_)) {
             loadConfigIni(configIniPath_);
         } else {
@@ -2700,9 +2715,13 @@ void AppGui::drawSettingsPanel() {
 
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
-                "Tip: Window positions are saved in Config.ini and layout.ini.");
+                "Tip: Window positions are saved in Config.ini (next to the executable).");
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
                 "Edit Config.ini to customize window coordinates.");
+            if (!configIniPath_.empty()) {
+                ImGui::TextColored(ImVec4(0.40f, 0.50f, 0.60f, 1.0f),
+                    "Path: %s", configIniPath_.c_str());
+            }
             ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.55f, 1.0f),
                 "Unlock windows to drag and resize freely.");
 
