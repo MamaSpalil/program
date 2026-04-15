@@ -95,8 +95,9 @@ int main(int argc, char* argv[]) {
         namespace fs = std::filesystem;
 #ifdef _WIN32
         // On Windows, use GetModuleFileName for a reliable absolute path
-        wchar_t exeBuf[MAX_PATH]{};
-        if (GetModuleFileNameW(NULL, exeBuf, MAX_PATH) > 0) {
+        wchar_t exeBuf[4096]{};
+        DWORD len = GetModuleFileNameW(NULL, exeBuf, 4096);
+        if (len > 0 && len < 4096) {
             exeDir = fs::path(exeBuf).parent_path().string();
         }
 #else

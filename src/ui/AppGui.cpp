@@ -269,11 +269,14 @@ bool AppGui::init(const std::string& configPath, const std::string& exeDir) {
             // Fallback: same directory as config file
             iniDir = cfgDir;
         }
-        if (iniDir.empty()) iniDir = ".";
+        if (iniDir.empty()) iniDir = fs::current_path();
         // Ensure the directory exists (it should for the exe dir)
         if (!fs::exists(iniDir)) {
             std::error_code ec;
             fs::create_directories(iniDir, ec);
+            if (ec) {
+                Logger::get()->warn("[Config] Failed to create directory for Config.ini: {}", ec.message());
+            }
         }
         configIniPath_ = (iniDir / "Config.ini").string();
         if (fs::exists(configIniPath_)) {
