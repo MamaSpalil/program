@@ -464,6 +464,11 @@ private:
     void loadLayoutIni(const std::string& path);
     void saveLayoutIni(const std::string& path) const;
 
+    // Config.ini — user-editable window coordinates
+    std::string configIniPath_;
+    void loadConfigIni(const std::string& path);
+    void saveConfigIni(const std::string& path) const;
+
     // Volume Delta zoom/pan state
     float vdZoomX_{1.0f};
     float vdZoomY_{1.0f};
