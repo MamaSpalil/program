@@ -841,7 +841,7 @@ void AppGui::saveConfigIni(const std::string& path) const {
     f << ";   width  — window width in pixels\n";
     f << ";   height — window height in pixels\n";
     f << ";\n";
-    f << "; After editing, restart the program to apply changes.\n";
+    f << "; Config.ini is loaded once at startup. Restart the program to apply changes.\n";
     f << "; To reset to defaults, delete this file — it will be recreated automatically.\n";
     f << "; ============================================================================\n\n";
 
