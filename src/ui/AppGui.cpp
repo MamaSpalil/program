@@ -917,6 +917,7 @@ void AppGui::renderFrame() {
     // ── Keyboard shortcuts ──
     // Ctrl+B — quick BUY (open Order Management with BUY side)
     // Ctrl+S — quick SELL (open Order Management with SELL side)
+    // Ctrl+M — open Settings menu
     // Escape — close topmost modal / popup
     if (!ImGui::GetIO().WantTextInput) {
         ImGuiIO& io = ImGui::GetIO();
@@ -928,6 +929,9 @@ void AppGui::renderFrame() {
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
             showOrderManagement_ = true;
             omSideIdx_ = 1; // SELL
+        }
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_M)) {
+            showSettings_ = !showSettings_;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             // Close the topmost optional window
@@ -1000,7 +1004,7 @@ void AppGui::renderFrame() {
 void AppGui::drawMenuBar() {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Settings", "Ctrl+S")) showSettings_ = true;
+            if (ImGui::MenuItem("Settings", "Ctrl+M")) showSettings_ = true;
             ImGui::Separator();
             if (ImGui::MenuItem("Save Config")) {
                 saveConfigToFile(configPath_);
