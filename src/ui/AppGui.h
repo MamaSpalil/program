@@ -311,6 +311,7 @@ private:
     GuiConfig config_;
 
     bool showSettings_{false};
+    bool prevShowSettings_{false};  // tracks settings panel open/close for buffer refresh
     bool showDemo_{false};
     bool showOrderBook_{false};  // Order book mode
     bool showUserPanel_{true};   // User panel (separate window)

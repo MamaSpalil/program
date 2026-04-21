@@ -967,6 +967,7 @@ void AppGui::renderFrame() {
     if (layoutNeedsReset_) layoutNeedsReset_ = false;
 
     // Settings window (modal-like)
+    if (!showSettings_) prevShowSettings_ = false;  // reset on close for buffer refresh
     if (showSettings_) drawSettingsPanel();
 
     // Order book as optional floating window
@@ -2396,6 +2397,28 @@ void AppGui::drawPortfolioPanel() {
 //  Settings Panel (separate window)
 // ---------------------------------------------------------------------------
 void AppGui::drawSettingsPanel() {
+    // Detect when the panel is (re)opened and refresh config→buffer copies
+    static char apiKeyBuf[256]        = {};
+    static char apiSecBuf[256]        = {};
+    static char passBuf[256]          = {};
+    static char baseUrlBuf[256]       = {};
+    static char wsHostBuf[256]        = {};
+    static char wsPortBuf[16]         = {};
+    static char futuresBaseUrlBuf[256]= {};
+    static char futuresWsHostBuf[256] = {};
+    static char futuresWsPortBuf[16]  = {};
+    static bool exchBufInit           = false;
+
+    static char symBuf[32]  = {};
+    static bool symBufInit  = false;
+
+    if (!prevShowSettings_) {
+        // Settings panel just opened — force all buffer re-initialisation
+        exchBufInit = false;
+        symBufInit  = false;
+        prevShowSettings_ = true;
+    }
+
     const ImVec2 settingsSize(600, 700);
     const ImVec2 settingsCenter = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(ImVec2(settingsCenter.x - settingsSize.x * 0.5f, settingsCenter.y - settingsSize.y * 0.5f), ImGuiCond_Appearing);
@@ -2420,17 +2443,7 @@ void AppGui::drawSettingsPanel() {
                 config_.exchangeName = exchanges[exIdx];
             }
 
-            static char apiKeyBuf[256] = {};
-            static char apiSecBuf[256] = {};
-            static char passBuf[256] = {};
-            static char baseUrlBuf[256] = {};
-            static char wsHostBuf[256] = {};
-            static char wsPortBuf[16] = {};
-            static char futuresBaseUrlBuf[256] = {};
-            static char futuresWsHostBuf[256] = {};
-            static char futuresWsPortBuf[16] = {};
-            static bool bufInit = false;
-            if (!bufInit) {
+            if (!exchBufInit) {
                 strncpy(apiKeyBuf, config_.apiKey.c_str(), sizeof(apiKeyBuf) - 1);
                 strncpy(apiSecBuf, config_.apiSecret.c_str(), sizeof(apiSecBuf) - 1);
                 strncpy(passBuf, config_.passphrase.c_str(), sizeof(passBuf) - 1);
@@ -2440,7 +2453,7 @@ void AppGui::drawSettingsPanel() {
                 strncpy(futuresBaseUrlBuf, config_.futuresBaseUrl.c_str(), sizeof(futuresBaseUrlBuf) - 1);
                 strncpy(futuresWsHostBuf, config_.futuresWsHost.c_str(), sizeof(futuresWsHostBuf) - 1);
                 strncpy(futuresWsPortBuf, config_.futuresWsPort.c_str(), sizeof(futuresWsPortBuf) - 1);
-                bufInit = true;
+                exchBufInit = true;
             }
             ImGui::InputText("API Key", apiKeyBuf, sizeof(apiKeyBuf));
             ImGui::InputText("API Secret", apiSecBuf, sizeof(apiSecBuf),
@@ -2509,11 +2522,9 @@ void AppGui::drawSettingsPanel() {
             ImGui::Text("Trading Parameters");
             ImGui::Separator();
 
-            static char symBuf[32] = {};
-            static bool symInit = false;
-            if (!symInit) {
+            if (!symBufInit) {
                 strncpy(symBuf, config_.symbol.c_str(), sizeof(symBuf) - 1);
-                symInit = true;
+                symBufInit = true;
             }
             ImGui::InputText("Symbol", symBuf, sizeof(symBuf));
 
@@ -3306,6 +3317,7 @@ void AppGui::drawPairListPanel() {
         const char* spinner = "|/-\\";
         char spinChar = spinner[(int)(time * 8.0f) % 4];
         ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f), "Loading %c", spinChar);
+        ImGui::End();
         return;
     }
 
@@ -3316,11 +3328,13 @@ void AppGui::drawPairListPanel() {
 
     if (filtered.empty() && cachedPairs_.empty()) {
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f), "Connect to load pairs");
+        ImGui::End();
         return;
     }
 
     if (filtered.empty()) {
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f), "No pairs found");
+        ImGui::End();
         return;
     }
 
@@ -3446,8 +3460,6 @@ void AppGui::drawPairSelector() {
         }
         ImGui::EndCombo();
     }
-
-    ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
