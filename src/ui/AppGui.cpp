@@ -1012,16 +1012,25 @@ void AppGui::drawMenuBar() {
 // ---------------------------------------------------------------------------
 void AppGui::drawMainToolbarWindow() {
     auto layout = layoutMgr_.get("Main Toolbar");
-    LayoutManager::lockWindow("Main Toolbar", layout.pos, layout.size);
+    if (config_.layoutLocked || layoutNeedsReset_)
+        LayoutManager::lockWindow("Main Toolbar", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Main Toolbar", layout.pos, layout.size);
 
     int wflags = ImGuiWindowFlags_NoTitleBar
                | ImGuiWindowFlags_NoCollapse
                | ImGuiWindowFlags_NoBringToFrontOnFocus
-               | ImGuiWindowFlags_NoMove
-               | ImGuiWindowFlags_NoResize
                | ImGuiWindowFlags_MenuBar;
+    if (config_.layoutLocked)
+        wflags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 
     ImGui::Begin("Main Toolbar", nullptr, wflags);
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Main Toolbar",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
+    }
     drawMenuBar();
     drawToolbar();
     ImGui::End();
@@ -1032,15 +1041,24 @@ void AppGui::drawMainToolbarWindow() {
 // ---------------------------------------------------------------------------
 void AppGui::drawFiltersBarWindow() {
     auto layout = layoutMgr_.get("Filters Bar");
-    LayoutManager::lockWindow("Filters Bar", layout.pos, layout.size);
+    if (config_.layoutLocked || layoutNeedsReset_)
+        LayoutManager::lockWindow("Filters Bar", layout.pos, layout.size);
+    else
+        LayoutManager::lockWindowOnce("Filters Bar", layout.pos, layout.size);
 
     int wflags = ImGuiWindowFlags_NoTitleBar
                | ImGuiWindowFlags_NoCollapse
-               | ImGuiWindowFlags_NoBringToFrontOnFocus
-               | ImGuiWindowFlags_NoMove
-               | ImGuiWindowFlags_NoResize;
+               | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    if (config_.layoutLocked)
+        wflags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
 
     ImGui::Begin("Filters Bar", nullptr, wflags);
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Filters Bar",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
+    }
     drawFilterPanel();
     ImGui::End();
 }
@@ -1272,6 +1290,12 @@ void AppGui::drawMarketDataWindow() {
     mdFlags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
     ImGui::Begin("Market Data", nullptr, mdFlags);
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Market Data",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
+    }
 
     // ── 5.2: Signal panel — price, indicators, signal, confidence ──
     {
@@ -1935,6 +1959,12 @@ void AppGui::drawIndicatorsPanel() {
     if (!ImGui::Begin("Indicators", nullptr, wflags)) {
         ImGui::End();
         return;
+    }
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Indicators",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
     }
 
     // Zoom / Pan interaction for indicator content
@@ -2801,6 +2831,12 @@ void AppGui::drawLogWindow() {
         ImGui::End();
         return;
     }
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Logs",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
+    }
 
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
@@ -2891,6 +2927,12 @@ void AppGui::drawVolumeDeltaPanel() {
     if (!ImGui::Begin("Volume Delta", nullptr, wflags)) {
         ImGui::End();
         return;
+    }
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Volume Delta",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
     }
 
     ImVec2 canvasPos  = ImGui::GetCursorScreenPos();
@@ -3134,6 +3176,12 @@ void AppGui::drawPairListPanel() {
         ImGui::End();
         return;
     }
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("Pair List",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
+    }
 
     // ── SPOT / FUTURES toggle ──
     {
@@ -3374,6 +3422,12 @@ void AppGui::drawUserPanel() {
     if (!ImGui::Begin("User Panel", &showUserPanel_, wflags)) {
         ImGui::End();
         return;
+    }
+    if (!config_.layoutLocked) {
+        ImVec2 p = ImGui::GetWindowPos();
+        ImVec2 s = ImGui::GetWindowSize();
+        layoutMgr_.setOverride("User Panel",
+            LayoutManager::Vec2(p.x, p.y), LayoutManager::Vec2(s.x, s.y));
     }
 
     GuiState snap;
