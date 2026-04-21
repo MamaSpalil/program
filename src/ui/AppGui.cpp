@@ -2396,7 +2396,10 @@ void AppGui::drawPortfolioPanel() {
 //  Settings Panel (separate window)
 // ---------------------------------------------------------------------------
 void AppGui::drawSettingsPanel() {
-    ImGui::SetNextWindowSize(ImVec2(600, 700), ImGuiCond_FirstUseEver);
+    const ImVec2 settingsSize(600, 700);
+    const ImVec2 settingsCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(settingsCenter.x - settingsSize.x * 0.5f, settingsCenter.y - settingsSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(settingsSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Settings", &showSettings_)) {
         ImGui::End();
         return;
@@ -3077,7 +3080,10 @@ void AppGui::drawVolumeDeltaPanel() {
 //  Order Book Panel (Стакан / Биржевой стакан)
 // ---------------------------------------------------------------------------
 void AppGui::drawOrderBookPanel() {
-    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+    const ImVec2 obSize(400, 500);
+    const ImVec2 obCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(obCenter.x - obSize.x * 0.5f, obCenter.y - obSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(obSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Order Book", &showOrderBook_)) {
         ImGui::End();
         return;
@@ -3691,7 +3697,10 @@ void AppGui::drawUserPanel() {
 //  H1 — Order Management Window
 // ---------------------------------------------------------------------------
 void AppGui::drawOrderManagementWindow() {
-    ImGui::SetNextWindowSize(ImVec2(420, 520), ImGuiCond_FirstUseEver);
+    const ImVec2 omSize(420, 520);
+    const ImVec2 omCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(omCenter.x - omSize.x * 0.5f, omCenter.y - omSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(omSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Order Management", &showOrderManagement_)) {
         ImGui::End();
         return;
@@ -3894,7 +3903,10 @@ void AppGui::drawOrderManagementWindow() {
 //  H2 — Paper Trading Window
 // ---------------------------------------------------------------------------
 void AppGui::drawPaperTradingWindow() {
-    ImGui::SetNextWindowSize(ImVec2(400, 400), ImGuiCond_FirstUseEver);
+    const ImVec2 ptSize(400, 400);
+    const ImVec2 ptCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(ptCenter.x - ptSize.x * 0.5f, ptCenter.y - ptSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ptSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Paper Trading", &showPaperTrading_)) {
         ImGui::End();
         return;
@@ -3966,7 +3978,10 @@ void AppGui::drawPaperTradingWindow() {
 //  M1 — Backtesting Window
 // ---------------------------------------------------------------------------
 void AppGui::drawBacktestWindow() {
-    ImGui::SetNextWindowSize(ImVec2(700, 600), ImGuiCond_FirstUseEver);
+    const ImVec2 btSize(700, 600);
+    const ImVec2 btCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(btCenter.x - btSize.x * 0.5f, btCenter.y - btSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(btSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Backtesting", &showBacktest_)) {
         ImGui::End();
         return;
@@ -4210,7 +4225,10 @@ void AppGui::drawBacktestWindow() {
 //  M3 — Alerts Window
 // ---------------------------------------------------------------------------
 void AppGui::drawAlertsWindow() {
-    ImGui::SetNextWindowSize(ImVec2(450, 350), ImGuiCond_FirstUseEver);
+    const ImVec2 alSize(450, 350);
+    const ImVec2 alCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(alCenter.x - alSize.x * 0.5f, alCenter.y - alSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(alSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Alerts", &showAlerts_)) {
         ImGui::End();
         return;
@@ -4268,7 +4286,10 @@ void AppGui::drawAlertsWindow() {
 //  L1 — Market Scanner Window
 // ---------------------------------------------------------------------------
 void AppGui::drawMarketScannerWindow() {
-    ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_FirstUseEver);
+    const ImVec2 scSize(800, 500);
+    const ImVec2 scCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(scCenter.x - scSize.x * 0.5f, scCenter.y - scSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(scSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Market Scanner", &showScanner_)) {
         ImGui::End();
         return;
@@ -4331,7 +4352,10 @@ void AppGui::drawMarketScannerWindow() {
 //  L3 — Pine Script Editor Window
 // ---------------------------------------------------------------------------
 void AppGui::drawPineEditorWindow() {
-    ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
+    const ImVec2 peSize(600, 500);
+    const ImVec2 peCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(peCenter.x - peSize.x * 0.5f, peCenter.y - peSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(peSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Pine Script Editor", &showPineEditor_)) {
         ImGui::End();
         return;
@@ -4425,7 +4449,10 @@ void AppGui::drawPineEditorWindow() {
 //  Trade History & Analytics Window
 // ---------------------------------------------------------------------------
 void AppGui::drawTradeHistoryWindow() {
-    ImGui::SetNextWindowSize(ImVec2(750, 550), ImGuiCond_FirstUseEver);
+    const ImVec2 thSize(750, 550);
+    const ImVec2 thCenter = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(ImVec2(thCenter.x - thSize.x * 0.5f, thCenter.y - thSize.y * 0.5f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(thSize, ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Trade History & Analytics", &showTradeHistory_)) {
         ImGui::End();
         return;
