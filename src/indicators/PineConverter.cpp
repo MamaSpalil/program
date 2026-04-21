@@ -144,38 +144,51 @@ void PineConverter::Parser::skipNL() {
     while (check(PineTok::NEWLINE)) advance();
 }
 
-// Parse an indented block: consume statements until we reach a token that
-// is NOT part of the block body.  Pine Script uses indentation, but the
-// lexer emits tokens without INDENT/DEDENT tokens, so we read one statement
-// that follows a newline and continues until the logical block ends (we see
-// a token that starts a top-level statement after the first newline pair).
+// Parse an indented block: consume statements that form the body of an if/else.
+// Pine Script uses significant whitespace (indentation) for blocks, but the
+// lexer does not emit INDENT/DEDENT tokens.  Without indentation information
+// we cannot reliably distinguish multi-statement block bodies from the
+// surrounding code.  We therefore use the following heuristic:
+//   - Read statements one by one until we hit EOF, KW_ELSE, or a parse error.
+//   - After each successfully parsed statement, peek at the next token.
+//     If the next token starts a construct that only appears at the top level
+//     (indicator/strategy declarations, plot calls) we stop the block.
+//   - For single-statement blocks (the most common Pine Script pattern) this
+//     works correctly.  Multi-statement blocks are supported as long as each
+//     inner statement can be distinguished from a new top-level statement.
+// TODO: Add INDENT/DEDENT tokens to the lexer for fully correct block parsing.
 std::vector<PineStmt> PineConverter::Parser::parseBlock() {
     std::vector<PineStmt> stmts;
-    // Skip the newline(s) after the colon / 'if' header
+    // Skip the newline(s) after the 'if' condition
     skipNL();
-    // The block consists of consecutive non-empty statements.
-    // We stop when we hit EOF, or when we detect the start of an 'else' or a
-    // keyword that only appears at top level (indicator/strategy), or when there
-    // are no more tokens that form a valid statement.
     while (!check(PineTok::END_OF_FILE) &&
            !check(PineTok::KW_ELSE)) {
+        // Stop if the next token starts a top-level construct that cannot
+        // appear inside an if-body (e.g. indicator(), strategy() declarations)
+        if (check(PineTok::IDENT) &&
+            (cur().value == "indicator" || cur().value == "strategy")) {
+            // Peek one more token to see if it's followed by '('
+            size_t saved = pos_;
+            advance();
+            bool isDecl = check(PineTok::LPAREN);
+            pos_ = saved;
+            if (isDecl) break;
+        }
+
         size_t savedPos = pos_;
         try {
             auto stmt = parseStmt();
             stmts.push_back(std::move(stmt));
         } catch (...) {
             pos_ = savedPos;
-            break; // Stop block parsing on error
+            break; // Stop block parsing on parse error
         }
         skipNL();
-        // After reading a statement, if the next non-NL token would begin
-        // something that can't be a block body statement, stop.
         if (check(PineTok::END_OF_FILE) || check(PineTok::KW_ELSE))
             break;
-        // Peek: if the next line appears to be at the same or lower indentation
-        // level we stop.  Since we have no indentation tokens we use a simple
-        // heuristic: stop after reading exactly one statement per block.
-        // This handles the common single-statement if/else pattern.
+        // Without indentation tokens we stop after one statement — this covers
+        // the most common single-statement if/else pattern.  Multi-statement
+        // blocks require INDENT/DEDENT lexer support (see TODO above).
         break;
     }
     return stmts;

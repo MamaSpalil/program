@@ -3332,7 +3332,7 @@ void AppGui::drawPairListPanel() {
 
         // Display unified symbol name (e.g. "BTCUSDT" regardless of exchange format)
         std::string unified = SymbolFormatter::toUnified(config_.exchangeName, filtered[i]->symbol);
-        std::string label = unified.empty() ? filtered[i]->displayName : unified;
+        const std::string& label = unified.empty() ? filtered[i]->symbol : unified;
 
         if (ImGui::Selectable(label.c_str(), isActive)) {
             activePair_ = filtered[i]->symbol;
