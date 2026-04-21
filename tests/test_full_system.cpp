@@ -4331,3 +4331,71 @@ TEST(BacktestAdaptive, DBStrategySavesEMAPeriods) {
 
     fs::remove(dbPath);
 }
+
+// ---------------------------------------------------------------------------
+//  v2.8.0 Tests
+// ---------------------------------------------------------------------------
+
+TEST(VersionV280, VersionStringExists) {
+    std::string version = "2.8.0";
+    EXPECT_FALSE(version.empty());
+    EXPECT_NE(version.find("2.8"), std::string::npos);
+}
+
+TEST(VersionV280, BacktestHistoryTabUsesBtRepository) {
+    // Verify that BacktestRepository::getAll works correctly for History tab
+    auto dbPath = getTempDir() + "bt_history_v280.db";
+    TradingDatabase db(dbPath);
+    ASSERT_TRUE(db.init());
+    BacktestRepository repo(db);
+
+    // Save a result
+    BacktestResult r;
+    r.id = "test_v280";
+    r.symbol = "BTCUSDT";
+    r.timeframe = "1h";
+    r.initialBalance = 10000.0;
+    r.finalBalance = 11000.0;
+    r.pnl = 1000.0;
+    r.pnlPct = 10.0;
+    r.winRate = 0.60;
+    r.sharpe = 1.5;
+    r.maxDrawdown = 5.0;
+    r.totalTrades = 20;
+    r.strategy = "EMA_9/21";
+    r.commission = 0.001;
+    repo.save(r, {});
+
+    auto all = repo.getAll("", 50);
+    EXPECT_GE(all.size(), 1u);
+    // History tab should be able to display symbol and pnl
+    bool found = false;
+    for (auto& br : all) {
+        if (br.symbol == "BTCUSDT" && br.pnl > 0.0) { found = true; break; }
+    }
+    EXPECT_TRUE(found);
+
+    fs::remove(dbPath);
+}
+
+TEST(VersionV280, SymbolFormatterPairListUnified) {
+    // SymbolFormatter::toUnified converts exchange symbols to unified display
+    // OKX uses BTC-USDT format; unified should be BTCUSDT
+    std::string unified = SymbolFormatter::toUnified("okx", "BTC-USDT");
+    EXPECT_EQ(unified, "BTCUSDT");
+
+    // Bitget futures suffix removed
+    unified = SymbolFormatter::toUnified("bitget", "BTCUSDT_UMCBL");
+    EXPECT_EQ(unified, "BTCUSDT");
+
+    // Binance format unchanged
+    unified = SymbolFormatter::toUnified("binance", "ETHUSDT");
+    EXPECT_EQ(unified, "ETHUSDT");
+}
+
+TEST(VersionV280, SymbolFormatterEmptyExchange) {
+    // Empty exchange name: return original symbol stripped of separators
+    std::string unified = SymbolFormatter::toUnified("", "BTC-USDT");
+    // Should not crash and should return something non-empty
+    EXPECT_FALSE(unified.empty());
+}

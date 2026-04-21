@@ -2,6 +2,7 @@
 #include "../core/Logger.h"
 #include "../indicators/PineConverter.h"
 #include "../trading/OrderManagement.h"
+#include "../exchange/SymbolFormatter.h"
 
 #include "../../third_party/imgui/imgui.h"
 #include "../../third_party/imgui/imgui_impl_glfw.h"
@@ -913,13 +914,36 @@ void AppGui::renderFrame() {
                            showPairList_, showUserPanel_,
                            showVolumeDelta_, showIndicators_, showLogs_);
 
-    // ── All 8 mandatory windows ──
+    // ── Keyboard shortcuts ──
+    // Ctrl+B — quick BUY (open Order Management with BUY side)
+    // Ctrl+S — quick SELL (open Order Management with SELL side)
+    // Escape — close topmost modal / popup
+    if (!ImGui::GetIO().WantTextInput) {
+        ImGuiIO& io = ImGui::GetIO();
+        bool ctrl = io.KeyCtrl;
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_B)) {
+            showOrderManagement_ = true;
+            omSideIdx_ = 0; // BUY
+        }
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+            showOrderManagement_ = true;
+            omSideIdx_ = 1; // SELL
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            // Close the topmost optional window
+            if (showSettings_)       { showSettings_ = false; }
+            else if (showOrderManagement_) { showOrderManagement_ = false; }
+            else if (showPaperTrading_)    { showPaperTrading_ = false; }
+            else if (showBacktest_)        { showBacktest_ = false; }
+            else if (showAlerts_)          { showAlerts_ = false; }
+            else if (showScanner_)         { showScanner_ = false; }
+            else if (showPineEditor_)      { showPineEditor_ = false; }
+            else if (showTradeHistory_)    { showTradeHistory_ = false; }
+            else if (showOrderBook_)       { showOrderBook_ = false; }
+        }
+    }
 
-    // Main Toolbar — top bar with connect/start/settings buttons
-    drawMainToolbarWindow();
-
-    // Filters Bar — below toolbar
-    drawFiltersBarWindow();
+    // ── Content windows (drawn first — lower z-order) ──
 
     // Pair List — left column, top
     if (showPairList_) drawPairListPanel();
@@ -952,6 +976,12 @@ void AppGui::renderFrame() {
     if (showScanner_) drawMarketScannerWindow();
     if (showPineEditor_) drawPineEditorWindow();
     if (showTradeHistory_) drawTradeHistoryWindow();
+
+    // ── Toolbar windows drawn LAST so they always appear on top in z-order ──
+    // Main Toolbar — top bar with connect/start/settings buttons
+    drawMainToolbarWindow();
+    // Filters Bar — below toolbar
+    drawFiltersBarWindow();
 
     // Render
     ImGui::Render();
@@ -999,7 +1029,7 @@ void AppGui::drawMenuBar() {
         }
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About")) {
-                addLog("[Info] Crypto ML Trader v2.6.0 — Algorithmic Trading System");
+                addLog("[Info] Crypto ML Trader v2.8.0 — Algorithmic Trading System");
             }
             ImGui::EndMenu();
         }
@@ -3156,7 +3186,7 @@ void AppGui::drawStatusBar() {
     ImGui::TextColored(statusColor, "%s", snap.statusMessage.c_str());
     ImGui::SameLine(ImGui::GetWindowWidth() - 200);
     ImGui::TextColored(ImVec4(0.45f, 0.45f, 0.47f, 1.0f),
-                       "Crypto ML Trader v2.6.0");
+                       "Crypto ML Trader v2.8.0");
 }
 
 // ---------------------------------------------------------------------------
@@ -3300,14 +3330,18 @@ void AppGui::drawPairListPanel() {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         }
 
-        if (ImGui::Selectable(filtered[i]->displayName.c_str(), isActive)) {
+        // Display unified symbol name (e.g. "BTCUSDT" regardless of exchange format)
+        std::string unified = SymbolFormatter::toUnified(config_.exchangeName, filtered[i]->symbol);
+        const std::string& label = unified.empty() ? filtered[i]->symbol : unified;
+
+        if (ImGui::Selectable(label.c_str(), isActive)) {
             activePair_ = filtered[i]->symbol;
             config_.symbol = filtered[i]->symbol;
             config_.marketType = filtered[i]->marketType;
             selectedPairIdx_ = i;
             chartScrollOffset_ = 0;
             needsChartReset_ = true;
-            addLog("[Config] Pair changed to " + filtered[i]->displayName);
+            addLog("[Config] Pair changed to " + label);
             if (onRefreshData_) onRefreshData_();
         }
 
@@ -3503,6 +3537,47 @@ void AppGui::drawUserPanel() {
                 ImGui::TextColored(eqCol, "Equity: $%.8f", snap.equity);
                 ImGui::Text("Drawdown: %.2f%%", snap.drawdown * 100.0);
             }
+        }
+    }
+
+    // ── Equity Curve Mini-Chart ──
+    if (ImGui::CollapsingHeader("Equity Curve", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // Collect up to 100 recent equity points from state
+        std::vector<float> eqPoints;
+        {
+            std::lock_guard<std::mutex> lk(stateMutex_);
+            const auto& src = state_.equityCurveData;
+            int n = static_cast<int>(src.size());
+            int start = std::max(0, n - 100);
+            eqPoints.reserve(n - start);
+            for (int k = start; k < n; ++k)
+                eqPoints.push_back(static_cast<float>(src[k]));
+        }
+        if (eqPoints.empty() && snap.equity > 0) {
+            // Fallback: use current equity as single point from equityHistory_
+            std::lock_guard<std::mutex> lk(stateMutex_);
+            for (double v : equityHistory_)
+                eqPoints.push_back(static_cast<float>(v));
+        }
+        if (eqPoints.size() >= 2) {
+            float minEq = *std::min_element(eqPoints.begin(), eqPoints.end());
+            float maxEq = *std::max_element(eqPoints.begin(), eqPoints.end());
+            float last  = eqPoints.back();
+            float first = eqPoints.front();
+            // Choose line colour based on overall trend (profit = green, loss = red)
+            ImVec4 lineCol = (last >= first)
+                ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
+                : ImVec4(0.90f, 0.30f, 0.30f, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_PlotLines, lineCol);
+            ImGui::PlotLines("##EqCurve", eqPoints.data(),
+                             static_cast<int>(eqPoints.size()),
+                             0, nullptr, minEq * 0.99f, maxEq * 1.01f,
+                             ImVec2(-1, 60));
+            ImGui::PopStyleColor();
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f),
+                               "Start: $%.2f  Now: $%.2f", first, last);
+        } else {
+            ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f), "No equity data yet");
         }
     }
 
@@ -3893,6 +3968,13 @@ void AppGui::drawBacktestWindow() {
         return;
     }
 
+    if (!ImGui::BeginTabBar("##BtTabs")) {
+        ImGui::End();
+        return;
+    }
+
+    // ── Tab 1: Run Backtest ──
+    if (ImGui::BeginTabItem("Run")) {
     const char* btIntervals[] = {"1m","5m","15m","30m","1h","4h","1d"};
     int btIntervalsCount = 7;
 
@@ -4046,6 +4128,76 @@ void AppGui::drawBacktestWindow() {
             ImGui::EndTable();
         }
     }
+
+    ImGui::EndTabItem(); // "Run"
+    } // if BeginTabItem("Run")
+
+    // ── Tab 2: History ──
+    if (ImGui::BeginTabItem("History")) {
+        if (!btRepo_) {
+            ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.62f, 1.0f), "Database not connected");
+        } else {
+            // Load history on demand
+            static std::vector<BacktestResult> btHistory;
+            static double btHistoryLoadTime = -1.0;
+            double now = ImGui::GetTime();
+            if (now - btHistoryLoadTime > 10.0) {
+                btHistory = btRepo_->getAll("", 50);
+                btHistoryLoadTime = now;
+            }
+
+            if (btHistory.empty()) {
+                ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f), "No backtest results saved yet");
+            } else {
+                ImGui::TextColored(ImVec4(0.60f, 0.70f, 0.85f, 1.0f),
+                                   "Showing last %d results", (int)btHistory.size());
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Refresh")) btHistoryLoadTime = -1.0;
+
+                if (ImGui::BeginTable("##BtHistory", 8,
+                    ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
+                    ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX,
+                    ImVec2(0, -1))) {
+                    ImGui::TableSetupColumn("Symbol",   ImGuiTableColumnFlags_WidthFixed, 80);
+                    ImGui::TableSetupColumn("TF",       ImGuiTableColumnFlags_WidthFixed, 45);
+                    ImGui::TableSetupColumn("Trades",   ImGuiTableColumnFlags_WidthFixed, 55);
+                    ImGui::TableSetupColumn("WinRate",  ImGuiTableColumnFlags_WidthFixed, 65);
+                    ImGui::TableSetupColumn("PnL",      ImGuiTableColumnFlags_WidthFixed, 90);
+                    ImGui::TableSetupColumn("Sharpe",   ImGuiTableColumnFlags_WidthFixed, 60);
+                    ImGui::TableSetupColumn("MaxDD",    ImGuiTableColumnFlags_WidthFixed, 70);
+                    ImGui::TableSetupColumn("Strategy", ImGuiTableColumnFlags_WidthStretch);
+                    ImGui::TableHeadersRow();
+
+                    for (auto& r : btHistory) {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%s", r.symbol.c_str());
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%s", r.timeframe.c_str());
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%d", r.totalTrades);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%.1f%%", r.winRate * 100.0);
+                        ImGui::TableNextColumn();
+                        ImVec4 pc = r.pnl >= 0
+                            ? ImVec4(0.3f, 0.85f, 0.35f, 1.0f)
+                            : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
+                        ImGui::TextColored(pc, "$%.2f (%.1f%%)", r.pnl, r.pnlPct);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%.2f", r.sharpe);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("-%.1f%%", r.maxDrawdown);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%s", r.strategy.c_str());
+                    }
+                    ImGui::EndTable();
+                }
+            }
+        }
+        ImGui::EndTabItem(); // "History"
+    } // if BeginTabItem("History")
+
+    ImGui::EndTabBar();
 
     ImGui::End();
 }

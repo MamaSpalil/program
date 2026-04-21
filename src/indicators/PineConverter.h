@@ -50,11 +50,14 @@ struct PineExpr {
 
 // ── Statement ────────────────────────────────────────────────────────────────
 struct PineStmt {
-    enum class Kind { INDICATOR, ASSIGN, VAR_DECL, PLOT, EXPR };
+    enum class Kind { INDICATOR, ASSIGN, VAR_DECL, PLOT, EXPR, IF_STMT };
     Kind kind;
     std::string name;
     std::shared_ptr<PineExpr> expr;
     std::string plotTitle;
+    // For IF_STMT: condition is in expr; branches are nested statements
+    std::vector<PineStmt> thenStmts;
+    std::vector<PineStmt> elseStmts;
 };
 
 // ── Parsed script ────────────────────────────────────────────────────────────
@@ -122,6 +125,7 @@ private:
         void skipNL();
 
         PineStmt parseStmt();
+        std::vector<PineStmt> parseBlock();
         std::shared_ptr<PineExpr> parseExpr();
         std::shared_ptr<PineExpr> parseTernary();
         std::shared_ptr<PineExpr> parseOr();
