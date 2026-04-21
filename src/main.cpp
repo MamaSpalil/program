@@ -337,6 +337,13 @@ int main(int argc, char* argv[]) {
                     static auto lastUserDataTime = std::chrono::steady_clock::time_point{};
                     auto now = std::chrono::steady_clock::now();
 
+                    // ── Fast lock-free tick update (called on every WebSocket kline message) ──
+                    // This runs BEFORE the expensive full-state copy so the Market Data window
+                    // shows the new price within ≤ 1 ms of the WebSocket message being received.
+                    gui->updateLiveTick(upd.candle.close, upd.candle.high,
+                                        upd.candle.low,   upd.candle.open,
+                                        upd.candle.volume);
+
                     crypto::GuiState st;
                     st.connected = true;
                     st.trading   = true;

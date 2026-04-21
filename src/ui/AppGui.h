@@ -217,6 +217,12 @@ public:
     // Thread-safe state update (called from engine thread)
     void updateState(const GuiState& state);
 
+    // Fast lock-free live tick update — called per WebSocket message.
+    // Updates the current (last) bar's price fields atomically so the chart
+    // refreshes every incoming tick without the overhead of a full state copy.
+    void updateLiveTick(double price, double high, double low,
+                        double open, double volume);
+
     // Get current config (thread-safe)
     GuiConfig getConfig() const;
 
@@ -378,6 +384,16 @@ private:
     std::chrono::steady_clock::time_point lastPriceRefresh_{};
     std::chrono::steady_clock::time_point lastOrderRefresh_{};
     std::chrono::steady_clock::time_point lastTradeRefresh_{};
+
+    // ── Live tick atomics ─────────────────────────────────────────────────
+    // Written by the engine/WebSocket thread via updateLiveTick() (lock-free).
+    // Read by the render thread in drawMarketDataWindow() to show the current
+    // bar's latest price without waiting for the next full updateState() copy.
+    std::atomic<double> liveTickPrice_{0.0};
+    std::atomic<double> liveTickHigh_{0.0};
+    std::atomic<double> liveTickLow_{0.0};
+    std::atomic<double> liveTickOpen_{0.0};
+    std::atomic<double> liveTickVolume_{0.0};
 
     // ── New module state ──────────────────────────────────────────────────
 

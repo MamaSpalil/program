@@ -25,6 +25,13 @@
 #include <algorithm>
 #include <cstring>
 #include <ctime>
+#include <thread>
+#include <chrono>
+
+#ifdef _WIN32
+#  include <mmsystem.h>
+#  pragma comment(lib, "winmm.lib")
+#endif
 
 namespace crypto {
 
@@ -198,7 +205,7 @@ bool AppGui::init(const std::string& configPath, const std::string& exeDir) {
         return false;
     }
     glfwMakeContextCurrent(window_);
-    glfwSwapInterval(1); // vsync
+    glfwSwapInterval(0); // VSync off — render as fast as possible for ≤1 ms tick latency
 
     // Load and set window icon (Win32: LoadImage → glfwSetWindowIcon)
 #ifdef _WIN32
@@ -304,11 +311,30 @@ bool AppGui::init(const std::string& configPath, const std::string& exeDir) {
 // run  (blocks until window close)
 // ---------------------------------------------------------------------------
 void AppGui::run() {
+    // Raise OS timer resolution to 1 ms on Windows so sleep_for(1ms) is accurate.
+#ifdef _WIN32
+    timeBeginPeriod(1);
+#endif
+
     while (!glfwWindowShouldClose(window_) && !shouldClose_) {
+        auto frameStart = std::chrono::steady_clock::now();
+
         glfwPollEvents();
         renderFrame();
+
+        // Cap frame rate at ~1000 fps (sleep for the remainder of the 1 ms budget).
+        // This prevents the GPU/CPU from spinning at 100 % while still delivering
+        // ≤ 1 ms latency between a new tick arriving and the frame being presented.
+        auto elapsed = std::chrono::steady_clock::now() - frameStart;
+        auto remaining = std::chrono::milliseconds(1) - elapsed;
+        if (remaining > std::chrono::microseconds(100))
+            std::this_thread::sleep_for(remaining);
     }
     shouldClose_ = true;
+
+#ifdef _WIN32
+    timeEndPeriod(1);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +409,19 @@ void AppGui::updateState(const GuiState& s) {
 GuiConfig AppGui::getConfig() const {
     std::lock_guard<std::mutex> lk(stateMutex_);
     return config_;
+}
+
+// ---------------------------------------------------------------------------
+// updateLiveTick — fast lock-free update for the current bar's OHLCV fields.
+// Called per WebSocket kline message; no mutex — writes to atomics only.
+// ---------------------------------------------------------------------------
+void AppGui::updateLiveTick(double price, double high, double low,
+                            double open, double volume) {
+    if (price  > 0.0) liveTickPrice_ .store(price,  std::memory_order_relaxed);
+    if (high   > 0.0) liveTickHigh_  .store(high,   std::memory_order_relaxed);
+    if (low    > 0.0) liveTickLow_   .store(low,    std::memory_order_relaxed);
+    if (open   > 0.0) liveTickOpen_  .store(open,   std::memory_order_relaxed);
+    if (volume >= 0.0) liveTickVolume_.store(volume, std::memory_order_relaxed);
 }
 
 void AppGui::addLog(const std::string& line) {
@@ -1314,6 +1353,23 @@ void AppGui::drawMarketDataWindow() {
         snap = state_;
     }
 
+    // ── Merge live tick atomics into the last-bar display values ──────────
+    // The atomic fields are written lock-free on every WebSocket kline message
+    // so they are always at most 1 message behind wall-clock time, independent
+    // of how often the full updateState() is called.
+    double livePx  = liveTickPrice_ .load(std::memory_order_relaxed);
+    double liveHi  = liveTickHigh_  .load(std::memory_order_relaxed);
+    double liveLo  = liveTickLow_   .load(std::memory_order_relaxed);
+    double liveOp  = liveTickOpen_  .load(std::memory_order_relaxed);
+    double liveVol = liveTickVolume_.load(std::memory_order_relaxed);
+
+    // Prefer live price; fall back to candle close when no live data yet.
+    double displayClose  = (livePx  > 0.0) ? livePx  : snap.lastCandle.close;
+    double displayHigh   = (liveHi  > 0.0 && liveHi  > snap.lastCandle.high)  ? liveHi  : snap.lastCandle.high;
+    double displayLow    = (liveLo  > 0.0 && liveLo  < snap.lastCandle.low)   ? liveLo  : snap.lastCandle.low;
+    double displayOpen   = (liveOp  > 0.0) ? liveOp  : snap.lastCandle.open;
+    double displayVolume = (liveVol >= 0.0 && liveVol > snap.lastCandle.volume) ? liveVol : snap.lastCandle.volume;
+
     // ── Window: fixed position/size via LayoutManager ──
     auto layout = layoutMgr_.get("Market Data");
     if (config_.layoutLocked || layoutNeedsReset_)
@@ -1344,8 +1400,8 @@ void AppGui::drawMarketDataWindow() {
             rsiVal = rsivec.back();
         }
 
-        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Price: %.8f",
-                           snap.lastCandle.close);
+        // Show live tick price (updated per WebSocket message, ≤ 1 ms latency)
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Price: %.8f", displayClose);
         ImGui::SameLine(0, 20);
         ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "RSI: %.1f", rsiVal);
         ImGui::SameLine(0, 20);
@@ -1364,13 +1420,13 @@ void AppGui::drawMarketDataWindow() {
         ImGui::TextColored(sigColor, "(%.1f%%)", snap.lastSignal.confidence * 100.0);
     }
 
-    // ── Price info bar (OHLCV) ──
+    // ── Price info bar (OHLCV) — uses live tick values for current bar ──
     {
         double priceChange = 0.0;
         double pctChange = 0.0;
-        if (snap.lastCandle.open > 0) {
-            priceChange = snap.lastCandle.close - snap.lastCandle.open;
-            pctChange = (priceChange / snap.lastCandle.open) * 100.0;
+        if (displayOpen > 0) {
+            priceChange = displayClose - displayOpen;
+            pctChange = (priceChange / displayOpen) * 100.0;
         }
         ImVec4 chgColor = (priceChange >= 0)
             ? ImVec4(0.30f, 0.85f, 0.35f, 1.0f)
@@ -1378,10 +1434,10 @@ void AppGui::drawMarketDataWindow() {
 
         ImGui::TextColored(chgColor, "(%+.2f%%)", pctChange);
         ImGui::SameLine(0, 20);
+        // Show live-tick OHLCV values for the current (last) bar
         ImGui::TextColored(ImVec4(0.50f, 0.50f, 0.52f, 1.0f),
             "O: %.8f  H: %.8f  L: %.8f  V: %.1f",
-            snap.lastCandle.open, snap.lastCandle.high,
-            snap.lastCandle.low, snap.lastCandle.volume);
+            displayOpen, displayHigh, displayLow, displayVolume);
     }
     ImGui::Separator();
 
@@ -1588,12 +1644,26 @@ void AppGui::drawMarketDataWindow() {
             float x = p.x + 2.0f + (float)vi * barStep;
             if (x > p.x + chartW) break;
 
-            float yHigh  = p.y + priceH - (float)((c.high  - pMin) / range) * priceH;
-            float yLow   = p.y + priceH - (float)((c.low   - pMin) / range) * priceH;
-            float yOpen  = p.y + priceH - (float)((c.open  - pMin) / range) * priceH;
-            float yClose = p.y + priceH - (float)((c.close - pMin) / range) * priceH;
+            // For the last (live) bar substitute live tick OHLCV so every
+            // WebSocket kline message is reflected without waiting for the next
+            // full updateState() call (≤ 1 ms latency via the atomic fast path).
+            double hi    = c.high;
+            double lo    = c.low;
+            double op    = c.open;
+            double cl    = c.close;
+            if (i == totalCount - 1) {
+                if (displayHigh > hi)  hi = displayHigh;
+                if (displayLow  > 0.0 && displayLow < lo) lo = displayLow;
+                if (displayOpen > 0.0) op = displayOpen;
+                if (displayClose > 0.0) cl = displayClose;
+            }
 
-            bool bullish = c.close >= c.open;
+            float yHigh  = p.y + priceH - (float)((hi - pMin) / range) * priceH;
+            float yLow   = p.y + priceH - (float)((lo - pMin) / range) * priceH;
+            float yOpen  = p.y + priceH - (float)((op - pMin) / range) * priceH;
+            float yClose = p.y + priceH - (float)((cl - pMin) / range) * priceH;
+
+            bool bullish = cl >= op;
             ImU32 color = bullish
                 ? IM_COL32(40, 200, 80, 255)
                 : IM_COL32(220, 60, 60, 255);
@@ -1701,9 +1771,13 @@ void AppGui::drawMarketDataWindow() {
                           IM_COL32(160, 160, 165, 220), label);
         }
 
-        // ── Current price line (last close) ──
-        if (endIdx > 0) {
-            double lastPrice = snap.candleHistory[endIdx - 1].close;
+        // ── Current price line — uses live tick close for ≤ 1 ms latency ──
+        {
+            // Use the live tick price when available; otherwise fall back to the
+            // last bar's close from the state snapshot.
+            double lastPrice = (endIdx == totalCount && displayClose > 0.0)
+                               ? displayClose
+                               : (endIdx > 0 ? snap.candleHistory[endIdx - 1].close : 0.0);
             if (lastPrice >= pMin && lastPrice <= pMax) {
                 float yLast = p.y + priceH - (float)((lastPrice - pMin) / range) * priceH;
                 draw->AddLine(ImVec2(p.x, yLast), ImVec2(p.x + chartW, yLast),
