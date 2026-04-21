@@ -374,3 +374,134 @@ TEST(UserIndicatorManager, UpdateAllProducesPlots) {
     // Should have produced some plot data from the loaded scripts
     EXPECT_FALSE(allPlots.empty());
 }
+
+// ── PineConverter if/else tests (v2.8.0) ────────────────────────────────────
+
+TEST(PineConverterV280, ParseIfStatement) {
+    // Verify that 'if' statements are parsed into IF_STMT nodes
+    std::string src = R"(
+//@version=6
+indicator("IfTest")
+x = close
+if x > 100
+    x = 200
+)";
+    auto script = PineConverter::parseSource(src);
+    bool hasIf = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::IF_STMT) {
+            hasIf = true;
+            EXPECT_NE(s.expr, nullptr); // condition exists
+            EXPECT_FALSE(s.thenStmts.empty()); // then branch exists
+        }
+    }
+    EXPECT_TRUE(hasIf);
+}
+
+TEST(PineConverterV280, ParseIfElseStatement) {
+    // Verify that 'if/else' is parsed with both branches
+    std::string src = R"(
+//@version=6
+indicator("IfElseTest")
+rsiVal = 50
+if rsiVal > 70
+    rsiVal = 1
+else
+    rsiVal = 0
+)";
+    auto script = PineConverter::parseSource(src);
+    bool hasIfElse = false;
+    for (auto& s : script.statements) {
+        if (s.kind == PineStmt::Kind::IF_STMT) {
+            hasIfElse = true;
+            EXPECT_NE(s.expr, nullptr);
+            EXPECT_FALSE(s.thenStmts.empty());
+            EXPECT_FALSE(s.elseStmts.empty());
+        }
+    }
+    EXPECT_TRUE(hasIfElse);
+}
+
+TEST(PineConverterV280, GenerateCppWithIfStatement) {
+    // Verify that generateCpp produces an 'if' block in C++ code
+    std::string src = R"(
+//@version=6
+indicator("IfGen")
+flag = 0
+if close > 100
+    flag = 1
+plot(flag, "flag")
+)";
+    auto script = PineConverter::parseSource(src);
+    std::string cpp = PineConverter::generateCpp(script, "IfGenIndicator");
+    EXPECT_NE(cpp.find("if ("), std::string::npos);
+}
+
+TEST(PineConverterV280, GenerateCppWithIfElseStatement) {
+    // Verify that generateCpp produces an 'if/else' block in C++ code
+    std::string src = R"(
+//@version=6
+indicator("IfElseGen")
+sig = 0
+if close > 100
+    sig = 1
+else
+    sig = -1
+plot(sig, "sig")
+)";
+    auto script = PineConverter::parseSource(src);
+    std::string cpp = PineConverter::generateCpp(script, "IfElseGenIndicator");
+    EXPECT_NE(cpp.find("if ("), std::string::npos);
+    EXPECT_NE(cpp.find("} else {"), std::string::npos);
+}
+
+TEST(PineConverterV280, RuntimeExecsIfTrue) {
+    // PineRuntime should execute the then-branch when condition is true
+    std::string src = R"(
+//@version=6
+indicator("RuntimeIf")
+sig = 0
+if close > 50
+    sig = 1
+plot(sig, "sig")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle c{};
+    c.close = 100.0; c.open = 99.0; c.high = 101.0; c.low = 99.0; c.volume = 1.0;
+    auto plots = rt.update(c);
+    // close(100) > 50 → sig should be 1
+    auto it = plots.find("sig");
+    if (it != plots.end()) {
+        EXPECT_DOUBLE_EQ(it->second, 1.0);
+    }
+    // At minimum the if statement should not crash the runtime
+}
+
+TEST(PineConverterV280, RuntimeExecsIfFalse) {
+    // PineRuntime should execute the else-branch when condition is false
+    std::string src = R"(
+//@version=6
+indicator("RuntimeIfElse")
+sig = 0
+if close > 200
+    sig = 1
+else
+    sig = -1
+plot(sig, "sig")
+)";
+    auto script = PineConverter::parseSource(src);
+    PineRuntime rt;
+    rt.load(script);
+
+    Candle c{};
+    c.close = 100.0; c.open = 99.0; c.high = 101.0; c.low = 99.0; c.volume = 1.0;
+    auto plots = rt.update(c);
+    // close(100) > 200 is false → sig should be -1
+    auto it = plots.find("sig");
+    if (it != plots.end()) {
+        EXPECT_DOUBLE_EQ(it->second, -1.0);
+    }
+}

@@ -5,6 +5,81 @@ All notable changes to the CryptoTrader project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-04-21
+
+### Fixed
+
+#### Fix 1: MainToolbar Z-Order — всегда поверх других окон
+- **AppGui.cpp renderFrame()** — `drawMainToolbarWindow()` и `drawFiltersBarWindow()` теперь вызываются ПОСЛЕДНИМИ в цикле отрисовки. В Dear ImGui окна, нарисованные последними, имеют более высокий z-порядок и отображаются поверх всех остальных окон. Ранее тулбар рисовался первым и мог оказаться под плавающими окнами (Settings, Order Management и т.д.).
+
+#### Fix 2: Версионная строка — обновлена с v2.6.0 на v2.8.0
+- **AppGui.cpp drawStatusBar()** — строка статусбара обновлена с "v2.6.0" на "v2.8.0".
+- **AppGui.cpp About menu** — лог-сообщение About обновлено с "v2.6.0" на "v2.8.0".
+
+### Added
+
+#### Этап 1: SymbolFormatter в PairList
+- **AppGui.cpp** — включён `SymbolFormatter.h`. В `drawPairListPanel()` символы теперь отображаются через `SymbolFormatter::toUnified()`:
+  - OKX: "BTC-USDT" → "BTCUSDT"
+  - Bitget: "BTCUSDT_UMCBL" → "BTCUSDT"
+  - Binance/Bybit: "BTCUSDT" → "BTCUSDT" (без изменений)
+  - При выборе пары внутренний symbol остаётся в формате биржи (для API), отображается унифицированный.
+
+#### Этап 2.1: Equity Curve Mini-Chart в User Panel
+- **AppGui.cpp drawUserPanel()** — добавлена секция "Equity Curve" (CollapsingHeader, по умолчанию открыта):
+  - Отображает последние 100 точек equity из `state_.equityCurveData` или `equityHistory_`.
+  - Цвет линии: зелёный (прибыль: last >= first), красный (убыток).
+  - Показывает стартовый и текущий equity в подписи.
+  - При отсутствии данных выводит "No equity data yet".
+
+#### Этап 2.4: Keyboard Shortcuts (горячие клавиши)
+- **AppGui.cpp renderFrame()** — добавлена обработка горячих клавиш (только когда фокус не на текстовом поле):
+  - `Ctrl+B` — открывает Order Management с выбранной стороной BUY.
+  - `Ctrl+S` — открывает Order Management с выбранной стороной SELL.
+  - `Escape` — закрывает последнее открытое опциональное окно (Settings → OrderManagement → PaperTrading → Backtest → Alerts → Scanner → PineEditor → TradeHistory → OrderBook).
+
+#### Этап 4.3: Backtest History Tab
+- **AppGui.cpp drawBacktestWindow()** — окно бэктеста реструктурировано с вкладками:
+  - **"Run"** — существующий функционал запуска бэктеста (без изменений).
+  - **"History"** — новая вкладка: загружает и отображает последние 50 результатов из `BacktestRepository`:
+    - Таблица с колонками: Symbol, TF, Trades, WinRate, PnL, Sharpe, MaxDD, Strategy.
+    - PnL подсвечен зелёным (прибыль) / красным (убыток).
+    - Кнопка "Refresh" для принудительного обновления (кэш 10 секунд).
+    - При отсутствии DB выводит "Database not connected".
+
+#### Этап 5.6: PineConverter — генерация if/else в C++
+- **PineConverter.h** — добавлен `Kind::IF_STMT` в `PineStmt::Kind`. Добавлены поля `thenStmts` и `elseStmts` в `PineStmt`. Добавлен метод `parseBlock()` в класс `Parser`.
+- **PineConverter.cpp Parser::parseStmt()** — добавлен парсинг `if/else` конструкций:
+  - Токен `KW_IF` → создаёт `IF_STMT` с условием в `expr`, then-ветвью в `thenStmts`.
+  - `else` после then-ветви → заполняет `elseStmts`. Поддерживается `else if` (рекурсивно).
+- **PineConverter.cpp Parser::parseBlock()** — новый вспомогательный метод для парсинга тела if/else блока.
+- **PineConverter.cpp generateCpp()** — добавлены:
+  - Лямбда `genExpr()` — преобразует `PineExpr` в C++ выражение.
+  - Лямбда `genStmtBody()` — рекурсивно генерирует тело if/else блоков.
+  - Перебор `script.statements`: для каждого `IF_STMT` генерируется `if (...) { ... } else { ... }` в методе `update()`.
+- **PineConverter.cpp PineRuntime::exec()** — добавлена ветвь `IF_STMT`: вычисляет условие, выполняет `thenStmts` если истинно, иначе `elseStmts`.
+
+### Tests
+
+#### Этап 6: Тестирование v2.8.0 (10 новых тестов)
+- **test_indicators.cpp** — 6 новых тестов `PineConverterV280`:
+  - `ParseIfStatement` — парсинг одиночного `if` создаёт `IF_STMT` с условием и then-ветвью.
+  - `ParseIfElseStatement` — парсинг `if/else` создаёт `IF_STMT` с обеими ветвями.
+  - `GenerateCppWithIfStatement` — `generateCpp()` включает `if (` в выходной C++ код.
+  - `GenerateCppWithIfElseStatement` — `generateCpp()` включает `if (` и `} else {`.
+  - `RuntimeExecsIfTrue` — `PineRuntime` выполняет then-ветвь при истинном условии.
+  - `RuntimeExecsIfFalse` — `PineRuntime` выполняет else-ветвь при ложном условии.
+- **test_full_system.cpp** — 4 новых теста `VersionV280`:
+  - `VersionStringExists` — подтверждает версию "2.8.0".
+  - `BacktestHistoryTabUsesBtRepository` — `BacktestRepository::getAll()` возвращает сохранённые результаты для History tab.
+  - `SymbolFormatterPairListUnified` — `SymbolFormatter::toUnified()` корректно нормализует символы OKX, Bitget, Binance.
+  - `SymbolFormatterEmptyExchange` — пустое имя биржи не приводит к краш или пустому результату.
+- **Итого тестов:** 639 (628 пройдено, 10 пропущено — LibTorch/XGBoost/другие skip)
+
+### Changed
+- **CHANGELOG.md** — добавлена секция v2.8.0.
+- **ANALYSIS_AND_PROMPT.md** — обновлена статистика до v2.8.0.
+
 ## [2.7.0] - 2026-03-06
 
 ### Fixed

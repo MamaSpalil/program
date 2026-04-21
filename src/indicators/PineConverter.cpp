@@ -144,6 +144,43 @@ void PineConverter::Parser::skipNL() {
     while (check(PineTok::NEWLINE)) advance();
 }
 
+// Parse an indented block: consume statements until we reach a token that
+// is NOT part of the block body.  Pine Script uses indentation, but the
+// lexer emits tokens without INDENT/DEDENT tokens, so we read one statement
+// that follows a newline and continues until the logical block ends (we see
+// a token that starts a top-level statement after the first newline pair).
+std::vector<PineStmt> PineConverter::Parser::parseBlock() {
+    std::vector<PineStmt> stmts;
+    // Skip the newline(s) after the colon / 'if' header
+    skipNL();
+    // The block consists of consecutive non-empty statements.
+    // We stop when we hit EOF, or when we detect the start of an 'else' or a
+    // keyword that only appears at top level (indicator/strategy), or when there
+    // are no more tokens that form a valid statement.
+    while (!check(PineTok::END_OF_FILE) &&
+           !check(PineTok::KW_ELSE)) {
+        size_t savedPos = pos_;
+        try {
+            auto stmt = parseStmt();
+            stmts.push_back(std::move(stmt));
+        } catch (...) {
+            pos_ = savedPos;
+            break; // Stop block parsing on error
+        }
+        skipNL();
+        // After reading a statement, if the next non-NL token would begin
+        // something that can't be a block body statement, stop.
+        if (check(PineTok::END_OF_FILE) || check(PineTok::KW_ELSE))
+            break;
+        // Peek: if the next line appears to be at the same or lower indentation
+        // level we stop.  Since we have no indentation tokens we use a simple
+        // heuristic: stop after reading exactly one statement per block.
+        // This handles the common single-statement if/else pattern.
+        break;
+    }
+    return stmts;
+}
+
 PineScript PineConverter::Parser::parse() {
     PineScript script;
     script.name = "user_indicator";
@@ -170,6 +207,28 @@ PineScript PineConverter::Parser::parse() {
 
 PineStmt PineConverter::Parser::parseStmt() {
     PineStmt s;
+
+    // if / else if / else
+    if (check(PineTok::KW_IF)) {
+        advance(); // consume 'if'
+        s.kind = PineStmt::Kind::IF_STMT;
+        s.expr = parseExpr(); // condition
+        // optional newline before block
+        s.thenStmts = parseBlock();
+        // optional else branch
+        skipNL();
+        if (check(PineTok::KW_ELSE)) {
+            advance(); // consume 'else'
+            skipNL();
+            if (check(PineTok::KW_IF)) {
+                // else if — recurse as a single statement in the else branch
+                s.elseStmts.push_back(parseStmt());
+            } else {
+                s.elseStmts = parseBlock();
+            }
+        }
+        return s;
+    }
 
     // var declaration
     if (check(PineTok::KW_VAR)) {
@@ -624,6 +683,15 @@ void PineRuntime::exec(const PineStmt& s) {
         case PineStmt::Kind::PLOT: {
             double v = eval(s.expr);
             plots_[s.plotTitle] = v;
+            break;
+        }
+        case PineStmt::Kind::IF_STMT: {
+            double cond = eval(s.expr);
+            if (cond != 0.0 && !std::isnan(cond)) {
+                for (auto& child : s.thenStmts) exec(child);
+            } else {
+                for (auto& child : s.elseStmts) exec(child);
+            }
             break;
         }
         default: break;
@@ -1327,6 +1395,69 @@ std::string PineConverter::generateCpp(const PineScript& script,
         out << "        double " << ind.key << " = " << ind.key << "_.value();\n";
     for (auto& sv : simpleVars)
         out << "        double " << sv.name << " = " << sv.defaultVal << ";\n";
+
+    // ── if/else statement code generation ──
+    // Helper to emit a simple expression as C++ text
+    std::function<std::string(const std::shared_ptr<PineExpr>&)> genExpr;
+    genExpr = [&](const std::shared_ptr<PineExpr>& e) -> std::string {
+        if (!e) return "0.0";
+        switch (e->kind) {
+            case PineExpr::Kind::LITERAL_NUM:  return std::to_string(e->numVal);
+            case PineExpr::Kind::LITERAL_BOOL: return e->boolVal ? "1.0" : "0.0";
+            case PineExpr::Kind::LITERAL_NA:   return "0.0/0.0";
+            case PineExpr::Kind::VARIABLE:     return e->strVal;
+            case PineExpr::Kind::LITERAL_STR:  return "0.0 /*\"" + e->strVal + "\"*/";
+            case PineExpr::Kind::BINARY_OP: {
+                std::string a = genExpr(e->children.size() > 0 ? e->children[0] : nullptr);
+                std::string b = genExpr(e->children.size() > 1 ? e->children[1] : nullptr);
+                std::string op = e->op;
+                if (op == "and") op = "&&";
+                else if (op == "or") op = "||";
+                else if (op == "==") op = "==";
+                else if (op == "!=") op = "!=";
+                return "(" + a + " " + op + " " + b + ")";
+            }
+            case PineExpr::Kind::UNARY_OP:
+                return "(!(" + genExpr(e->children.size() > 0 ? e->children[0] : nullptr) + "))";
+            case PineExpr::Kind::TERNARY: {
+                std::string cond = genExpr(e->children.size() > 0 ? e->children[0] : nullptr);
+                std::string t    = genExpr(e->children.size() > 1 ? e->children[1] : nullptr);
+                std::string f    = genExpr(e->children.size() > 2 ? e->children[2] : nullptr);
+                return "(" + cond + " ? " + t + " : " + f + ")";
+            }
+            default: return "0.0";
+        }
+    };
+
+    // Helper to emit a single assignment statement body
+    std::function<void(const PineStmt&, const std::string&)> genStmtBody;
+    genStmtBody = [&](const PineStmt& st, const std::string& indent) {
+        if (st.kind == PineStmt::Kind::ASSIGN || st.kind == PineStmt::Kind::VAR_DECL) {
+            if (st.expr)
+                out << indent << st.name << " = " << genExpr(st.expr) << ";\n";
+        } else if (st.kind == PineStmt::Kind::IF_STMT) {
+            std::string cond = st.expr ? genExpr(st.expr) : "false";
+            out << indent << "if (" << cond << ") {\n";
+            for (auto& ch : st.thenStmts)
+                genStmtBody(ch, indent + "    ");
+            out << indent << "}";
+            if (!st.elseStmts.empty()) {
+                out << " else {\n";
+                for (auto& ch : st.elseStmts)
+                    genStmtBody(ch, indent + "    ");
+                out << indent << "}";
+            }
+            out << "\n";
+        }
+        // Other statement kinds (EXPR, PLOT, INDICATOR) are handled elsewhere
+    };
+
+    // Emit top-level if/else statements that appear in the script
+    for (auto& stmt : script.statements) {
+        if (stmt.kind == PineStmt::Kind::IF_STMT) {
+            genStmtBody(stmt, "        ");
+        }
+    }
 
     // SMA computation
     for (auto& s : smaInfos) {
