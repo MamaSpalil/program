@@ -16,6 +16,8 @@ The demo version runs entirely in your browser with simulated data. Features:
 
 Simply open `frontend/demo.html` in any modern web browser, or view it on [GitHub Pages](https://mamaspalil.github.io/program/web-version-php/frontend/demo.html).
 
+**Want to deploy this demo yourself?** See [GITHUB_PAGES.md](GITHUB_PAGES.md) for instructions.
+
 ## Technology Stack
 
 ### Backend
