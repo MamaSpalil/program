@@ -2,6 +2,20 @@
 
 Web-based cryptocurrency trading platform with ML-enhanced signals using PHP backend, Java ML service, and HTML/CSS frontend with MSSQL 2012 database.
 
+## 🎯 Live Demo
+
+**[Try the Interactive Demo](frontend/demo.html)** - No installation required!
+
+The demo version runs entirely in your browser with simulated data. Features:
+- ✅ Interactive TradingView charts with real-time updates
+- ✅ Technical indicators (RSI, MACD, EMA, ATR)
+- ✅ ML-enhanced trading signals
+- ✅ Simulated trading with position tracking
+- ✅ Responsive design for all devices
+- ✅ No backend/database required
+
+Simply open `frontend/demo.html` in any modern web browser, or view it on [GitHub Pages](https://mamaspalil.github.io/program/web-version-php/frontend/demo.html).
+
 ## Technology Stack
 
 ### Backend

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoTrader - Live Demo</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/dashboard.css">
+    <style>
+        .demo-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 2rem;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid #5a67d8;
+        }
+        .demo-banner a {
+            color: white;
+            text-decoration: underline;
+            margin-left: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Demo Banner -->
+    <div class="demo-banner">
+        🎯 DEMO MODE - This is a demonstration with simulated data |
+        <a href="https://github.com/MamaSpalil/program" target="_blank">View on GitHub</a>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <h1>🚀 CryptoTrader</h1>
+        </div>
+        <div class="header-center">
+            <div class="symbol-selector">
+                <select id="symbolSelect">
+                    <option value="BTCUSDT">BTC/USDT</option>
+                    <option value="ETHUSDT">ETH/USDT</option>
+                    <option value="BNBUSDT">BNB/USDT</option>
+                    <option value="SOLUSDT">SOL/USDT</option>
+                    <option value="ADAUSDT">ADA/USDT</option>
+                </select>
+                <select id="intervalSelect">
+                    <option value="1m">1m</option>
+                    <option value="5m">5m</option>
+                    <option value="15m" selected>15m</option>
+                    <option value="1h">1h</option>
+                    <option value="4h">4h</option>
+                    <option value="1d">1d</option>
+                </select>
+            </div>
+        </div>
+        <div class="header-right">
+            <span id="userDisplay">Demo User</span>
+            <button id="infoBtn" class="btn btn-secondary">ℹ️ Info</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active">
+                    <span>📊</span> Dashboard
+                </a>
+                <a href="#" class="nav-item">
+                    <span>💹</span> Trading
+                </a>
+                <a href="#" class="nav-item">
+                    <span>📈</span> Positions
+                </a>
+                <a href="#" class="nav-item">
+                    <span>📜</span> History
+                </a>
+                <a href="#" class="nav-item">
+                    <span>⚙️</span> Settings
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Content Area -->
+        <main class="content">
+            <!-- Market Info -->
+            <div class="market-info">
+                <div class="info-card">
+                    <div class="info-label">Price</div>
+                    <div class="info-value" id="currentPrice">--</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">24h Change</div>
+                    <div class="info-value" id="priceChange">--</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">24h Volume</div>
+                    <div class="info-value" id="volume">--</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">ML Signal</div>
+                    <div class="info-value" id="mlSignal">--</div>
+                </div>
+            </div>
+
+            <!-- Chart Container -->
+            <div class="chart-container">
+                <div id="tradingChart" class="chart"></div>
+            </div>
+
+            <!-- Indicators -->
+            <div class="indicators-container">
+                <h3>Technical Indicators</h3>
+                <div class="indicators-grid">
+                    <div class="indicator-card">
+                        <div class="indicator-name">RSI (14)</div>
+                        <div class="indicator-value" id="rsiValue">--</div>
+                    </div>
+                    <div class="indicator-card">
+                        <div class="indicator-name">MACD</div>
+                        <div class="indicator-value" id="macdValue">--</div>
+                    </div>
+                    <div class="indicator-card">
+                        <div class="indicator-name">EMA (21)</div>
+                        <div class="indicator-value" id="emaValue">--</div>
+                    </div>
+                    <div class="indicator-card">
+                        <div class="indicator-name">ATR</div>
+                        <div class="indicator-value" id="atrValue">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trading Panel -->
+            <div class="trading-panel">
+                <h3>Quick Trade (Demo)</h3>
+                <div class="trade-form">
+                    <div class="trade-buttons">
+                        <button class="btn btn-buy" id="buyBtn">BUY</button>
+                        <button class="btn btn-sell" id="sellBtn">SELL</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" id="quantity" step="0.001" value="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Order Type</label>
+                        <select id="orderType">
+                            <option value="market">Market</option>
+                            <option value="limit">Limit</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Positions -->
+            <div class="positions-container">
+                <h3>Open Positions (Demo)</h3>
+                <div id="positionsList">
+                    <p class="empty-state">No open positions</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/lightweight-charts@latest/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="assets/js/demo.js"></script>
+</body>
+</html>
