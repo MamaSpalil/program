@@ -2,6 +2,18 @@
 
 Production-ready C++17/20 algorithmic trading system with ML-enhanced signals.
 
+## 🌐 Web Version Demo
+
+**[Try the Interactive Demo →](web-version-php/frontend/demo.html)**
+
+Experience the web-based trading platform with simulated data - no installation required! The demo showcases:
+- Real-time charting with TradingView
+- Technical indicators (RSI, MACD, EMA, ATR)
+- ML-enhanced trading signals
+- Interactive position management
+
+For full installation instructions, see [web-version-php/README.md](web-version-php/README.md).
+
 ## Architecture
 
 ```
