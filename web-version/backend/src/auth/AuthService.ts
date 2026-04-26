@@ -197,12 +197,14 @@ export class AuthService {
   }
 
   private generateTokens(userId: string, email: string, role: string) {
+    // @ts-ignore - jwt.sign types have issues with string | number for expiresIn
     const accessToken = jwt.sign(
       { userId, email, role, type: 'access' },
       config.jwtSecret,
       { expiresIn: config.jwtExpiresIn }
     );
 
+    // @ts-ignore - jwt.sign types have issues with string | number for expiresIn
     const refreshToken = jwt.sign(
       { userId, type: 'refresh' },
       config.jwtSecret,
