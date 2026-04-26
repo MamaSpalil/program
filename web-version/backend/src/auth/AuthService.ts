@@ -4,11 +4,20 @@ import { PrismaClient } from '@prisma/client';
 import config from '../config';
 import { ApiError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import InvitationService from './InvitationService';
 
 const prisma = new PrismaClient();
 
 export class AuthService {
-  async register(email: string, password: string, firstName?: string, lastName?: string) {
+  async register(email: string, password: string, invitationCode: string, firstName?: string, lastName?: string) {
+    // Check if this is the first user
+    const isFirstUser = await InvitationService.isFirstUser();
+
+    // If not first user, validate invitation code
+    if (!isFirstUser) {
+      await InvitationService.validateInvitation(invitationCode, email);
+    }
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
@@ -22,12 +31,14 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Create user with default settings
+    // First user is automatically admin
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
         firstName,
         lastName,
+        role: isFirstUser ? 'ADMIN' : 'USER',
         settings: {
           create: {
             paperTradingMode: true, // Start in paper trading by default
@@ -44,7 +55,12 @@ export class AuthService {
       },
     });
 
-    logger.info(`New user registered: ${email}`);
+    // Mark invitation as used (if not first user)
+    if (!isFirstUser) {
+      await InvitationService.markInvitationUsed(invitationCode, user.id);
+    }
+
+    logger.info(`New user registered: ${email} (${isFirstUser ? 'ADMIN' : 'USER'})`);
 
     // Generate tokens
     const tokens = this.generateTokens(user.id, user.email, user.role);

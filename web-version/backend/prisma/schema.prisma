@@ -24,16 +24,18 @@ model User {
   updatedAt     DateTime @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
 
-  exchanges     UserExchange[]
-  settings      UserSettings?
-  orders        Order[]
-  positions     Position[]
-  trades        Trade[]
-  strategies    Strategy[]
-  backtests     Backtest[]
-  alerts        Alert[]
-  equityHistory EquityHistory[]
-  auditLogs     AuditLog[]
+  exchanges       UserExchange[]
+  settings        UserSettings?
+  orders          Order[]
+  positions       Position[]
+  trades          Trade[]
+  strategies      Strategy[]
+  backtests       Backtest[]
+  alerts          Alert[]
+  equityHistory   EquityHistory[]
+  auditLogs       AuditLog[]
+  invitationsCreated InvitationCode[] @relation("InvitationCreator")
+  invitationUsed  InvitationCode? @relation("InvitationUser")
 
   @@map("users")
 }
@@ -67,6 +69,26 @@ model UserSettings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
+}
+
+// ── Invitation System ────────────────────────────────────────────────────────
+
+model InvitationCode {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  email       String   @unique
+  createdById String   @map("created_by_id")
+  usedById    String?  @unique @map("used_by_id")
+  expiresAt   DateTime @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  createdBy User  @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  usedBy    User? @relation("InvitationUser", fields: [usedById], references: [id])
+
+  @@index([code])
+  @@index([email])
+  @@map("invitation_codes")
 }
 
 // ── Exchange Configuration ───────────────────────────────────────────────────
@@ -385,4 +407,69 @@ model AuditLog {
   @@index([userId, timestamp])
   @@index([action, timestamp])
   @@map("audit_logs")
+}
+
+// ── Chart Analysis & Zones ───────────────────────────────────────────────────
+
+model SupportResistanceZone {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  exchange    String
+  symbol      String
+  interval    String
+  type        ZoneType
+  priceLevel  Float     @map("price_level")
+  priceTop    Float     @map("price_top")
+  priceBottom Float     @map("price_bottom")
+  strength    Float     // 0-1, based on touches and volume
+  touches     Int       @default(1)
+  firstTouch  DateTime  @map("first_touch")
+  lastTouch   DateTime  @map("last_touch")
+  isBroken    Boolean   @default(false) @map("is_broken")
+  brokenAt    DateTime? @map("broken_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([exchange, symbol, interval, type])
+  @@index([userId, exchange, symbol])
+  @@map("support_resistance_zones")
+}
+
+enum ZoneType {
+  SUPPORT
+  RESISTANCE
+  PIVOT
+}
+
+model PositionMarker {
+  id           String       @id @default(uuid())
+  userId       String       @map("user_id")
+  exchange     String
+  symbol       String
+  interval     String
+  type         MarkerType
+  price        Float
+  timestamp    DateTime
+  reason       String       // Description of why marker was placed
+  confidence   Float        // 0-1, based on analysis
+  zoneId       String?      @map("zone_id") // Related support/resistance zone
+  stopLoss     Float?       @map("stop_loss")
+  takeProfit   Float?       @map("take_profit")
+  isExecuted   Boolean      @default(false) @map("is_executed")
+  executedAt   DateTime?    @map("executed_at")
+  pnl          Float?       // Profit/loss if executed
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([userId, exchange, symbol, type])
+  @@index([timestamp])
+  @@map("position_markers")
+}
+
+enum MarkerType {
+  BUY_ENTRY
+  SELL_ENTRY
+  BUY_EXIT
+  SELL_EXIT
+  STOP_LOSS
+  TAKE_PROFIT
 }

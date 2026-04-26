@@ -10,6 +10,7 @@ const router = Router();
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  invitationCode: z.string().min(1, 'Invitation code is required'),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
 });
@@ -35,6 +36,7 @@ router.post('/register', authRateLimiter, async (req, res, next) => {
     const result = await AuthService.register(
       validated.email,
       validated.password,
+      validated.invitationCode,
       validated.firstName,
       validated.lastName
     );
