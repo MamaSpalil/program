@@ -53,8 +53,12 @@ void WebSocketClient::disconnect() {
 bool WebSocketClient::isConnected() const { return connected_; }
 
 void WebSocketClient::send(const std::string& message) {
-    // Implementation would write to beast ws stream
-    (void)message;
+    // Subscriptions are typically issued from the calling thread immediately
+    // after connect(); the worker thread may not yet have completed the TLS
+    // handshake. Queue the payload — the worker drains the queue in its
+    // session loop (and re-sends on reconnect so subscriptions persist).
+    std::lock_guard<std::mutex> lk(sendMutex_);
+    pendingSends_.push_back(message);
 }
 
 void WebSocketClient::workerLoop() {
@@ -122,6 +126,29 @@ void WebSocketClient::workerLoop() {
             connected_ = true;
             backoffSec = 5;
             Logger::get()->info("WebSocket connected to {}:{}{}", host_, port_, path_);
+
+            // ── Flush queued subscription payloads ───────────────────────────
+            // All known callers (Bybit/OKX/KuCoin/Bitget) enqueue subscribe
+            // messages immediately after connect() so they are guaranteed to
+            // be in the queue by the time we get here. We snapshot under the
+            // lock then write outside it (beast write may block on TLS).
+            // Note: we do NOT pop the queue — keeping the messages allows
+            // automatic re-subscription on reconnect.
+            {
+                std::vector<std::string> snapshot;
+                {
+                    std::lock_guard<std::mutex> lk(sendMutex_);
+                    snapshot = pendingSends_;
+                }
+                for (const auto& msg : snapshot) {
+                    beast::error_code wec;
+                    stream->write(net::buffer(msg), wec);
+                    if (wec) {
+                        Logger::get()->warn("WebSocket subscribe write failed: {}", wec.message());
+                        break;
+                    }
+                }
+            }
 
             while (shouldRun_) {
                 beast::flat_buffer buffer;

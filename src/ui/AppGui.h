@@ -196,6 +196,14 @@ struct GuiConfig {
     float layoutVdPct{0.15f};
     float layoutIndPct{0.20f};
     bool  layoutLocked{true};   // when true, windows cannot be moved/resized (default ON)
+
+    // UI theme: "dark" (default, dark-metal) or "light"
+    std::string theme{"dark"};
+
+    // Chart: fraction of horizontal chart area kept empty to the right of the
+    // last bar (so the latest bar isn't flush against the price scale).
+    // Range [0.0 .. 0.5]. Typical TradingView-like value ≈ 0.18 (≈18%).
+    float chartRightPadPct{0.18f};
 };
 
 class AppGui {
@@ -216,6 +224,12 @@ public:
 
     // Thread-safe state update (called from engine thread)
     void updateState(const GuiState& state);
+
+    // Fast lock-free live tick update — called per WebSocket message.
+    // Updates the current (last) bar's price fields atomically so the chart
+    // refreshes every incoming tick without the overhead of a full state copy.
+    void updateLiveTick(double price, double high, double low,
+                        double open, double volume);
 
     // Get current config (thread-safe)
     GuiConfig getConfig() const;
@@ -311,6 +325,7 @@ private:
     GuiConfig config_;
 
     bool showSettings_{false};
+    bool prevShowSettings_{false};  // tracks settings panel open/close for buffer refresh
     bool showDemo_{false};
     bool showOrderBook_{false};  // Order book mode
     bool showUserPanel_{true};   // User panel (separate window)
@@ -377,6 +392,16 @@ private:
     std::chrono::steady_clock::time_point lastPriceRefresh_{};
     std::chrono::steady_clock::time_point lastOrderRefresh_{};
     std::chrono::steady_clock::time_point lastTradeRefresh_{};
+
+    // ── Live tick atomics ─────────────────────────────────────────────────
+    // Written by the engine/WebSocket thread via updateLiveTick() (lock-free).
+    // Read by the render thread in drawMarketDataWindow() to show the current
+    // bar's latest price without waiting for the next full updateState() copy.
+    std::atomic<double> liveTickPrice_{0.0};
+    std::atomic<double> liveTickHigh_{0.0};
+    std::atomic<double> liveTickLow_{0.0};
+    std::atomic<double> liveTickOpen_{0.0};
+    std::atomic<double> liveTickVolume_{0.0};
 
     // ── New module state ──────────────────────────────────────────────────
 

@@ -1,0 +1,18 @@
+{
+    "_comment": "Demo / placeholder snapshot. Replace by writing live data from the C++ engine.",
+    "symbol": "BTCUSDT",
+    "price": 67432.18,
+    "change_pct": 1.24,
+    "connected": true,
+    "account": {
+        "balance": 9821.43,
+        "equity": 10024.78,
+        "pnl_open": 203.35,
+        "pnl_total": 24.78,
+        "drawdown": 0.034
+    },
+    "positions": [
+        { "symbol": "BTCUSDT", "side": "BUY", "qty": 0.012, "entry_price": 65980.5, "current_price": 67432.18, "pnl": 17.42 }
+    ],
+    "updated_at": null
+}

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <mutex>
 #include <memory>
+#include <vector>
 
 namespace crypto {
 
@@ -31,6 +32,11 @@ private:
     std::atomic<bool> shouldRun_{false};
     std::thread workerThread_;
     std::mutex sendMutex_;
+
+    // Pending outbound messages (e.g. subscribe payloads) queued before the
+    // WebSocket handshake completes. Drained by the worker thread after
+    // handshake and on every reconnect so subscriptions survive reconnects.
+    std::vector<std::string> pendingSends_;
 
     void workerLoop();
 };
