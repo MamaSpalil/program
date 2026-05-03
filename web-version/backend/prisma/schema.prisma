@@ -1,0 +1,475 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── User Management ──────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  firstName     String?  @map("first_name")
+  lastName      String?  @map("last_name")
+  role          UserRole @default(USER)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean  @default(false) @map("email_verified")
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+
+  exchanges       UserExchange[]
+  settings        UserSettings?
+  orders          Order[]
+  positions       Position[]
+  trades          Trade[]
+  strategies      Strategy[]
+  backtests       Backtest[]
+  alerts          Alert[]
+  equityHistory   EquityHistory[]
+  auditLogs       AuditLog[]
+  invitationsCreated InvitationCode[] @relation("InvitationCreator")
+  invitationUsed  InvitationCode? @relation("InvitationUser")
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  DEVELOPER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model UserSettings {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  theme             String   @default("dark")
+  language          String   @default("en")
+  timezone          String   @default("UTC")
+  notifications     Json     @default("{}")
+  defaultExchange   String?  @map("default_exchange")
+  defaultSymbol     String?  @map("default_symbol")
+  defaultInterval   String?  @map("default_interval")
+  paperTradingMode  Boolean  @default(true) @map("paper_trading_mode")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// ── Invitation System ────────────────────────────────────────────────────────
+
+model InvitationCode {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  email       String   @unique
+  createdById String   @map("created_by_id")
+  usedById    String?  @unique @map("used_by_id")
+  expiresAt   DateTime @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  createdBy User  @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  usedBy    User? @relation("InvitationUser", fields: [usedById], references: [id])
+
+  @@index([code])
+  @@index([email])
+  @@map("invitation_codes")
+}
+
+// ── Exchange Configuration ───────────────────────────────────────────────────
+
+model UserExchange {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  exchangeName    String   @map("exchange_name")
+  apiKeyEncrypted String   @map("api_key_encrypted")
+  apiSecretEncrypted String @map("api_secret_encrypted")
+  passphraseEncrypted String? @map("passphrase_encrypted")
+  testnet         Boolean  @default(true)
+  enabled         Boolean  @default(true)
+  label           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exchangeName, testnet])
+  @@map("user_exchanges")
+}
+
+// ── Market Data ──────────────────────────────────────────────────────────────
+
+model Candle {
+  id          String   @id @default(uuid())
+  exchange    String
+  symbol      String
+  interval    String
+  timestamp   DateTime
+  open        Float
+  high        Float
+  low         Float
+  close       Float
+  volume      Float
+  quoteVolume Float?   @map("quote_volume")
+  trades      Int?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([exchange, symbol, interval, timestamp])
+  @@index([exchange, symbol, interval, timestamp])
+  @@map("candles")
+}
+
+// ── Trading ──────────────────────────────────────────────────────────────────
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String      @map("user_id")
+  exchange        String
+  symbol          String
+  side            OrderSide
+  type            OrderType
+  price           Float?
+  quantity        Float
+  stopPrice       Float?      @map("stop_price")
+  status          OrderStatus @default(PENDING)
+  filledQuantity  Float       @default(0) @map("filled_quantity")
+  averagePrice    Float?      @map("average_price")
+  commission      Float       @default(0)
+  commissionAsset String?     @map("commission_asset")
+  exchangeOrderId String?     @map("exchange_order_id")
+  clientOrderId   String?     @map("client_order_id")
+  timeInForce     String?     @map("time_in_force")
+  reduceOnly      Boolean     @default(false) @map("reduce_only")
+  postOnly        Boolean     @default(false) @map("post_only")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  filledAt        DateTime?   @map("filled_at")
+  cancelledAt     DateTime?   @map("cancelled_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades Trade[]
+
+  @@index([userId, status, createdAt])
+  @@index([exchange, symbol, status])
+  @@map("orders")
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP_MARKET
+  STOP_LIMIT
+  TRAILING_STOP
+}
+
+enum OrderStatus {
+  PENDING
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+model Position {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  exchange        String
+  symbol          String
+  side            PositionSide
+  entryPrice      Float    @map("entry_price")
+  quantity        Float
+  leverage        Int      @default(1)
+  unrealizedPnl   Float    @default(0) @map("unrealized_pnl")
+  realizedPnl     Float    @default(0) @map("realized_pnl")
+  commission      Float    @default(0)
+  liquidationPrice Float?  @map("liquidation_price")
+  stopLoss        Float?   @map("stop_loss")
+  takeProfit      Float?   @map("take_profit")
+  trailingStop    Float?   @map("trailing_stop")
+  status          PositionStatus @default(OPEN)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  closedAt        DateTime? @map("closed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([exchange, symbol, status])
+  @@map("positions")
+}
+
+enum PositionSide {
+  LONG
+  SHORT
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+  LIQUIDATED
+}
+
+model Trade {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  orderId         String   @map("order_id")
+  exchange        String
+  symbol          String
+  side            OrderSide
+  price           Float
+  quantity        Float
+  commission      Float
+  commissionAsset String   @map("commission_asset")
+  realizedPnl     Float?   @map("realized_pnl")
+  exchangeTradeId String?  @map("exchange_trade_id")
+  timestamp       DateTime
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@index([exchange, symbol, timestamp])
+  @@map("trades")
+}
+
+// ── Strategies ───────────────────────────────────────────────────────────────
+
+model Strategy {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  name        String
+  description String?
+  type        StrategyType
+  parameters  Json
+  indicators  Json           @default("[]")
+  status      StrategyStatus @default(INACTIVE)
+  isPublic    Boolean        @default(false) @map("is_public")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  backtests Backtest[]
+
+  @@index([userId, status])
+  @@map("strategies")
+}
+
+enum StrategyType {
+  MANUAL
+  INDICATOR_BASED
+  ML_ENHANCED
+  GRID_BOT
+  DCA_BOT
+  CUSTOM
+}
+
+enum StrategyStatus {
+  ACTIVE
+  INACTIVE
+  PAUSED
+  ERROR
+}
+
+model Backtest {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  strategyId      String   @map("strategy_id")
+  name            String
+  exchange        String
+  symbol          String
+  interval        String
+  startDate       DateTime @map("start_date")
+  endDate         DateTime @map("end_date")
+  initialCapital  Float    @map("initial_capital")
+  finalEquity     Float    @map("final_equity")
+  totalReturn     Float    @map("total_return")
+  sharpeRatio     Float?   @map("sharpe_ratio")
+  maxDrawdown     Float    @map("max_drawdown")
+  winRate         Float    @map("win_rate")
+  totalTrades     Int      @map("total_trades")
+  profitFactor    Float?   @map("profit_factor")
+  metrics         Json     @default("{}")
+  status          BacktestStatus @default(PENDING)
+  createdAt       DateTime @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("backtests")
+}
+
+enum BacktestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ── Alerts ───────────────────────────────────────────────────────────────────
+
+model Alert {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  type        AlertType
+  exchange    String
+  symbol      String
+  condition   String
+  targetPrice Float?      @map("target_price")
+  message     String?
+  channels    Json        @default("[]")
+  status      AlertStatus @default(ACTIVE)
+  triggered   Boolean     @default(false)
+  triggeredAt DateTime?   @map("triggered_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  expiresAt   DateTime?   @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, triggered])
+  @@map("alerts")
+}
+
+enum AlertType {
+  PRICE
+  INDICATOR
+  STRATEGY_SIGNAL
+  POSITION_PNL
+  ACCOUNT_BALANCE
+  CUSTOM
+}
+
+enum AlertStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  DELETED
+}
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+
+model EquityHistory {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  timestamp     DateTime
+  equity        Float
+  balance       Float
+  unrealizedPnl Float    @map("unrealized_pnl")
+  marginUsed    Float?   @map("margin_used")
+  exchange      String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@map("equity_history")
+}
+
+// ── Audit & Security ─────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  timestamp DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@index([action, timestamp])
+  @@map("audit_logs")
+}
+
+// ── Chart Analysis & Zones ───────────────────────────────────────────────────
+
+model SupportResistanceZone {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  exchange    String
+  symbol      String
+  interval    String
+  type        ZoneType
+  priceLevel  Float     @map("price_level")
+  priceTop    Float     @map("price_top")
+  priceBottom Float     @map("price_bottom")
+  strength    Float     // 0-1, based on touches and volume
+  touches     Int       @default(1)
+  firstTouch  DateTime  @map("first_touch")
+  lastTouch   DateTime  @map("last_touch")
+  isBroken    Boolean   @default(false) @map("is_broken")
+  brokenAt    DateTime? @map("broken_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([exchange, symbol, interval, type])
+  @@index([userId, exchange, symbol])
+  @@map("support_resistance_zones")
+}
+
+enum ZoneType {
+  SUPPORT
+  RESISTANCE
+  PIVOT
+}
+
+model PositionMarker {
+  id           String       @id @default(uuid())
+  userId       String       @map("user_id")
+  exchange     String
+  symbol       String
+  interval     String
+  type         MarkerType
+  price        Float
+  timestamp    DateTime
+  reason       String       // Description of why marker was placed
+  confidence   Float        // 0-1, based on analysis
+  zoneId       String?      @map("zone_id") // Related support/resistance zone
+  stopLoss     Float?       @map("stop_loss")
+  takeProfit   Float?       @map("take_profit")
+  isExecuted   Boolean      @default(false) @map("is_executed")
+  executedAt   DateTime?    @map("executed_at")
+  pnl          Float?       // Profit/loss if executed
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([userId, exchange, symbol, type])
+  @@index([timestamp])
+  @@map("position_markers")
+}
+
+enum MarkerType {
+  BUY_ENTRY
+  SELL_ENTRY
+  BUY_EXIT
+  SELL_EXIT
+  STOP_LOSS
+  TAKE_PROFIT
+}
