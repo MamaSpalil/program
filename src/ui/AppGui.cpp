@@ -29,6 +29,14 @@
 #include <chrono>
 
 #ifdef _WIN32
+   // <mmsystem.h> (via mciapi.h / mmiscapi.h) uses APIENTRY as a calling-convention
+   // macro in function declarations.  The earlier `#undef APIENTRY` (needed to
+   // silence C4005 from <GLFW/glfw3native.h>) leaves it undefined, which would
+   // make the compiler parse APIENTRY as a type-identifier and emit hundreds of
+   // C2146/C4430/C2371 errors.  Restore the standard definition before include.
+#  ifndef APIENTRY
+#    define APIENTRY __stdcall
+#  endif
 #  include <mmsystem.h>
 #  pragma comment(lib, "winmm.lib")
 #endif
