@@ -196,6 +196,14 @@ struct GuiConfig {
     float layoutVdPct{0.15f};
     float layoutIndPct{0.20f};
     bool  layoutLocked{true};   // when true, windows cannot be moved/resized (default ON)
+
+    // UI theme: "dark" (default, dark-metal) or "light"
+    std::string theme{"dark"};
+
+    // Chart: fraction of horizontal chart area kept empty to the right of the
+    // last bar (so the latest bar isn't flush against the price scale).
+    // Range [0.0 .. 0.5]. Typical TradingView-like value ≈ 0.18 (≈18%).
+    float chartRightPadPct{0.18f};
 };
 
 class AppGui {

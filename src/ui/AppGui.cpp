@@ -160,6 +160,115 @@ static void ApplyDarkMetalTheme() {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: light theme — soft greys with the same steel-blue accent so the
+// brand identity stays consistent when the user toggles light mode.
+// ---------------------------------------------------------------------------
+static void ApplyLightTheme() {
+    ImGuiStyle& s = ImGui::GetStyle();
+
+    s.WindowRounding    = 2.0f;
+    s.FrameRounding     = 2.0f;
+    s.GrabRounding      = 1.0f;
+    s.ScrollbarRounding = 2.0f;
+    s.TabRounding       = 2.0f;
+    s.ChildRounding     = 2.0f;
+    s.PopupRounding     = 2.0f;
+    s.WindowBorderSize  = 1.0f;
+    s.FrameBorderSize   = 0.0f;
+    s.FramePadding      = ImVec2(6, 4);
+    s.ItemSpacing       = ImVec2(8, 5);
+    s.ScrollbarSize     = 14.0f;
+    s.GrabMinSize       = 10.0f;
+
+    ImVec4* c = s.Colors;
+
+    ImVec4 bg        = ImVec4(0.95f, 0.95f, 0.96f, 1.00f); // soft off-white
+    ImVec4 bgChild   = ImVec4(0.97f, 0.97f, 0.98f, 1.00f);
+    ImVec4 panel     = ImVec4(0.90f, 0.90f, 0.92f, 1.00f);
+    ImVec4 border    = ImVec4(0.70f, 0.70f, 0.72f, 0.60f);
+    ImVec4 text      = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
+    ImVec4 textDim   = ImVec4(0.45f, 0.45f, 0.48f, 1.00f);
+    ImVec4 accent    = ImVec4(0.20f, 0.45f, 0.75f, 1.00f); // steel-blue
+    ImVec4 accentH   = ImVec4(0.28f, 0.55f, 0.85f, 1.00f);
+    ImVec4 header    = ImVec4(0.86f, 0.86f, 0.88f, 1.00f);
+    ImVec4 headerH   = ImVec4(0.78f, 0.82f, 0.90f, 1.00f);
+    ImVec4 headerA   = ImVec4(0.72f, 0.78f, 0.88f, 1.00f);
+    ImVec4 btnCol    = ImVec4(0.88f, 0.88f, 0.90f, 1.00f);
+    ImVec4 btnHov    = ImVec4(0.78f, 0.82f, 0.90f, 1.00f);
+    ImVec4 btnAct    = ImVec4(0.70f, 0.76f, 0.88f, 1.00f);
+    ImVec4 tab       = ImVec4(0.86f, 0.86f, 0.88f, 1.00f);
+    ImVec4 tabH      = ImVec4(0.78f, 0.82f, 0.90f, 1.00f);
+    ImVec4 tabA      = ImVec4(0.92f, 0.94f, 0.97f, 1.00f);
+    ImVec4 scrollbar = ImVec4(0.88f, 0.88f, 0.90f, 1.00f);
+    ImVec4 scrollG   = ImVec4(0.70f, 0.70f, 0.74f, 1.00f);
+    ImVec4 scrollGH  = ImVec4(0.55f, 0.55f, 0.60f, 1.00f);
+    ImVec4 scrollGA  = ImVec4(0.45f, 0.45f, 0.50f, 1.00f);
+
+    c[ImGuiCol_WindowBg]             = bg;
+    c[ImGuiCol_ChildBg]              = bgChild;
+    c[ImGuiCol_PopupBg]              = ImVec4(0.97f, 0.97f, 0.98f, 0.98f);
+    c[ImGuiCol_Border]               = border;
+    c[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
+
+    c[ImGuiCol_Text]                 = text;
+    c[ImGuiCol_TextDisabled]         = textDim;
+
+    c[ImGuiCol_FrameBg]              = panel;
+    c[ImGuiCol_FrameBgHovered]       = btnHov;
+    c[ImGuiCol_FrameBgActive]        = btnAct;
+
+    c[ImGuiCol_TitleBg]              = ImVec4(0.84f, 0.84f, 0.86f, 1.00f);
+    c[ImGuiCol_TitleBgActive]        = ImVec4(0.78f, 0.82f, 0.90f, 1.00f);
+    c[ImGuiCol_TitleBgCollapsed]     = ImVec4(0.86f, 0.86f, 0.88f, 0.80f);
+
+    c[ImGuiCol_MenuBarBg]            = ImVec4(0.90f, 0.90f, 0.92f, 1.00f);
+
+    c[ImGuiCol_ScrollbarBg]          = scrollbar;
+    c[ImGuiCol_ScrollbarGrab]        = scrollG;
+    c[ImGuiCol_ScrollbarGrabHovered] = scrollGH;
+    c[ImGuiCol_ScrollbarGrabActive]  = scrollGA;
+
+    c[ImGuiCol_CheckMark]            = accent;
+    c[ImGuiCol_SliderGrab]           = accent;
+    c[ImGuiCol_SliderGrabActive]     = accentH;
+
+    c[ImGuiCol_Button]               = btnCol;
+    c[ImGuiCol_ButtonHovered]        = btnHov;
+    c[ImGuiCol_ButtonActive]         = btnAct;
+
+    c[ImGuiCol_Header]               = header;
+    c[ImGuiCol_HeaderHovered]        = headerH;
+    c[ImGuiCol_HeaderActive]         = headerA;
+
+    c[ImGuiCol_Separator]            = border;
+    c[ImGuiCol_SeparatorHovered]     = accentH;
+    c[ImGuiCol_SeparatorActive]      = accent;
+
+    c[ImGuiCol_ResizeGrip]           = ImVec4(0.65f, 0.65f, 0.70f, 0.40f);
+    c[ImGuiCol_ResizeGripHovered]    = accentH;
+    c[ImGuiCol_ResizeGripActive]     = accent;
+
+    c[ImGuiCol_Tab]                  = tab;
+    c[ImGuiCol_TabHovered]           = tabH;
+    c[ImGuiCol_TabActive]            = tabA;
+    c[ImGuiCol_TabUnfocused]         = tab;
+    c[ImGuiCol_TabUnfocusedActive]   = tabA;
+
+    c[ImGuiCol_TableHeaderBg]        = ImVec4(0.86f, 0.86f, 0.88f, 1.00f);
+    c[ImGuiCol_TableBorderStrong]    = border;
+    c[ImGuiCol_TableBorderLight]     = ImVec4(0.78f, 0.78f, 0.82f, 0.40f);
+    c[ImGuiCol_TableRowBg]           = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_TableRowBgAlt]        = ImVec4(0, 0, 0, 0.03f);
+
+    c[ImGuiCol_TextSelectedBg]       = ImVec4(accent.x, accent.y, accent.z, 0.30f);
+    c[ImGuiCol_DragDropTarget]       = accentH;
+    c[ImGuiCol_NavHighlight]         = accent;
+    c[ImGuiCol_NavWindowingHighlight]= ImVec4(0, 0, 0, 0.10f);
+    c[ImGuiCol_NavWindowingDimBg]    = ImVec4(0.5f, 0.5f, 0.5f, 0.40f);
+    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.5f, 0.5f, 0.5f, 0.40f);
+}
+
+// ---------------------------------------------------------------------------
 // GLFW error callback
 // ---------------------------------------------------------------------------
 static void glfwErrorCb(int /*err*/, const char* desc) {
@@ -362,7 +471,11 @@ void AppGui::shutdown() {
 // Theme
 // ---------------------------------------------------------------------------
 void AppGui::setupTheme() {
-    ApplyDarkMetalTheme();
+    if (config_.theme == "light") {
+        ApplyLightTheme();
+    } else {
+        ApplyDarkMetalTheme();
+    }
 
     // Slightly larger default font size
     ImGuiIO& io = ImGui::GetIO();
@@ -552,6 +665,8 @@ void AppGui::loadConfig(const std::string& path) {
         config_.layoutVdPct  = ly.value("vd_pct",   0.15f);
         config_.layoutIndPct = ly.value("ind_pct",  0.20f);
         config_.layoutLocked = ly.value("locked",   true);
+        config_.theme        = ly.value("theme",    std::string("dark"));
+        config_.chartRightPadPct = ly.value("chart_right_pad_pct", 0.18f);
         showPairList_    = ly.value("show_pair_list",    true);
         showUserPanel_   = ly.value("show_user_panel",   true);
         showVolumeDelta_ = ly.value("show_volume_delta", true);
@@ -646,6 +761,8 @@ nlohmann::json AppGui::configToJson() const {
         {"vd_pct",   config_.layoutVdPct},
         {"ind_pct",  config_.layoutIndPct},
         {"locked",   config_.layoutLocked},
+        {"theme",    config_.theme},
+        {"chart_right_pad_pct", config_.chartRightPadPct},
         {"show_pair_list",    showPairList_},
         {"show_user_panel",   showUserPanel_},
         {"show_volume_delta", showVolumeDelta_},
@@ -746,6 +863,13 @@ void AppGui::loadLayoutIni(const std::string& path) {
             else if (key == "vd_pct")            config_.layoutVdPct   = std::stof(val);
             else if (key == "ind_pct")           config_.layoutIndPct  = std::stof(val);
             else if (key == "locked")            config_.layoutLocked  = (std::stoi(val) != 0);
+            else if (key == "theme") {
+                if (val == "light" || val == "dark") config_.theme = val;
+            }
+            else if (key == "chart_right_pad_pct") {
+                float v = std::stof(val);
+                if (v >= 0.0f && v <= 0.5f) config_.chartRightPadPct = v;
+            }
             else if (key == "show_pair_list")    showPairList_         = (std::stoi(val) != 0);
             else if (key == "show_user_panel")   showUserPanel_        = (std::stoi(val) != 0);
             else if (key == "show_volume_delta") showVolumeDelta_      = (std::stoi(val) != 0);
@@ -785,6 +909,8 @@ void AppGui::saveLayoutIni(const std::string& path) const {
     f << "vd_pct=" << config_.layoutVdPct << "\n";
     f << "ind_pct=" << config_.layoutIndPct << "\n";
     f << "locked=" << (config_.layoutLocked ? 1 : 0) << "\n";
+    f << "theme=" << config_.theme << "\n";
+    f << "chart_right_pad_pct=" << config_.chartRightPadPct << "\n";
     f << "show_pair_list=" << (showPairList_ ? 1 : 0) << "\n";
     f << "show_user_panel=" << (showUserPanel_ ? 1 : 0) << "\n";
     f << "show_volume_delta=" << (showVolumeDelta_ ? 1 : 0) << "\n";
@@ -1069,6 +1195,20 @@ void AppGui::drawMenuBar() {
             ImGui::MenuItem("Market Scanner",    nullptr, &showScanner_);
             ImGui::MenuItem("Pine Editor",       nullptr, &showPineEditor_);
             ImGui::MenuItem("Trade History",     nullptr, &showTradeHistory_);
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Theme")) {
+                bool isDark  = (config_.theme != "light");
+                bool isLight = (config_.theme == "light");
+                if (ImGui::MenuItem("Dark",  nullptr, isDark,  !isDark)) {
+                    config_.theme = "dark";
+                    setupTheme();
+                }
+                if (ImGui::MenuItem("Light", nullptr, isLight, !isLight)) {
+                    config_.theme = "light";
+                    setupTheme();
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {
@@ -1550,11 +1690,12 @@ void AppGui::drawMarketDataWindow() {
 
         int totalCount = (int)snap.candleHistory.size();
 
-        // ── Apply reset: fit last 50 bars ──
+        // ── Apply reset: fit last 50 bars (taking right margin into account) ──
         if (needsChartReset_ && totalCount >= 2) {
             float chartW = canvasSize.x - priceScaleW;
+            float effW   = chartW * std::max(0.5f, 1.0f - config_.chartRightPadPct);
             int visibleCount = std::min(50, totalCount);
-            chartBarWidth_ = std::clamp(chartW / (float)visibleCount - 1.0f,
+            chartBarWidth_ = std::clamp(effW / (float)visibleCount - 1.0f,
                                         chartMinBarWidth_, chartMaxBarWidth_);
             chartScrollOffset_ = 0;
             needsChartReset_ = false;
@@ -1591,21 +1732,39 @@ void AppGui::drawMarketDataWindow() {
         float barStep = chartBarWidth_ + 1.0f;
         int visibleBars = std::max(2, (int)(chartW / barStep));
 
-        int maxScroll = std::max(0, totalCount - visibleBars);
+        // Reserve empty space to the right of the latest bar (TradingView-like
+        // "right margin"). Clamp so at least 2 actual bars are drawn.
+        int rightPadBars = std::clamp(
+            (int)(visibleBars * config_.chartRightPadPct), 0, visibleBars - 2);
+        int drawnBars = visibleBars - rightPadBars;
+
+        int maxScroll = std::max(0, totalCount - drawnBars);
         chartScrollOffset_ = std::clamp(chartScrollOffset_, 0, maxScroll);
 
-        int startIdx = totalCount - visibleBars - chartScrollOffset_;
+        int startIdx = totalCount - drawnBars - chartScrollOffset_;
         if (startIdx < 0) startIdx = 0;
-        int endIdx = std::min(totalCount, startIdx + visibleBars);
+        int endIdx = std::min(totalCount, startIdx + drawnBars);
 
         // ── Find price/volume range for visible bars only ──
         double pMin = 1e18, pMax = -1e18;
         double vMax = 1.0;
         for (int i = startIdx; i < endIdx; ++i) {
             auto& c = snap.candleHistory[i];
-            if (c.low  < pMin) pMin = c.low;
-            if (c.high > pMax) pMax = c.high;
-            if (c.volume > vMax) vMax = c.volume;
+            double hi = c.high, lo = c.low, vol = c.volume;
+            // For the last (live) bar, fold in the latest tick high/low/close
+            // so the Y-axis grows in real time as ticks arrive — without this
+            // a tick that punches through the static candle.high/low would be
+            // clipped at the chart edge until the next bar close.
+            if (i == totalCount - 1) {
+                if (displayHigh > hi)              hi = displayHigh;
+                if (displayLow  > 0.0 && displayLow  < lo) lo = displayLow;
+                if (displayClose > 0.0 && displayClose > hi) hi = displayClose;
+                if (displayClose > 0.0 && displayClose < lo) lo = displayClose;
+                if (liveVol > vol) vol = liveVol;
+            }
+            if (lo  < pMin) pMin = lo;
+            if (hi  > pMax) pMax = hi;
+            if (vol > vMax) vMax = vol;
         }
         double range = pMax - pMin;
         if (range < 1e-9) range = 1.0;
