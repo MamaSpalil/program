@@ -19,3 +19,4 @@ logs/
 *.exp
 *.generated.h
 *.db
+Compile_Error*
